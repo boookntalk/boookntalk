@@ -1,15 +1,21 @@
 {
-    "name": "BoooknTalk Dev Environment",
-    "dockerComposeFile": "docker-compose.yml",
-    "service": "app",
-    "workspaceFolder": "/workspaces/boookntalk",
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "dbaeumer.vscode-eslint",
-                "esbenp.prettier-vscode",
-                "prisma.prisma"
-            ]
-        }
+  "name": "boookntalk-dev-env",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "frontend", 
+  // 기존 "/app"에서 아래와 같이 수정하여 최상위 루트를 바라보게 합니다.
+  "workspaceFolder": "/workspace/boookntalk",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "bradlc.vscode-tailwindcss"
+      ]
     }
+  },
+  "forwardPorts": [3000, 8000, 5432],
+  "remoteUser": "node"
 }

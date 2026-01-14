@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: boookntalk-db
+    restart: always
+    environment:
+      POSTGRES_DB: boookntalk
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - ./db/data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    container_name: boookntalk-backend
+    volumes:
+      - .:/workspace/boookntalk # 전체 프로젝트 루트 마운트
+      - /workspace/boookntalk/backend/venv # 파이썬 가상환경 격리 필요시
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+  frontend:
+    build: 
+      context: ./frontend
+    container_name: boookntalk-frontend
+    # 메모리 부족 시 컨테이너가 죽지 않도록 재시작 옵션 추가
+    restart: unless-stopped
+    volumes:
+      - .:/workspace/boookntalk
+      # node_modules는 컨테이너 내부에 독립 볼륨으로 생성하여 호스트 I/O 부하 감소
+      - /workspace/boookntalk/frontend/node_modules
+    ports:
+      - "3000:3000"
+    # 메모리 제한을 명시적으로 설정하거나 넉넉하게 비워둡니다
+    deploy:
+      resources:
+        limits:
+          memory: 2G
