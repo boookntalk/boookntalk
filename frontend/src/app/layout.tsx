@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
 import "./globals.css"; // 경로 확인: 같은 폴더(app) 내에 있어야 함
+import { Inter } from 'next/font/google'
+import type { Metadata } from "next";
 
 // @/ 대신 상대 경로(../) 사용
 import Header from "../components/layout/Header";

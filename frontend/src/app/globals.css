@@ -3,12 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 248, 250, 252; /* slate-50 */
-  --background-end-rgb: 255, 255, 255;
+  --background: #F9F9F7;
+  --foreground: #2C3E50;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: white;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 한글 폰트 부드럽게 처리를 위한 추가 */
+@import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap');
+
+/* 브라우저 기본 여백 초기화 */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
 }
