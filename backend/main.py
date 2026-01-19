@@ -1,7 +1,12 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware # 추가
 from sqlalchemy.orm import Session
-from . import models, database
+from database import engine
+import models
+import database
+
+# DB 테이블 생성
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="boookntalk API")
 

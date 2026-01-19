@@ -2,17 +2,18 @@
 
 import React from 'react';
 import { Search } from 'lucide-react';
+import { signIn, signOut, useSession } from "next-auth/react";
 
 // ✅ 해결 1: 별도의 컴포넌트는 export default 대신 일반 const로 선언합니다.
 const GoogleLoginButton = () => {
     const handleGoogleLogin = () => {
         console.log("구글 로그인 시도 중...");
+        signIn("google");
     };
 
     return (
         <button onClick={handleGoogleLogin}
-            className="flex items-center gap-3 bg-white border border-gray-300 px-4 py-2 rounded-md shadow-sm hover:shadow-md hover:bg-gray-50 transition-all duration-200 group"
-        >
+            className="flex items-center gap-3 bg-white border border-gray-300 px-4 py-2 rounded-md shadow-sm hover:shadow-md hover:bg-gray-50 transition-all duration-200 group">
             <svg className="w-4 h-4" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
