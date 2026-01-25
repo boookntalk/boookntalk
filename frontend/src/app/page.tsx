@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
+// import Header from "@/components/layout/Header";
+// import Footer from "@/components/layout/Footer";
 
 const QUOTES = [
     {
@@ -54,8 +54,6 @@ export default function Home() {
 
     return (
         <div className="min-h-screen flex flex-col bg-white">
-            <Header />
-
             <main className={`flex-grow ${contentMaxWidth} mx-auto w-full px-6`}>
                 
                 {/* 1. Today's Quote Carousel (Hero Section) */}
@@ -138,8 +136,6 @@ export default function Home() {
                     </div>
                 </section>
             </main>
-
-            <Footer />
         </div>
     );
 }

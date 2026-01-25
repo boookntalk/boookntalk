@@ -1,35 +1,21 @@
-//'use client';
 // src/app/layout.tsx
-import { SessionProvider } from "next-auth/react";
 import type { Metadata } from "next";
-import "./globals.css"; // 경로 확인: 같은 폴더(app) 내에 있어야 함
-import { Inter } from 'next/font/google'
-import AuthContext from "@/components/AuthContext"; // 경로 확인
+import { Inter } from 'next/font/google';
+import "./globals.css";
 
+// 컴포넌트 임포트
+import Header from '@/components/layout/Header';
+import Footer from '@/components/layout/Footer';
+import AuthContext from "@/components/AuthContext";
+import ClientLayout from '@/components/ClientLayout';
 
-// @/ 대신 상대 경로(../) 사용
-import Header from "../components/layout/Header";
-import Footer from "../components/layout/Footer";
+const inter = Inter({ subsets: ['latin'] });
 
+// 상용 서비스 SEO를 위한 메타데이터
 export const metadata: Metadata = {
   title: "boookntalk",
   description: "책과 대화가 머무는 시간",
 };
-
-// export default function RootLayout({
-//   children,
-// }: {
-//   children: React.ReactNode;
-// }) {
-//   return (
-//     <html lang="ko">
-//       <body className="antialiased bg-slate-50">
-//         {/* Header와 Footer는 파일을 만든 후 나중에 추가할 예정입니다 */}
-//         <main>{children}</main>
-//       </body>
-//     </html>
-//   );
-// }
 
 export default function RootLayout({
   children,
@@ -38,10 +24,19 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>
-        {/* ✅ 클라이언트 컴포넌트인 AuthContext로 감싸서 Session 기능을 제공합니다. */}
+      <body className={inter.className}>
+        {/* NextAuth 세션을 위한 컨텍스트 (클라이언트 컴포넌트) */}
         <AuthContext>
-          {children}
+          {/* 공통 헤더 */}
+          <Header />
+          
+          {/* FAB와 Modal 상태를 관리하는 클라이언트 래퍼 */}
+          <ClientLayout>
+            {children}
+          </ClientLayout>
+
+          {/* 공통 푸터 */}
+          <Footer />
         </AuthContext>
       </body>
     </html>
