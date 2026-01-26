@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
@@ -11,6 +11,8 @@ import httpx
 import asyncio
 
 from dotenv import load_dotenv
+
+import uuid
 
 # DB 테이블 생성
 models.Base.metadata.create_all(bind=engine)
@@ -124,3 +126,71 @@ def get_posts(db: Session = Depends(database.get_db)):
 @app.get("/")
 def read_root():
     return {"message": "Welcome to boookntalk API"}
+
+# [에러 해결] get_db 함수 정의가 있어야 합니다.
+def get_db():
+    db = SessionLocal() # database.py에서 정의한 세션
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.post("/api/books/register")
+async def finalize_book_registration(book_info: dict, db: Session = Depends(get_db)):
+    """
+    book_info 예시: { "title": "...", "isbn": "...", "extraCode": "...", "cover": "...", "user_id": 123 }
+    """
+    try:
+        # 1. ISBN 처리 (없을 경우 BnT ID 생성 - 프로세스 5번)
+        final_isbn = book_info.get('isbn')
+        is_bnt_generated = False
+        
+        if not final_isbn:
+            final_isbn = f"BNT-{uuid.uuid4().hex[:8].upper()}"
+            is_bnt_generated = True
+        
+        # 2. 기존 판본(Edition) 존재 여부 확인
+        existing_edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
+        
+        if not existing_edition:
+            # 3. 작품(Work)이 없는 경우 신규 생성
+            # (같은 제목/저자의 작품이 있는지 체크 로직 추가 가능)
+            new_work = models.Work(
+                title=book_info['title'],
+                author=book_info['author'],
+                description=book_info.get('description', "")
+            )
+            db.add(new_work)
+            db.flush() # ID 생성을 위해 flush
+
+            # 4. 판본(Edition) 생성 (최초 등록자 기록 - 프로세스 4번)
+            new_edition = models.Edition(
+                isbn=final_isbn,
+                work_id=new_work.id,
+                publisher=book_info.get('publisher'),
+                cover_image=book_info.get('cover'),
+                page_count=book_info.get('pageCount'),
+                is_bnt_isbn=is_bnt_generated,
+                registrant_id=book_info['user_id'] # 최초 등록한 사용자 ID
+            )
+            db.add(new_edition)
+            db.flush()
+            target_edition_id = new_edition.id
+        else:
+            target_edition_id = existing_edition.id
+
+        # 5. 사용자의 서재(UserLibrary)에 연결
+        # (중복 등록 방지 로직 필요)
+        new_user_book = models.UserLibrary(
+            user_id=book_info['user_id'],
+            edition_id=target_edition_id,
+            status="reading" # 기본 상태값
+        )
+        db.add(new_user_book)
+        
+        db.commit()
+        return {"status": "success", "isbn": final_isbn, "nickname": "사용자_닉네임"} # 실제 닉네임 반환
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
