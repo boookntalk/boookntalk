@@ -58,11 +58,11 @@ export default function Home() {
                 
                 {/* 1. Today's Quote Carousel (Hero Section) */}
                 {/* 헤더와 1cm(38px) 간격 유지 */}
-                <section className="mt-[38px] relative rounded-[20px] overflow-hidden group">
+                <section className="mt-[19px] relative rounded-[10px] overflow-hidden group">
                     <div 
                         ref={scrollRef}
                         onScroll={handleScroll}
-                        className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-[500px]"
+                        className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-[280px]"
                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                     >
                         {QUOTES.map((quote) => (
@@ -109,10 +109,10 @@ export default function Home() {
                 </section>
 
                 {/* 2. 실시간 광장 (Community) - 위와 폭 동일 */}
-                <section className="py-24">
-                    <div className="flex justify-between items-end mb-10">
+                <section className="pt-12 pb-24">
+                    <div className="flex justify-between items-end mb-7">
                         <div>
-                            <h3 className="text-[32px] font-semibold tracking-tight text-[#1d1d1f]">실시간 광장</h3>
+                            <h3 className="text-[25px] font-semibold tracking-tight text-[#1d1d1f]">실시간 광장</h3>
                             <p className="text-[#86868b] mt-1 text-[17px]">지금 이 순간, 독자들이 나누는 이야기</p>
                         </div>
                         <button className="text-[#0066cc] text-[15px] font-medium hover:underline">모두 보기</button>
