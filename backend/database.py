@@ -2,6 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+
 import os
 import urllib.parse
 
@@ -28,7 +29,9 @@ engine = create_engine(
     pool_pre_ping=True   # 연결 전 살아있는지 항상 확인 (핵심 옵션!)
 )
 
+# [해결 포인트] 이 부분이 정의되어 있어야 합니다.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 Base = declarative_base()
 
 def get_db():

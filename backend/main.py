@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from typing import Optional
 import database, models
-from database import engine, Base
+from database import SessionLocal, engine, Base
 import os
 import httpx
 import asyncio
@@ -14,8 +14,10 @@ from dotenv import load_dotenv
 
 import uuid
 
+load_dotenv()
+
 # DB 테이블 생성
-models.Base.metadata.create_all(bind=engine)
+#models.Base.metadata.create_all(bind=engine)
 
 # [중요] 테이블 삭제 및 재생성 로직
 # def setup_database():
@@ -48,24 +50,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-load_dotenv()
-
 ALADIN_TTB_KEY = os.getenv("ALADIN_TTB_KEY")
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
-
+        
 @app.get("/api/books/search/{isbn}")
-async def search_external_books(isbn: str):
+async def search_external_books(isbn: str, extra: Optional[str] = None):
+    # isbn 변수에 9788937460470이 자동으로 담깁니다.
+    # extra 변수에는 query parameter인 ""(빈값)이 담깁니다.
+
     async with httpx.AsyncClient() as client:
         # 알라딘: 페이지 수 및 상세 정보용
-        aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={ALADIN_TTB_KEY}&itemIdType=ISBN13&ItemId={isbn}&output=js&Version=20131101&OptResult=itemPage,fullSentence"
+        aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={ALADIN_TTB_KEY}&itemIdType=ISBN13&ItemId={isbn}&output=js&Version=20131101&OptResult=itemPage,fullSentence,originalTitle"
         # 구글: 미리보기 링크용
         google_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}&key={GOOGLE_BOOKS_API_KEY}"
 
         # 병렬 호출로 속도 최적화
-        responses = await asyncio.gather(
-            client.get(aladin_url),
-            client.get(google_url)
-        )
+        responses = await asyncio.gather(client.get(aladin_url), client.get(google_url))
+        item = responses[0].json().get('item', [{}])[0]
+        google_info = responses[1].json().get('items', [{}])[0].get('volumeInfo', {})
 
         aladin_res = responses[0].json()
         google_res = responses[1].json()
@@ -81,10 +83,13 @@ async def search_external_books(isbn: str):
             "title": item.get('title'),
             "author": item.get('author'),
             "publisher": item.get('publisher'),
+            "pubDate": item.get('pubDate'),
+            "categoryName": item.get('categoryName'),
             "cover": item.get('cover'),
             "description": item.get('description'),
-            "pageCount": item.get('subInfo', {}).get('itemPage'), # 디테일 정보
-            "previewLink": google_info.get('previewLink'), # 미리보기 기능
+            "pageCount": item.get('subInfo', {}).get('itemPage'),
+            "originalTitle": item.get('subInfo', {}).get('originalTitle'),
+            "previewLink": google_info.get('previewLink'),
             "isbn": isbn
         }
 
@@ -134,44 +139,49 @@ def get_db():
         yield db
     finally:
         db.close()
-
+            
 @app.post("/api/books/register")
 async def finalize_book_registration(book_info: dict, db: Session = Depends(get_db)):
-    """
-    book_info 예시: { "title": "...", "isbn": "...", "extraCode": "...", "cover": "...", "user_id": 123 }
-    """
     try:
-        # 1. ISBN 처리 (없을 경우 BnT ID 생성 - 프로세스 5번)
-        final_isbn = book_info.get('isbn')
-        is_bnt_generated = False
+        # 1. ISBN 처리
+        final_isbn = book_info.get('isbn') or f"BNT-{uuid.uuid4().hex[:8].upper()}"
+        is_bnt_generated = not book_info.get('isbn')
         
         if not final_isbn:
+            # uuid가 임포트되어 있어야 에러가 나지 않습니다.
             final_isbn = f"BNT-{uuid.uuid4().hex[:8].upper()}"
             is_bnt_generated = True
+        
+        # [해결 2] 데이터 타입 체크
+        # 프론트에서 user_id로 email(문자열)을 보낸다면 DB의 registrant_id 타입과 맞아야 합니다.
+        raw_user_id = book_info.get('user_id')
         
         # 2. 기존 판본(Edition) 존재 여부 확인
         existing_edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
         
         if not existing_edition:
-            # 3. 작품(Work)이 없는 경우 신규 생성
-            # (같은 제목/저자의 작품이 있는지 체크 로직 추가 가능)
+            # 1. Work 생성 (추가 정보 반영)
             new_work = models.Work(
-                title=book_info['title'],
-                author=book_info['author'],
-                description=book_info.get('description', "")
+                title=book_info.get('title'),
+                author=book_info.get('author'),
+                description=book_info.get('description'),
+                category=book_info.get('categoryName'),
+                original_title=book_info.get('originalTitle')
             )
             db.add(new_work)
-            db.flush() # ID 생성을 위해 flush
+            db.flush()
 
-            # 4. 판본(Edition) 생성 (최초 등록자 기록 - 프로세스 4번)
+            # 2. Edition 생성 (추가 정보 반영)
             new_edition = models.Edition(
                 isbn=final_isbn,
                 work_id=new_work.id,
                 publisher=book_info.get('publisher'),
                 cover_image=book_info.get('cover'),
                 page_count=book_info.get('pageCount'),
+                pub_date=book_info.get('pubDate'),
+                preview_link=book_info.get('previewLink'),
                 is_bnt_isbn=is_bnt_generated,
-                registrant_id=book_info['user_id'] # 최초 등록한 사용자 ID
+                registrant_id=book_info.get('user_id')
             )
             db.add(new_edition)
             db.flush()
@@ -180,17 +190,25 @@ async def finalize_book_registration(book_info: dict, db: Session = Depends(get_
             target_edition_id = existing_edition.id
 
         # 5. 사용자의 서재(UserLibrary)에 연결
-        # (중복 등록 방지 로직 필요)
-        new_user_book = models.UserLibrary(
-            user_id=book_info['user_id'],
-            edition_id=target_edition_id,
-            status="reading" # 기본 상태값
-        )
-        db.add(new_user_book)
+        # 중복 등록 방지 로직 추가
+        already_exists = db.query(models.UserLibrary).filter(
+            models.UserLibrary.user_id == raw_user_id,
+            models.UserLibrary.edition_id == target_edition_id
+        ).first()
+
+        if not already_exists:
+            new_user_book = models.UserLibrary(
+                user_id=raw_user_id,
+                edition_id=target_edition_id,
+                status="reading"
+            )
+            db.add(new_user_book)
         
         db.commit()
-        return {"status": "success", "isbn": final_isbn, "nickname": "사용자_닉네임"} # 실제 닉네임 반환
+        return {"status": "success", "isbn": final_isbn}
 
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        # [중요] 터미널에 실제 에러를 찍어서 확인하기 위함
+        print(f"Registration Error: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
