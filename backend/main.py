@@ -4,8 +4,10 @@ from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from typing import Optional
-import database, models
 from database import SessionLocal, engine, Base
+from datetime import datetime
+
+import database, models
 import os
 import httpx
 import asyncio
@@ -212,3 +214,78 @@ async def finalize_book_registration(book_info: dict, db: Session = Depends(get_
         # [중요] 터미널에 실제 에러를 찍어서 확인하기 위함
         print(f"Registration Error: {str(e)}") 
         raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
+    
+@app.get("/api/my-library/{user_email}")
+async def get_my_library(user_email: str, db: Session = Depends(get_db)):
+    # UserLibrary, Edition, Work 테이블을 Join하여 데이터 추출
+    library_items = db.query(
+        models.UserLibrary,
+        models.Edition,
+        models.Work
+    ).join(models.Edition, models.UserLibrary.edition_id == models.Edition.id)\
+     .join(models.Work, models.Edition.work_id == models.Work.id)\
+     .filter(models.UserLibrary.user_id == user_email)\
+     .all()
+
+    results = []
+    for lib, ed, work in library_items:
+        results.append({
+            "library_id": lib.id,
+            "status": lib.status,
+            "added_at": lib.added_at,
+            "title": work.title,
+            "author": work.author,
+            "cover": ed.cover_image,
+            "isbn": ed.isbn,
+            "page_count": ed.page_count,
+            "category": work.category
+        })
+    return results
+
+@app.patch("/api/my-library/{library_id}")
+async def update_library_info(library_id: int, info: dict, db: Session = Depends(get_db)):
+    db_item = db.query(models.UserLibrary).filter(models.UserLibrary.id == library_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    # 전달받은 필드만 업데이트 (rating, status, short_review 등)
+    for key, value in info.items():
+        setattr(db_item, key, value)
+        
+    db.commit()
+    return {"message": "Updated successfully"}
+
+class LibraryUpdate(BaseModel):
+    status: Optional[str] = None
+    rating: Optional[float] = None
+    start_date: Optional[datetime] = None
+    finish_date: Optional[datetime] = None
+    short_review: Optional[str] = None
+    book_type: Optional[str] = None
+
+# 2. 업데이트 API 엔드포인트
+@app.patch("/api/my-library/{library_id}")
+async def update_library_entry(
+    library_id: int, 
+    update_data: LibraryUpdate, 
+    db: Session = Depends(get_db)
+):
+    # 해당 ID의 기록 찾기
+    db_item = db.query(models.UserLibrary).filter(models.UserLibrary.id == library_id).first()
+    
+    if not db_item:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+
+    # 전달된 데이터만 추출하여 업데이트 (None이 아닌 값만)
+    update_dict = update_data.dict(exclude_unset=True)
+    
+    for key, value in update_dict.items():
+        setattr(db_item, key, value)
+
+    try:
+        db.commit()
+        db.refresh(db_item)
+        return {"message": "성공적으로 업데이트되었습니다.", "data": db_item}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"DB 업데이트 오류: {str(e)}")

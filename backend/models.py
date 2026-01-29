@@ -1,7 +1,8 @@
 from database import Base
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, Text, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from datetime import datetime
 
 class User(Base):
     __tablename__ = "users"
@@ -58,6 +59,11 @@ class UserLibrary(Base):
     edition_id = Column(Integer, ForeignKey("editions.id"))
     status = Column(String, default="reading")
     added_at = Column(DateTime(timezone=True), server_default=func.now())
+    rating = Column(Float, default=0.0)      # 별점 (예: 4.5)
+    start_date = Column(DateTime)            # 독서 시작일
+    finish_date = Column(DateTime)           # 완독일
+    short_review = Column(String(200))       # 한 줄 평
+    book_type = Column(String(20))           # 종이책, e-book 등
     
 class Post(Base):
     __tablename__ = "posts"
