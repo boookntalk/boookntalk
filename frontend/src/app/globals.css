@@ -3,23 +3,20 @@
 @tailwind utilities;
 
 :root {
-  --background: #F9F9F7;
-  --foreground: #2C3E50;
+  --background: #F9F9F7; /* BoooknTalk 표준 배경색 */
+  --foreground: #1d1d1f;
+  --header-height: 56px; /* Header h-14와 일치 */
+  --content-gap: 20px;   /* 사용자 요청 여백 */
 }
 
-body {
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* 전역 스크롤 방지 */
   background-color: var(--background);
-  color: var(--foreground);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 한글 폰트 부드럽게 처리를 위한 추가 */
-@import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap');
-
-/* 브라우저 기본 여백 초기화 */
 * {
   box-sizing: border-box;
-  padding: 0;
-  margin: 0;
 }

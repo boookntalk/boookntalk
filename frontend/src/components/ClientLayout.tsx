@@ -9,12 +9,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   return (
     <>
-      <main>{children}</main>
+      {/* 중복된 main 태그를 제거하여 layout.tsx의 main 설정만 따릅니다. */}
+      {children}
       
-      {/* 플로팅 버튼 클릭 시 모달 열기 */}
       <AddBookFAB onClick={() => setIsModalOpen(true)} />
       
-      {/* 모달 컴포넌트 */}
       <AddBookModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 

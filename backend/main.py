@@ -145,45 +145,48 @@ def get_db():
 @app.post("/api/books/register")
 async def finalize_book_registration(book_info: dict, db: Session = Depends(get_db)):
     try:
-        # 1. ISBN 처리
+        # 1. ISBN 및 사용자 ID 확보
         final_isbn = book_info.get('isbn') or f"BNT-{uuid.uuid4().hex[:8].upper()}"
         is_bnt_generated = not book_info.get('isbn')
-        
-        if not final_isbn:
-            # uuid가 임포트되어 있어야 에러가 나지 않습니다.
-            final_isbn = f"BNT-{uuid.uuid4().hex[:8].upper()}"
-            is_bnt_generated = True
-        
-        # [해결 2] 데이터 타입 체크
-        # 프론트에서 user_id로 email(문자열)을 보낸다면 DB의 registrant_id 타입과 맞아야 합니다.
         raw_user_id = book_info.get('user_id')
         
-        # 2. 기존 판본(Edition) 존재 여부 확인
+        # 2. 판본(Edition) 존재 확인
         existing_edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
         
         if not existing_edition:
-            # 1. Work 생성 (추가 정보 반영)
-            new_work = models.Work(
-                title=book_info.get('title'),
-                author=book_info.get('author'),
-                description=book_info.get('description'),
-                category=book_info.get('categoryName'),
-                original_title=book_info.get('originalTitle')
-            )
-            db.add(new_work)
-            db.flush()
+            # 3. [핵심] 작품(Work) 중복 확인 (제목 + 저자 조합)
+            existing_work = db.query(models.Work).filter(
+                models.Work.title == book_info.get('title'),
+                models.Work.author == book_info.get('author')
+            ).first()
 
-            # 2. Edition 생성 (추가 정보 반영)
+            if not existing_work:
+                # 새로운 작품 생성
+                new_work = models.Work(
+                    title=book_info.get('title'),
+                    author=book_info.get('author'),
+                    description=book_info.get('description'),
+                    category=book_info.get('categoryName'),
+                    original_title=book_info.get('originalTitle')
+                )
+                db.add(new_work)
+                db.flush() # work.id 확보를 위해 flush
+                work_id = new_work.id
+            else:
+                # 기존 작품 ID 사용
+                work_id = existing_work.id
+
+            # 4. 새로운 판본 생성 (Work와 연결)
             new_edition = models.Edition(
                 isbn=final_isbn,
-                work_id=new_work.id,
+                work_id=work_id,
                 publisher=book_info.get('publisher'),
                 cover_image=book_info.get('cover'),
                 page_count=book_info.get('pageCount'),
                 pub_date=book_info.get('pubDate'),
                 preview_link=book_info.get('previewLink'),
                 is_bnt_isbn=is_bnt_generated,
-                registrant_id=book_info.get('user_id')
+                registrant_id=raw_user_id
             )
             db.add(new_edition)
             db.flush()
@@ -191,8 +194,7 @@ async def finalize_book_registration(book_info: dict, db: Session = Depends(get_
         else:
             target_edition_id = existing_edition.id
 
-        # 5. 사용자의 서재(UserLibrary)에 연결
-        # 중복 등록 방지 로직 추가
+        # 5. 사용자 서재 등록 (중복 방지)
         already_exists = db.query(models.UserLibrary).filter(
             models.UserLibrary.user_id == raw_user_id,
             models.UserLibrary.edition_id == target_edition_id
@@ -208,13 +210,10 @@ async def finalize_book_registration(book_info: dict, db: Session = Depends(get_
         
         db.commit()
         return {"status": "success", "isbn": final_isbn}
-
     except Exception as e:
         db.rollback()
-        # [중요] 터미널에 실제 에러를 찍어서 확인하기 위함
-        print(f"Registration Error: {str(e)}") 
-        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
-    
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/my-library/{user_email}")
 async def get_my_library(user_email: str, db: Session = Depends(get_db)):
     # UserLibrary, Edition, Work 테이블을 Join하여 데이터 추출
@@ -229,6 +228,8 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
 
     results = []
     for lib, ed, work in library_items:
+        has_detail = True if (lib.rating and lib.rating > 0) or lib.short_review else False
+        
         results.append({
             "library_id": lib.id,
             "status": lib.status,
@@ -236,11 +237,23 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
             "title": work.title,
             "author": work.author,
             "cover": ed.cover_image,
-            "isbn": ed.isbn,
-            "page_count": ed.page_count,
-            "category": work.category
+            "rating": lib.rating or 0,
+            "short_review": lib.short_review or "",
+            # [수정] 날짜 데이터 형식을 프론트엔드 input type="date"에 맞게 처리
+            "start_date": lib.start_date.strftime('%Y-%m-%d') if lib.start_date else "",
+            "finish_date": lib.finish_date.strftime('%Y-%m-%d') if lib.finish_date else "",
+            "has_detail": has_detail
         })
     return results
+
+# 1. 스키마 정의 (Pydantic)
+class LibraryUpdate(BaseModel):
+    status: Optional[str] = None
+    rating: Optional[float] = None
+    start_date: Optional[str] = None
+    finish_date: Optional[str] = None
+    short_review: Optional[str] = None
+    book_type: Optional[str] = None
 
 @app.patch("/api/my-library/{library_id}")
 async def update_library_info(library_id: int, info: dict, db: Session = Depends(get_db)):
@@ -254,14 +267,6 @@ async def update_library_info(library_id: int, info: dict, db: Session = Depends
         
     db.commit()
     return {"message": "Updated successfully"}
-
-class LibraryUpdate(BaseModel):
-    status: Optional[str] = None
-    rating: Optional[float] = None
-    start_date: Optional[datetime] = None
-    finish_date: Optional[datetime] = None
-    short_review: Optional[str] = None
-    book_type: Optional[str] = None
 
 # 2. 업데이트 API 엔드포인트
 @app.patch("/api/my-library/{library_id}")
@@ -289,3 +294,51 @@ async def update_library_entry(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"DB 업데이트 오류: {str(e)}")
+
+# 내 서재 목록 조회 (상세 정보 포함)
+@app.get("/api/my-library/{user_email}")
+async def get_my_library(user_email: str, db: Session = Depends(get_db)):
+    library_items = db.query(
+        models.UserLibrary, models.Edition, models.Work
+    ).join(models.Edition, models.UserLibrary.edition_id == models.Edition.id)\
+     .join(models.Work, models.Edition.work_id == models.Work.id)\
+     .filter(models.UserLibrary.user_id == user_email).all()
+
+    results = []
+    for lib, ed, work in library_items:
+        # 기록 존재 여부 판단 로직
+        has_detail = True if (lib.rating and lib.rating > 0) or lib.short_review else False
+        
+        results.append({
+            "library_id": lib.id,
+            "status": lib.status,
+            "added_at": lib.added_at,
+            "title": work.title,
+            "author": work.author,
+            "cover": ed.cover_image,
+            "rating": lib.rating or 0,
+            "short_review": lib.short_review or "",
+            "start_date": lib.start_date,
+            "finish_date": lib.finish_date,
+            "has_detail": has_detail
+        })
+    return results
+
+# 상세 정보 업데이트 API (통합본)
+@app.patch("/api/my-library/{library_id}")
+async def update_library_entry(library_id: int, update_data: LibraryUpdate, db: Session = Depends(get_db)):
+    db_item = db.query(models.UserLibrary).filter(models.UserLibrary.id == library_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+
+    update_dict = update_data.dict(exclude_unset=True)
+    for key, value in update_dict.items():
+        setattr(db_item, key, value)
+
+    try:
+        db.commit()
+        db.refresh(db_item)
+        return {"message": "success", "data": db_item}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
