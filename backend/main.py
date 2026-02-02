@@ -54,44 +54,73 @@ app = FastAPI(lifespan=lifespan)
 
 ALADIN_TTB_KEY = os.getenv("ALADIN_TTB_KEY")
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
-        
+
 @app.get("/api/books/search/{isbn}")
 async def search_external_books(isbn: str, extra: Optional[str] = None):
-    # isbn 변수에 9788937460470이 자동으로 담깁니다.
-    # extra 변수에는 query parameter인 ""(빈값)이 담깁니다.
-
     async with httpx.AsyncClient() as client:
-        # 알라딘: 페이지 수 및 상세 정보용
         aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={ALADIN_TTB_KEY}&itemIdType=ISBN13&ItemId={isbn}&output=js&Version=20131101&OptResult=itemPage,fullSentence,originalTitle"
-        # 구글: 미리보기 링크용
         google_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}&key={GOOGLE_BOOKS_API_KEY}"
 
-        # 병렬 호출로 속도 최적화
-        responses = await asyncio.gather(client.get(aladin_url), client.get(google_url))
-        item = responses[0].json().get('item', [{}])[0]
-        google_info = responses[1].json().get('items', [{}])[0].get('volumeInfo', {})
-
+        try:
+            # 타임아웃 설정을 추가하여 외부 API 지연 시 무한 대기 방지
+            responses = await asyncio.gather(
+                client.get(aladin_url, timeout=5.0), 
+                client.get(google_url, timeout=5.0)
+            )
+        except Exception as e:
+            raise HTTPException(status_code=503, detail="외부 도서 서비스 연결에 실패했습니다.")
+        
         aladin_res = responses[0].json()
         google_res = responses[1].json()
 
-        if not aladin_res.get('item'):
+        # 데이터 안전하게 추출
+        aladin_item = aladin_res.get('item', [{}])[0] if aladin_res.get('item') else {}
+        google_items = google_res.get('items', [])
+        google_info = google_items[0].get('volumeInfo', {}) if google_items else {}
+
+        # 1. 제목 및 저자 검증
+        title = google_info.get('title') or aladin_item.get('title')
+        if not title:
             raise HTTPException(status_code=404, detail="도서 정보를 찾을 수 없습니다.")
 
-        item = aladin_res['item'][0]
-        google_info = google_res.get('items', [{}])[0].get('volumeInfo', {})
+        # 저자 리스트 처리
+        google_authors = google_info.get('authors')
+        author = ", ".join(google_authors) if google_authors else aladin_item.get('author', "저자 미상")
 
-        # boookntalk 통합 데이터 객체 (프론트엔드로 전달)
+        # 2. 고해상도 표지 로직 (확실한 Fallback)
+        google_items = google_res.get('items', [])
+        google_info = google_items[0].get('volumeInfo', {}) if google_items else {}
+        image_links = google_info.get('imageLinks', {})
+
+        # 구글에서 제공하는 모든 이미지 필드를 샅샅이 뒤집니다 (우선순위 순서)
+        google_cover = (
+            image_links.get('extraLarge') or 
+            image_links.get('large') or 
+            image_links.get('medium') or 
+            image_links.get('small') or 
+            image_links.get('thumbnail') or
+            image_links.get('smallThumbnail')
+        )
+        
+        if google_cover:
+            # 고해상도 치환 로직
+            final_cover = google_cover.replace("&zoom=1", "&zoom=0").replace("&edge=curl", "").replace("http://", "https://")
+        else:
+            # 구글에 이미지가 정말 없으면 알라딘 커버 사용
+            final_cover = aladin_item.get('cover', "")
+
+        # 3. 기타 필드 정규화
         return {
-            "title": item.get('title'),
-            "author": item.get('author'),
-            "publisher": item.get('publisher'),
-            "pubDate": item.get('pubDate'),
-            "categoryName": item.get('categoryName'),
-            "cover": item.get('cover'),
-            "description": item.get('description'),
-            "pageCount": item.get('subInfo', {}).get('itemPage'),
-            "originalTitle": item.get('subInfo', {}).get('originalTitle'),
-            "previewLink": google_info.get('previewLink'),
+            "title": title,
+            "author": author,
+            "publisher": google_info.get('publisher') or aladin_item.get('publisher') or "출판사 미상",
+            "pubDate": google_info.get('publishedDate') or aladin_item.get('pubDate') or "",
+            "categoryName": aladin_item.get('categoryName') or "미분류",
+            "cover": final_cover,
+            "description": google_info.get('description') or aladin_item.get('description') or "",
+            "pageCount": google_info.get('pageCount') or aladin_item.get('subInfo', {}).get('itemPage') or 0,
+            "originalTitle": aladin_item.get('subInfo', {}).get('originalTitle') or "",
+            "previewLink": google_info.get('previewLink') or "",
             "isbn": isbn
         }
 

@@ -6,6 +6,8 @@ import { DESIGN_TOKEN } from '@/constants/styles';
 import BookDetailForm from './BookDetailForm';
 import Dialog from '@/components/ui/dialog'; 
 import Container from '@/components/layout/Container'; // 대소문자 확인: Container
+import Image from 'next/image'; // 이 라인을 추가하세요
+
 
 export default function LibraryClient({ initialBooks }: { initialBooks: any[] }) {
     const [filter, setFilter] = useState('all');
@@ -85,21 +87,22 @@ export default function LibraryClient({ initialBooks }: { initialBooks: any[] })
                         >
                             {/* [수정 포인트] 정보 전체를 감싸는 흰색 카드 생성 */}
                             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-50 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-0.5">
-
                                 {/* 1. 책 표지 영역 (카드 내 상단에 위치) */}
-                                
-                                <div className="relative aspect-[3/4] rounded-lg mb-4 w-[70%] mx-auto">
-                                    <img 
+                                <div className="relative aspect-[3/4] rounded-lg mb-4 w-[70%] mx-auto overflow-hidden">
+                                    <Image 
                                         src={book.cover} 
-                                        alt={book.title} 
-                                        className="w-full h-full object-cover rounded-lg shadow-md 
+                                        alt={book.title}
+                                        fill  // 부모 div의 aspect-[3/4] 비율에 맞춰 꽉 채웁니다.
+                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                        unoptimized={true} // 구글 고해상도(zoom=0) 원본 품질을 유지하기 위해 필수입니다.
+                                        className="object-cover rounded-lg shadow-md 
                                         transition-all duration-500 ease-out 
-                                        group-hover:-translate-y-0.3 group-hover:shadow-[10px_10px_10px_rgba(0,0,0,0.4)]" 
+                                        group-hover:scale-105 group-hover:shadow-[10px_10px_10px_rgba(0,0,0,0.4)]" 
                                     />
-                                    {/* 표지 위에 덧씌워지는 미세한 오버레이 (선택사항) */}
+                                    {/* 표지 위에 덧씌워지는 미세한 오버레이 */}
                                     <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
                                 </div>
-
+                         
                                 {/* 2. 도서 정보 영역 (카드 내 하단에 위치) */}
                                 <div className="text-left px-1"> {/* 좌측 정렬 유지 */}
                                     <h3 className="font-bold text-[#1d1d1f] text-[15px] mb-1 line-clamp-1">{book.title}</h3>
