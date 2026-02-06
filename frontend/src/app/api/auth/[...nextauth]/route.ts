@@ -1,7 +1,8 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
-const handler = NextAuth({
+// [수정] 설정 옵션을 변수로 분리하고 export 합니다.
+export const authOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
@@ -9,8 +10,7 @@ const handler = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ user }) {
-      // 1. 로그인 성공 시 백엔드 API 호출 (데이터 동기화)
+    async signIn({ user }: any) {
       try {
         const response = await fetch("http://localhost:8000/api/auth/sync", {
           method: "POST",
@@ -21,27 +21,22 @@ const handler = NextAuth({
             profile_image: user.image,
           }),
         });
-
-        if (response.ok) {
-          return true; // 로그인 허용
-        } else {
-          console.error("Backend sync failed");
-          return true; // 동기화 실패해도 일단 로그인은 허용 (선택 사항)
-        }
+        return true; 
       } catch (error) {
         console.error("Error during sync:", error);
         return true;
       }
     },
-    async session({ session, token }) {
-      // 세션에 추가 정보 저장
+    async session({ session, token }: any) {
       if (session.user) {
-        (session.user as any).id = token.sub;
+        session.user.id = token.sub;
       }
       return session;
     },
   },
-});
+};
 
-// App Router 환경에서는 반드시 GET과 POST를 export 해야 합니다.
+// 위에서 만든 옵션을 넣어줍니다.
+const handler = NextAuth(authOptions);
+
 export { handler as GET, handler as POST };
