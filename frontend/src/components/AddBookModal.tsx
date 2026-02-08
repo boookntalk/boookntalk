@@ -1,166 +1,247 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, BookOpen, Loader2, Info } from 'lucide-react';
-import { useSession } from "next-auth/react"; 
+import { X, Search, Book, Loader2, Info } from 'lucide-react';
+import Image from 'next/image';
 
-export default function AddBookModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { data: session } = useSession(); 
+interface AddBookModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  userEmail: string;
+}
+
+export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModalProps) {
+  const [isbnInput, setIsbnInput] = useState('');
+  const [addonInput, setAddonInput] = useState(''); // 5자리 부가기호
   
-  const [isbn, setIsbn] = useState('');
-  const [extraCode, setExtraCode] = useState('');
-  const [bookData, setBookData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchResult, setSearchResult] = useState<any>(null);
+  const [error, setError] = useState('');
 
-  // 1. 도서 검색 (변경 없음)
+  // 1. 책 검색
   const handleSearch = async () => {
-    if (!isbn.trim()) {
-      alert("ISBN을 입력하거나, ISBN이 없는 도서 등록 절차를 확인해 주세요.");
+    const cleanIsbn = isbnInput.trim().replace(/-/g, '');
+    
+    if (!cleanIsbn) {
+      setError('ISBN을 입력해주세요.');
       return;
     }
-    setLoading(true);
+
+    if (cleanIsbn.length !== 10 && cleanIsbn.length !== 13) {
+      setError('ISBN은 10자리 또는 13자리여야 합니다.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setSearchResult(null);
+
     try {
-      // API 주소는 환경변수(process.env.NEXT_PUBLIC_API_URL) 사용을 권장하지만, 일단 현재 설정 유지
-      const res = await fetch(`http://localhost:8000/api/books/search/${isbn}?extra=${extraCode}`);
-      if (!res.ok) throw new Error('Search failed');
+      // 검색은 메인 ISBN으로만 진행
+      const res = await fetch(`http://localhost:8000/api/books/search/${cleanIsbn}`);
+      
+      if (!res.ok) {
+        throw new Error('도서를 찾을 수 없습니다.');
+      }
+      
       const data = await res.json();
-      setBookData(data);
-    } catch (error) {
-      alert("도서 정보를 가져오는데 실패했습니다. 정확한 ISBN인지 확인해주세요.");
+      setSearchResult(data);
+    } catch (err) {
+      setError('도서 정보를 불러오지 못했습니다. ISBN을 확인해주세요.');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  // 2. 최종 등록 (핵심 수정!)
-  const handleFinalRegister = async () => {
-    if (!bookData) return;
-
-    if (!session?.user?.email) {
-      alert("로그인 정보가 없습니다. 다시 로그인해 주세요.");
+  // 2. 책 등록
+  const handleRegister = async () => {
+    if (!searchResult || !userEmail) {
+      alert("로그인 정보가 없거나 도서 정보가 없습니다.");
       return;
     }
 
-    const payload = {
-      ...bookData,
-      extraCode: extraCode,
-      // [중요 수정] 백엔드가 이메일을 통해 유저 ID를 찾으므로 'user_email'로 보냅니다.
-      user_email: session.user.email, 
-      nickname: session.user.name
-    };
-
     try {
-      const res = await fetch('http://localhost:8000/api/books/register', {
+      setIsLoading(true);
+
+      const payload = {
+        user_email: userEmail,
+        title: searchResult.title,
+        author: searchResult.author,
+        publisher: searchResult.publisher,
+        pubDate: searchResult.pubDate,
+        description: searchResult.description,
+        isbn: searchResult.isbn,      
+        isbn10: searchResult.isbn10,
+        
+        // [핵심] 사용자가 입력한 5자리 부가기호 전송
+        addon_code: addonInput.trim(), 
+        
+        cover: searchResult.cover,
+        pageCount: searchResult.pageCount,
+        categoryName: searchResult.categoryName,
+        originalTitle: searchResult.originalTitle
+      };
+
+      const res = await fetch('http://localhost:8000/api/books', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      
-      if (res.ok) {
-        alert("📚 서재에 성공적으로 등록되었습니다!");
-        onClose();
-        // 등록 후 새로고침하여 목록 갱신
-        window.location.reload(); 
-      } else {
+
+      if (!res.ok) {
         const errorData = await res.json();
-        alert(`등록 실패: ${errorData.detail || "알 수 없는 오류"}`);
+        throw new Error(errorData.detail || '도서 등록에 실패했습니다.');
       }
-    } catch (error) {
-      console.error(error);
-      alert("등록 중 서버 오류가 발생했습니다.");
+
+      alert('도서가 성공적으로 등록되었습니다!');
+      onClose();
+      window.location.reload(); 
+
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleAddonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    if (val.length <= 5) setAddonInput(val);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+        
         {/* 헤더 */}
-        <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-          <h2 className="font-bold text-lg text-[#1d1d1f]">새 도서 등록</h2>
-          <button onClick={onClose} className="hover:bg-gray-200 p-1 rounded-full text-gray-500 transition-colors">
-            <X className="w-5 h-5" />
+        <div className="flex justify-between items-center px-6 py-5 border-b border-gray-100">
+          <h2 className="text-xl font-bold text-[#1d1d1f]">새 도서 등록</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <X size={22} className="text-gray-500" />
           </button>
         </div>
 
-        {/* 본문 */}
-        <div className="p-8">
-          {!bookData ? (
-            // 검색 전 화면
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <label className="text-sm font-semibold text-gray-700 ml-1">도서 식별 번호 (ISBN)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={isbn}
-                    onChange={(e) => setIsbn(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    placeholder="ISBN 13자리 입력"
-                    className="flex-[3] px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-[15px] transition-all"
-                  />
-                  <input
-                    type="text"
-                    value={extraCode}
-                    onChange={(e) => setExtraCode(e.target.value)}
-                    placeholder="옵션" 
-                    className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-[15px] italic text-center transition-all"
-                  />
-                </div>
-                
-                {/* 안내 문구 */}
-                <div className="flex items-start gap-2 mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                  <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-                  <p className="text-[13px] text-blue-700 leading-relaxed">
-                    ISBN이 없는 도서의 경우, 임의의 13자리를 입력하시면 <span className="font-bold underline">BnT 고유 ID</span>로 등록됩니다.
-                  </p>
-                </div>
+        {/* 바디 */}
+        <div className="p-6 overflow-y-auto custom-scrollbar">
+          
+          {/* 검색 입력 영역 */}
+          <div className="flex flex-col gap-4 mb-6">
+            <label className="text-xs font-bold text-gray-500 ml-1">ISBN 정보 입력</label>
+            <div className="flex gap-2">
+              {/* ISBN 입력 */}
+              <div className="relative flex-grow">
+                <input
+                  type="text"
+                  value={isbnInput}
+                  onChange={(e) => setIsbnInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  placeholder="ISBN 13자리 또는 10자리"
+                  className="w-full pl-10 pr-3 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc] transition-all text-sm font-medium"
+                />
+                <Search className="absolute left-3.5 top-3.5 text-gray-400" size={20} />
               </div>
-              
-              <button 
-                onClick={handleSearch} 
-                disabled={loading} 
-                className="w-full bg-[#1d1d1f] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:bg-black hover:shadow-lg disabled:opacity-70"
+
+              {/* 5자리 부가기호 입력 */}
+              <div className="w-28 flex-shrink-0">
+                <input
+                  type="text"
+                  value={addonInput}
+                  onChange={handleAddonChange}
+                  placeholder="5자리(선택)"
+                  className="w-full px-3 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc] transition-all text-sm text-center font-medium"
+                />
+              </div>
+
+              {/* 검색 버튼 */}
+              <button
+                onClick={handleSearch}
+                disabled={isLoading}
+                className="bg-[#1d1d1f] text-white px-5 rounded-xl font-semibold hover:bg-[#333] transition-colors disabled:opacity-50 whitespace-nowrap text-sm"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "도서 정보 조회하기"}
+                {isLoading ? <Loader2 className="animate-spin" size={20} /> : '검색'}
               </button>
             </div>
-          ) : (
-            // 검색 결과 화면
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="flex gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                    {bookData.cover ? (
-                        <img src={bookData.cover} alt="cover" className="w-24 h-36 object-cover rounded shadow-md shrink-0" />
-                    ) : (
-                        <div className="w-24 h-36 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">이미지 없음</div>
-                    )}
-                    <div className="flex flex-col justify-between py-1">
-                        <div>
-                            <h3 className="font-bold text-lg leading-tight line-clamp-2">{bookData.title}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{bookData.author}</p>
-                        </div>
-                        
-                        <div>
-                            <p className="text-xs text-blue-600 font-semibold bg-white border border-blue-100 inline-block px-2 py-1 rounded shadow-sm">
-                                {bookData.pageCount ? `${bookData.pageCount} 페이지` : '페이지 정보 없음'}
-                            </p>
-                            {bookData.previewLink && (
-                            <a href={bookData.previewLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] text-gray-400 mt-2 hover:text-black transition-colors">
-                                <BookOpen className="w-3 h-3" /> 미리보기
-                            </a>
-                            )}
-                        </div>
-                    </div>
+
+            {/* [복구됨] 2. ISBN/세트 관련 도움말 (파란색 박스) */}
+            <div className="flex flex-col gap-3 bg-blue-50 p-4 rounded-xl text-blue-700 border border-blue-100">
+              {/* 첫 번째 줄 */}
+              <div className="flex items-start gap-2.5">
+                <Info size={18} className="flex-shrink-0 mt-0.5" />
+                <p className="text-sm leading-snug">
+                  ISBN-13 또는 ISBN-10을 입력해주세요.
+                </p>
+              </div>
+              {/* 두 번째 줄 */}
+              <div className="flex items-start gap-2.5">
+                <Info size={18} className="flex-shrink-0 mt-0.5" />
+                <p className="text-sm leading-snug">
+                  세트 도서의 경우 박스 바코드보다 <strong className="font-semibold underline decoration-blue-300 underline-offset-2">읽으실 낱권의 바코드</strong>를 입력하는 것을 추천해요.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-4 mb-4 bg-red-50 text-red-600 text-sm rounded-xl flex items-center gap-2 animate-pulse border border-red-100">
+              <span className="font-bold">Error:</span> {error}
+            </div>
+          )}
+
+          {searchResult ? (
+            /* 검색 결과가 있을 때 */
+            <div className="border border-gray-200 rounded-2xl p-4 flex gap-5 bg-white shadow-sm hover:shadow-md transition-shadow">
+              <div className="relative w-28 h-40 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-100 shadow-inner">
+                {searchResult.cover ? (
+                  <Image
+                    src={searchResult.cover}
+                    alt={searchResult.title}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-300">
+                    <Book size={32} />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col justify-between flex-1 py-1">
+                <div>
+                  <h3 className="font-bold text-[#1d1d1f] text-lg leading-tight mb-2 line-clamp-2">
+                    {searchResult.title}
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-1">{searchResult.author}</p>
+                  <p className="text-xs text-gray-400">{searchResult.publisher} · {searchResult.pubDate}</p>
                 </div>
                 
-                <button onClick={handleFinalRegister} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg">
-                    이 책으로 서재 등록 완료
+                <button
+                  onClick={handleRegister}
+                  disabled={isLoading}
+                  className="mt-3 w-full bg-[#0066cc] text-white py-3 rounded-xl font-semibold hover:bg-[#0052a3] transition-colors active:scale-[0.98] shadow-md shadow-blue-500/20"
+                >
+                  {isLoading ? '저장 중...' : '내 서재에 담기'}
                 </button>
-                <button onClick={() => setBookData(null)} className="w-full mt-4 text-gray-400 text-[13px] hover:text-gray-600 hover:underline transition-colors">
-                    뒤로 가기 (다시 검색)
-                </button>
+              </div>
             </div>
+          ) : (
+            /* 검색 결과가 없을 때 (초기 상태) - 가이드 이미지 표시 */
+            !isLoading && !error && (
+              <div className="flex flex-col items-center justify-center pt-2 pb-6">
+                <div className="relative w-full aspect-[2/1] max-w-[400px]">
+                  {/* [수정 경로 적용] public 바로 아래에 파일이 있는 경우 */}
+                  <Image 
+                    src="/guide_isbn.png" 
+                    alt="ISBN 가이드"
+                    fill
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+              </div>
+            )
           )}
         </div>
       </div>

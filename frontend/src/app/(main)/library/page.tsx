@@ -1,5 +1,5 @@
 // src/app/(main)/library/page.tsx
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"; 
+import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import LibraryClient from "./LibraryClient";
 import { redirect } from "next/navigation";

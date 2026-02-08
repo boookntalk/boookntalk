@@ -3,6 +3,33 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
+# [1] 참여자(작가) 정보 테이블 (NEW)
+class Contributor(Base):
+    __tablename__ = "contributors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=False)   # 예: J.K. 롤링
+    original_name = Column(String, nullable=True)       # 예: J.K. Rowling
+    description = Column(String, nullable=True)         # 동명이인 구분용 메모
+
+    # 관계 설정
+    work_participations = relationship("WorkContributor", back_populates="contributor")
+
+# [2] 작품-참여자 연결 테이블 (NEW - 다대다 관계)
+class WorkContributor(Base):
+    __tablename__ = "work_contributors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id"))
+    contributor_id = Column(Integer, ForeignKey("contributors.id"))
+    
+    role = Column(String, nullable=False)  # Author, Translator, Illustrator 등
+    
+    # 관계 설정
+    work = relationship("Work", back_populates="contributors")
+    contributor = relationship("Contributor", back_populates="work_participations")
+
+
 # 1. 사용자 (Users) - OAuth 및 프로 버전 대응
 class User(Base):
     __tablename__ = "users"
@@ -21,17 +48,18 @@ class User(Base):
     records = relationship("Record", back_populates="user")
     memos = relationship("Memo", back_populates="user")
 
-# 2. 원천 작품 (Works) - 책의 고유 정보 (작가, 제목 등)
+# [3] Work 테이블 수정 (관계 추가)
 class Work(Base):
     __tablename__ = "works"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(512), index=True) # 스키마엔 없었지만 필수 필드라 추가
-    author = Column(String(255), index=True)
-    description = Column(Text)
-    category = Column(String(100)) # 장르/카테고리
     
-    # 관계: 하나의 작품은 여러 판본(Edition)을 가짐
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True)
+    author = Column(String) # (원본 문자열 유지)
+    description = Column(Text, nullable=True)
+    category = Column(String, nullable=True)
+    
+    # [추가] 참여자 목록 관계
+    contributors = relationship("WorkContributor", back_populates="work")
     editions = relationship("Edition", back_populates="work")
 
 # 3. 판본 (Editions) - 출판사별/연도별 구체적인 책
@@ -39,16 +67,18 @@ class Edition(Base):
     __tablename__ = "editions"
 
     id = Column(Integer, primary_key=True, index=True)
+    isbn = Column(String, unique=True, index=True)
+    isbn10 = Column(String, nullable=True)
+    addon_code = Column(String, nullable=True) # 지난번에 추가한 것
     work_id = Column(Integer, ForeignKey("works.id"))
-    
-    isbn = Column(String(20), unique=True, index=True)
-    publisher = Column(String(255))
-    publish_date = Column(DateTime)
-    page_count = Column(Integer)
-    cover_image = Column(String(1024)) # 표지 이미지
-    is_bnt_isbn = Column(Boolean, default=False) # ISBN 없는 독립출판물 등
-
+    publisher = Column(String, index=True)
+    publish_date = Column(DateTime, nullable=True) 
+    cover_image = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    page_count = Column(Integer, nullable=True)
+    is_bnt_isbn = Column(Boolean, default=False)
     work = relationship("Work", back_populates="editions")
+    records = relationship("Record", back_populates="edition")
 
 # 4. 기록 (Record) - 핵심 기능: 독서 세션 (구 user_library)
 class Record(Base):
