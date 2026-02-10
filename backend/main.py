@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from utils import parse_author_string
+from sqlalchemy import or_
 
 import models
 import httpx
@@ -77,7 +78,9 @@ class RegisterBookRequest(BaseModel):
 async def lifespan(app: FastAPI):
     # 개발 초기 단계에서 DB 스키마 변경이 잦을 때 사용 (주의: 데이터 삭제됨)
     # models.Base.metadata.drop_all(bind=engine)
-    models.Base.metadata.create_all(bind=engine)
+    # print("drop_all")
+    # models.Base.metadata.create_all(bind=engine)
+    # print("create_all.")
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -452,3 +455,80 @@ async def update_library_entry(library_id: int, update_data: LibraryUpdate, db: 
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# 1. 함수 정의 부분에 status 파라미터가 있는지 확인!
+@app.get("/api/users/{user_email}/records")
+async def read_user_records(
+    user_email: str, 
+    status: str = "ALL",  # 기본값은 전체
+    db: Session = Depends(get_db)
+):
+    
+    # ▼▼▼ [감시 코드 추가] 서버 터미널에서 확인하세요! ▼▼▼
+    print(f"\n[API 호출] 이메일: {user_email}, 요청된 상태: {status}")
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+ 
+    # 1. 사용자 찾기
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 2. 기본 쿼리 생성 (이 사용자의 기록만 가져오기)
+    query = db.query(models.Record).filter(models.Record.user_id == user.id)
+
+    # 3. 상태(status)에 따른 필터링 로직 분기
+    if status == "ALL":
+        print(">> 필터링: 전체 보기 (ALL)") # 로그 추가
+        pass
+    elif status == "REVIEW":
+        print(">> 필터링: 리뷰 있는 책만") # 로그 추가
+        query = query.filter(models.Record.short_review != None, models.Record.short_review != "")
+    else:
+        # [나머지 탭] READING, COMPLETED, STOPPED 등
+        # 클라이언트에서 보낸 status 값과 DB의 status 컬럼이 정확히 일치하는 것만
+        print(f">> 필터링: 상태값 ({status}) 검색") # 로그 추가
+        query = query.filter(models.Record.status == status)
+
+    records = query.order_by(models.Record.added_at.desc()).all()
+    print(f">> 검색된 책 개수: {len(records)}권\n") # 로그 추가
+
+    # 4. 최신순(등록순) 정렬 후 DB에서 실행 (.all())
+    records = query.order_by(models.Record.added_at.desc()).all()
+    
+    # ---------------------------------------------------------
+    # [5. 데이터 가공 단계]
+    # DB 객체(Record)를 프론트엔드가 쓰기 편한 JSON(Dictionary) 형태로 변환
+    # ---------------------------------------------------------
+    response_data = []
+    
+    for record in records:
+        # 만약 연결된 책 정보(edition)가 없으면 건너뜀 (데이터 무결성 보호)
+        if not record.edition:
+            continue
+            
+        # Work(작품) 정보 안전하게 가져오기 (없으면 기본값)
+        work_title = record.edition.work.title if record.edition.work else "제목 없음"
+        work_author = record.edition.work.author if record.edition.work else "작가 미상"
+
+        # 프론트엔드로 보낼 최종 데이터 조립
+        book_info = {
+            "library_id": record.id,       # 내 서재에서의 고유 ID (삭제/수정 시 필요)
+            "id": record.edition.id,       # 책(판본)의 ID
+            "title": work_title,
+            "author": work_author,
+            "cover": record.edition.cover_image,
+            "status": record.status,
+            "rating": record.rating,
+            "short_review": record.short_review,
+            "added_at": record.added_at,
+            
+            # ▼▼▼ [핵심] ISBN 정보 포함 (이제 화면에 나옵니다!) ▼▼▼
+            "isbn": record.edition.isbn,      # ISBN 13
+            "isbn10": record.edition.isbn10   # ISBN 10
+        }
+        
+        response_data.append(book_info)
+
+    # 6. 가공된 데이터 반환
+    return response_data
