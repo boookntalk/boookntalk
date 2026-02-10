@@ -6,7 +6,8 @@ import { DESIGN_TOKEN } from '@/constants/styles';
 import BookDetailForm from './BookDetailForm';
 import Dialog from '@/components/ui/dialog'; 
 import Container from '@/components/layout/Container'; 
-import Image from 'next/image'; 
+import Image from 'next/image';
+
 
 interface Book {
     library_id?: number; 
@@ -131,42 +132,69 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                 <div className={`transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                     <main className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                         {filteredBooks.map((book, index) => (
-                            <div 
-                                key={book.library_id || book.id || `idx-${index}`} 
-                                onClick={() => openModal(book)}
-                                className="group cursor-pointer"
-                            >
-                                <div className="bg-white rounded-2xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-gray-100 transition-all duration-300 group-hover:shadow-lg group-hover:-translate-y-1">
-                                    <div className="relative aspect-[3/4] rounded-lg mb-4 w-[70%] mx-auto overflow-visible shadow-sm transition-all duration-300 group-hover:shadow-[8px_8px_12px_rgba(0,0,0,0.25)] group-hover:-translate-y-1">
-                                        {book.cover ? (
-                                            <Image 
-                                                src={book.cover} 
-                                                alt={book.title}
-                                                fill  
-                                                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                                                unoptimized={true} 
-                                                className="object-cover rounded-lg" 
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full bg-gray-100 flex items-center justify-center text-xs text-gray-400 rounded-lg">No Cover</div>
-                                        )}
-                                        <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
-                                    </div>
-                            
-                                    <div className="text-left px-1">
-                                        <h3 className="font-bold text-[#1d1d1f] text-[15px] mb-1 line-clamp-1">
-                                            {book.title}
-                                        </h3>
-                                        <p className="text-[13px] text-[#86868b] mb-0.5 line-clamp-1">
-                                            {book.author}
-                                        </p>
-                                        
-                                        <p className="text-[10px] text-gray-400 font-medium tracking-tight mb-3 font-mono">
-                                            {book.isbn || book.isbn10 || ""}
-                                        </p>
+                        <div 
+                            key={book.library_id || book.id || `idx-${index}`} 
+                            onClick={() => openModal(book)}
+                            className="group cursor-pointer"
+                        >
+                            <div className="bg-white rounded-2xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-gray-100 transition-all duration-300 group-hover:shadow-lg group-hover:-translate-y-1 h-full flex flex-col">
+                                
+                                {/* 1. 표지 이미지 (기존 유지) */}
+                                <div className="relative aspect-[3/4] rounded-lg mb-4 w-[60%] mx-auto overflow-visible shadow-sm transition-all duration-300 group-hover:shadow-[8px_8px_12px_rgba(0,0,0,0.25)] group-hover:-translate-y-1">
+                                    {book.cover ? (
+                                        <Image 
+                                            src={book.cover} 
+                                            alt={book.title}
+                                            fill  
+                                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                            unoptimized={true} 
+                                            className="object-cover rounded-[1px]" 
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full bg-gray-100 flex items-center justify-center text-xs text-gray-400 rounded-lg">No Cover</div>
+                                    )}
+                                    {/* 호버 효과 */}
+                                    <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
+                                </div>
+                        
+                                {/* 2. 텍스트 정보 영역 (flex-grow로 하단 정렬 보장) */}
+                                <div className="text-left px-1 flex flex-col flex-grow">
+                                    
+                                    {/* 제목 */}
+                                    <h3 className="font-bold text-[#1d1d1f] text-[15px] mb-1 line-clamp-1" title={book.title}>
+                                        {book.title}
+                                    </h3>
 
-                                        <div className="pt-3 border-t border-gray-50 flex items-center justify-between">
-                                            <BadgeByStatus status={book.status} />
+                                    {/* [수정] 작가 정보: 2줄까지 표시 (line-clamp-2) */}
+                                    {/* min-h-[2.5em]을 주어 1줄이어도 높이를 유지하게 하면 카드 높이가 들쑥날쑥해지는 걸 방지할 수 있습니다. */}
+                                    <p className="text-[13px] text-[#86868b] mb-1 line-clamp-2 leading-tight min-h-[2.4em]" title={book.author}>
+                                        {book.author}
+                                    </p>
+                                    
+                                    {/* ISBN */}
+                                    <p className="text-[10px] text-gray-300 font-medium tracking-tight mb-3 font-mono mt-auto">
+                                        {book.isbn || book.isbn10 || ""}
+                                    </p>
+
+                                    {/* 하단 정보 (상태 / 리뷰 / 별점) */}
+                                    <div className="pt-3 border-t border-gray-50 flex items-center justify-between mt-auto">
+                                        {/* 왼쪽: 상태 뱃지 */}
+                                        <BadgeByStatus status={book.status} />
+
+                                        {/* 오른쪽: 리뷰 유무 & 별점 */}
+                                        <div className="flex items-center gap-3">
+                                            
+                                            {/* [NEW] 리뷰 유무 아이콘 (On/Off) */}
+                                            <div className="flex items-center" title={book.short_review ? "리뷰 있음" : "리뷰 없음"}>
+                                                <MessageSquare
+                                                    size={14} 
+                                                    // 리뷰가 있으면: 파란색 + 채우기 / 없으면: 연한 회색 + 빈 아이콘
+                                                    className={book.short_review ? "text-blue-500" : "text-gray-300"} 
+                                                    fill={book.short_review ? "currentColor" : "none"}
+                                                />
+                                            </div>
+
+                                            {/* 별점 */}
                                             <div className="flex items-center gap-1">
                                                 <Star 
                                                     size={12} 
@@ -181,7 +209,8 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                     </div>
                                 </div>
                             </div>
-                        ))}
+                        </div>
+                    ))}
                     </main>
                 </div>
 
