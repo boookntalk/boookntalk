@@ -1,34 +1,23 @@
-import React from 'react';
-import Header from '@/components/layout/Header';
-import Footer from '@/components/layout/Footer';
-import { getServerSession } from 'next-auth'; 
-import GlobalAddBookFAB from '@/components/GlobalAddBookFAB';
+// src/app/(main)/layout.tsx
 
-// [체크] 경로가 올바른지 다시 한번 확인해주세요. (src/lib/auth.ts)
-import { authOptions } from '@/lib/auth';
+import Header from '@/components/layout/Header'; // 경로 확인
+import Footer from '@/components/layout/Footer'; // 경로 확인
 
-export default async function MainLayout({ children }: { children: React.ReactNode }) {
-  // 1. 서버 세션 가져오기
-  const session = await getServerSession(authOptions);
+export default function MainLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <div className="flex flex-col min-h-screen">
+            {/* [수정 1] 헤더: sticky, top-0, z-50 (가장 높게 설정) */}
+            <div className="sticky top-0 z-50 w-full bg-white border-b">
+                <Header />
+            </div>
 
-  return (
-    <div className="min-h-screen bg-[#f5f5f7] flex flex-col relative"> 
-      {/* 헤더 */}
-      <Header />
-      
-      {/* 본문 영역 */}
-      <main className="flex-1 w-full pt-10 flex flex-col">
-        {children}
-      </main>
+            {/* 메인 콘텐츠 영역 */}
+            <main className="flex-1 relative z-0">
+                {children}
+            </main>
 
-      {/* 푸터 */}
-      <Footer />
-      
-      {/* [타입 안전성 보강] 
-        session.user.email은 string | null 일 수 있는데, 
-        컴포넌트가 undefined를 원할 경우를 대비해 (|| undefined)를 추가합니다.
-      */}
-      <GlobalAddBookFAB userEmail={session?.user?.email || undefined} />
-    </div>
-  );
+            {/* 풋터 */}
+            <Footer />
+        </div>
+    );
 }

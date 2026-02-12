@@ -90,7 +90,7 @@ class Record(Base):
 
     status = Column(String(50), default="READING") # 읽는 중, 완독, 중단 (추가됨)
     rating = Column(Float, default=0.0)
-    short_review = Column(String(200)) # 한줄평
+    short_review = Column(Text) # 한줄평
     
     start_date = Column(DateTime, nullable=True)
     finish_date = Column(DateTime, nullable=True)
