@@ -1,23 +1,19 @@
 // src/app/(main)/layout.tsx
-
-import Header from '@/components/layout/Header'; // 경로 확인
-import Footer from '@/components/layout/Footer'; // 경로 확인
+import Header from '@/components/layout/Header';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
     return (
-        <div className="flex flex-col min-h-screen">
-            {/* [수정 1] 헤더: sticky, top-0, z-50 (가장 높게 설정) */}
-            <div className="sticky top-0 z-50 w-full bg-white border-b">
+        /* 전체 화면을 위아래(Header / Main Content)로 나누는 flex-col */
+        <div className="flex flex-col h-screen w-full overflow-hidden bg-[#F5F5F7]">
+            {/* [1] 헤더: 상단 전체 가로 폭 차지 및 고정  */}
+            <header className="flex-none h-14 bg-white border-b border-gray-200 z-50">
                 <Header />
-            </div>
+            </header>
 
-            {/* 메인 콘텐츠 영역 */}
-            <main className="flex-1 relative z-0">
+            {/* [2] 아래 영역: 사이드바와 콘텐츠가 들어갈 공간 [cite: 209] */}
+            <main className="flex-1 flex overflow-hidden relative">
                 {children}
             </main>
-
-            {/* 풋터 */}
-            <Footer />
         </div>
     );
 }

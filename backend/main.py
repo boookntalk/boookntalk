@@ -69,6 +69,13 @@ class RegisterBookRequest(BaseModel):
     categoryName: Optional[str] = None
     originalTitle: Optional[str] = None
     itemPage: Optional[int] = None
+    detailed_authors: Optional[list] = None
+
+# [추가] 상세 페이지용 응답 스키마
+class RecordDetailResponse(BaseModel):
+    record: dict
+    work: dict
+    related_editions: list
 
 # -------------------------------------------------------------------
 # [3] 앱 수명주기 및 미들웨어 (Lifespan & Middleware)
@@ -161,7 +168,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None):
     
     async with httpx.AsyncClient() as client:
         # itemIdType=ISBN으로 설정하여 10/13자리 모두 유연하게 검색
-        aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={ALADIN_TTB_KEY}&itemIdType=ISBN&ItemId={isbn}&output=js&Version=20131101&OptResult=itemPage,fullSentence,originalTitle"
+        aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={ALADIN_TTB_KEY}&itemIdType=ISBN&ItemId={isbn}&output=js&Version=20131101&OptResult=itemPage,fullSentence,originalTitle,authors"
         google_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}&key={GOOGLE_BOOKS_API_KEY}"
 
         try:
@@ -244,6 +251,11 @@ async def search_external_books(isbn: str, extra: Optional[str] = None):
             final_cover = google_cover.replace("&zoom=1", "&zoom=0").replace("&edge=curl", "").replace("http://", "https://")
         else:
             final_cover = aladin_item.get('cover', "")
+        
+        # [추가] 작가 상세 정보(ID 포함) 추출 로직
+        detailed_authors = []
+        if "subInfo" in aladin_item and "authors" in aladin_item["subInfo"]:
+            detailed_authors = aladin_item["subInfo"]["authors"] # [{authorId: 123, authorName: '...', ...}]
 
         return {
             "title": title,
@@ -259,7 +271,8 @@ async def search_external_books(isbn: str, extra: Optional[str] = None):
             
             # [결과] 계산된 ISBN 반환
             "isbn": final_main_isbn,  # 대표 ISBN
-            "isbn10": final_sub_isbn  # 보조 ISBN (없으면 null/None)
+            "isbn10": final_sub_isbn,  # 보조 ISBN (없으면 null/None)
+            "detailed_authors": detailed_authors # 프론트엔드 등록 시 사용 위해 전달
         }
 
 # -------------------------------------------------------------------
@@ -268,12 +281,12 @@ async def search_external_books(isbn: str, extra: Optional[str] = None):
 
 @app.post("/api/books")
 async def register_book(request: RegisterBookRequest, db: Session = Depends(get_db)):
-    # 1. 사용자 조회 (기존 코드 유지)
+    # 1. 사용자 조회
     user = db.query(models.User).filter(models.User.email == request.user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
 
-    # 2. ISBN 처리 (기존 코드 유지)
+    # 2. ISBN 처리
     final_isbn = request.isbn.strip()
     is_bnt_generated = False
     if not final_isbn:
@@ -281,7 +294,7 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
         is_bnt_generated = True
 
     # ---------------------------------------------------------
-    # [3. Work (작품) 확인 및 생성 - 여기가 핵심 변경 구간!]
+    # [3. Work (작품) 확인 및 생성]
     # ---------------------------------------------------------
     work = db.query(models.Work).filter(
         models.Work.title == request.title, 
@@ -292,7 +305,7 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
         # 3-1. Work가 없으면 새로 생성
         work = models.Work(
             title=request.title, 
-            author=request.author, # 원본 문자열도 검색용으로 저장
+            author=request.author, 
             description=request.description,
             category=request.categoryName
         )
@@ -300,48 +313,68 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
         db.commit()
         db.refresh(work)
         
-        # 3-2. [✨ 작가 정보 파싱 및 저장 로직 시작]
+        # 3-2. 작가 정보 및 알라딘 ID 연동
         try:
-            # utils.py의 함수로 문자열을 쪼갬
-            parsed_authors = parse_author_string(request.author)
-            
-            for p_auth in parsed_authors:
-                # A. 해당 작가가 이미 DB에 있는지 이름으로 확인
-                contributor = db.query(models.Contributor).filter(
-                    models.Contributor.name == p_auth['name']
-                ).first()
-                
-                # B. 없으면 새로 등록
-                if not contributor:
-                    contributor = models.Contributor(name=p_auth['name'])
-                    db.add(contributor)
-                    db.commit()
-                    db.refresh(contributor)
-                
-                # C. 작품-작가 연결 (중복 연결 방지)
-                # "해리포터" 작품에 "J.K. 롤링"이 "Author"로 이미 연결되어 있는지 확인
-                link_exists = db.query(models.WorkContributor).filter(
-                    models.WorkContributor.work_id == work.id,
-                    models.WorkContributor.contributor_id == contributor.id,
-                    models.WorkContributor.role == p_auth['role']
-                ).first()
-                
-                # D. 연결이 안 되어 있다면 연결 데이터(WorkContributor) 생성
-                if not link_exists:
-                    link = models.WorkContributor(
-                        work_id=work.id,
-                        contributor_id=contributor.id,
-                        role=p_auth['role']
-                    )
-                    db.add(link)
-                    db.commit()
+            # A. 상세 정보(authorId 포함)가 있는 경우 우선 처리
+            if hasattr(request, 'detailed_authors') and request.detailed_authors:
+                for a_info in request.detailed_authors:
+                    a_name = a_info.get('authorName')
+                    a_id = a_info.get('authorId')
+                    a_role = "Author"
+
+                    contributor = db.query(models.Contributor).filter(
+                        or_(
+                            models.Contributor.aladin_author_id == a_id,
+                            models.Contributor.name == a_name
+                        )
+                    ).first()
+
+                    if not contributor:
+                        contributor = models.Contributor(name=a_name, aladin_author_id=a_id)
+                        db.add(contributor)
+                        db.commit()
+                        db.refresh(contributor)
+                    elif a_id and not contributor.aladin_author_id:
+                        contributor.aladin_author_id = a_id
+                        db.commit()
+
+                    link_exists = db.query(models.WorkContributor).filter(
+                        models.WorkContributor.work_id == work.id,
+                        models.WorkContributor.contributor_id == contributor.id
+                    ).first()
+
+                    if not link_exists:
+                        link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=a_role)
+                        db.add(link)
+                        db.commit()
+
+            # B. 상세 정보가 없는 경우 기존 문자열 파싱 (Fallback)
+            else:
+                parsed_authors = parse_author_string(request.author)
+                for p_auth in parsed_authors:
+                    contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+                    if not contributor:
+                        contributor = models.Contributor(name=p_auth['name'])
+                        db.add(contributor)
+                        db.commit()
+                        db.refresh(contributor)
+                    
+                    link_exists = db.query(models.WorkContributor).filter(
+                        models.WorkContributor.work_id == work.id,
+                        models.WorkContributor.contributor_id == contributor.id,
+                        models.WorkContributor.role == p_auth['role']
+                    ).first()
+                    
+                    if not link_exists:
+                        link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
+                        db.add(link)
+                        db.commit()
                     
         except Exception as e:
-            # 작가 정보 저장하다 에러가 나도, 책 등록 자체는 멈추지 않도록 처리
             print(f"⚠️ 작가 정보 저장 중 오류 발생 (무시됨): {e}")
 
     # ---------------------------------------------------------
-    # [4. Edition (판본) 생성] (기존 로직 + addon_code 반영)
+    # [4. Edition (판본) 생성]
     # ---------------------------------------------------------
     edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
 
@@ -349,7 +382,7 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
         edition = models.Edition(
             isbn=final_isbn,           
             isbn10=request.isbn10,
-            addon_code=request.addon_code, # 5자리 부가기호
+            addon_code=request.addon_code,
             work_id=work.id,           
             publisher=request.publisher,
             cover_image=request.cover, 
@@ -360,7 +393,6 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
         db.commit()
         db.refresh(edition)
     else:
-        # 기존 책 업데이트 로직 (부가기호 등 누락된 정보 채우기)
         updated = False
         if request.addon_code and not edition.addon_code:
             edition.addon_code = request.addon_code
@@ -368,12 +400,11 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
         if request.isbn10 and not edition.isbn10:
             edition.isbn10 = request.isbn10
             updated = True
-        
         if updated:
             db.commit()
 
     # ---------------------------------------------------------
-    # [5. Record (서재) 생성] (기존 로직 유지)
+    # [5. Record (서재) 생성]
     # ---------------------------------------------------------
     record = db.query(models.Record).filter(
         models.Record.user_id == user.id, 
@@ -532,3 +563,88 @@ async def read_user_records(
 
     # 6. 가공된 데이터 반환
     return response_data
+
+# backend/main.py
+
+# ... (기존 import 문 유지)
+
+@app.get("/api/records/{record_id}")
+async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
+    """
+    특정 독서 기록 상세 조회 + '내 서재'에 있는 같은 작품의 다른 에디션 목록 반환
+    """
+    # 1. 현재 기록 조회
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="독서 기록을 찾을 수 없습니다.")
+
+    current_edition = record.edition
+    work = current_edition.work
+    user_id = record.user_id
+
+    # 2. [핵심 로직] '나의 서재'에 있는 '같은 작품'의 '다른 에디션' 기록들 조회
+    # (Record -> Edition -> Work가 같은지 확인)
+    my_other_records = db.query(models.Record).join(models.Edition).filter(
+        models.Record.user_id == user_id,           # 내 기록만
+        models.Edition.work_id == work.id,          # 같은 작품만
+        models.Record.id != record_id               # 현재 보고 있는 기록은 제외 (리스트에는 포함시킬 것이므로 여기선 제외했다가 아래에서 병합)
+    ).all()
+
+    # 3. 스위처용 데이터 가공 (내 서재에 있는 에디션 목록)
+    my_editions_data = []
+    
+    # 3-1. 현재 보고 있는 기록을 가장 먼저 추가
+    my_editions_data.append({
+        "record_id": record.id,      # 이동할 링크의 핵심 ID
+        "edition_id": current_edition.id,
+        "title": work.title,
+        "publisher": current_edition.publisher,
+        "publish_date": current_edition.publish_date,
+        "cover_image": current_edition.cover_image,
+        "status": record.status,     # 읽음 상태 표시
+        "is_current": True           # 현재 선택됨
+    })
+
+    # 3-2. 다른 기록들 추가
+    for rec in my_other_records:
+        ed = rec.edition
+        my_editions_data.append({
+            "record_id": rec.id,
+            "edition_id": ed.id,
+            "title": ed.work.title,
+            "publisher": ed.publisher,
+            "publish_date": ed.publish_date,
+            "cover_image": ed.cover_image,
+            "status": rec.status,
+            "is_current": False
+        })
+
+    # 4. 최종 응답 구성
+    return {
+        "record": {
+            "id": record.id,
+            "status": record.status,
+            "start_date": record.start_date,
+            "finish_date": record.finish_date,
+            "rating": record.rating,
+            "short_review": record.short_review,
+        },
+        "work": {
+            "title": work.title,
+            "author": work.author,
+            "category": work.category,
+            # 모델에 original_title 컬럼이 없다면 title로 대체하거나 비워둠
+            "original_title": getattr(work, 'original_title', None) 
+        },
+        "current_edition": {
+            "id": current_edition.id,
+            "isbn": current_edition.isbn,
+            "cover": current_edition.cover_image,
+            "publisher": current_edition.publisher,
+            "pubDate": current_edition.publish_date,
+            "page_count": current_edition.page_count,
+            # 모델에 description 컬럼이 없다면 빈 문자열
+            "description": getattr(current_edition, 'description', "") 
+        },
+        "my_editions": my_editions_data # Frontend에서 사용할 내 에디션 리스트
+    }

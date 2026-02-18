@@ -18,7 +18,7 @@ db_name = os.getenv("db_name").strip()
 # 인코딩 처리
 encoded_password = urllib.parse.quote_plus(password)
 # 최종 URL 조립
-SQLALCHEMY_DATABASE_URL = f"postgresql://{user_id}:{password}@{host}:{port}/{db_name}"
+SQLALCHEMY_DATABASE_URL = f"postgresql://{user_id}:{encoded_password}@{host}:{port}/{db_name}"
 
 # 상용 서비스의 안정적인 연결을 위한 커넥션 풀 설정
 engine = create_engine(

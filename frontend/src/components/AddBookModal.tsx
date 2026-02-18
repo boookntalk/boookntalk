@@ -79,14 +79,15 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
         cover: searchResult.cover,
         pageCount: searchResult.pageCount,
         categoryName: searchResult.categoryName,
-        originalTitle: searchResult.originalTitle
+        originalTitle: searchResult.originalTitle,
+        detailed_authors: searchResult.detailed_authors
       };
 
-      const res = await fetch('http://localhost:8000/api/books', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/books`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      });
+    });
 
       if (!res.ok) {
         const errorData = await res.json();

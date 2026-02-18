@@ -59,7 +59,7 @@ export default function Header() {
     };
 
     return (
-        <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-gray-100">
+        <header className="sticky top-0 z-[100] w-full bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
             <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between">
                 
                 {/* [1] 좌측: 로고 및 메뉴 그룹 (flex-1로 영역 확보) */}

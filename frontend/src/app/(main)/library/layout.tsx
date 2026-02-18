@@ -1,32 +1,33 @@
+// src/app/(main)/library/layout.tsx
 'use client';
-
 import React from 'react';
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { LibrarySidebar } from '@/components/library/LibrarySidebar';
+import Footer from '@/components/layout/Footer';
 
 export default function LibraryLayout({ children }: { children: React.ReactNode }) {
     return (
         <SidebarProvider defaultOpen={true}>
-            {/* [핵심 1] h-[calc(100vh-64px)]: 헤더 제외한 높이로 고정 */}
-            {/* [핵심 2] overflow-hidden: 전체 화면 스크롤 제거 (내부에서 스크롤 할 것임) */}
-            <div className="flex w-full h-[calc(100vh-64px)] bg-[#F5F5F7] overflow-hidden">
+            {/* 부모 레이아웃이 지정한 영역을 꽉 채움 [cite: 463] */}
+            <div className="flex w-full h-full bg-[#F5F5F7] overflow-hidden">
                 
-                <LibrarySidebar />
+                {/* [1] 좌측: 사이드바 (헤더 아래부터 화면 끝까지) [cite: 464, 708] */}
+                <aside className="hidden md:block w-64 flex-none border-r border-gray-300 bg-white h-full">
+                    <LibrarySidebar />
+                </aside>
                 
-                {/* 메인 영역도 높이 꽉 채우고 스크롤 막음 */}
-                <main className="flex-1 flex flex-col w-full relative md:pl-64 h-full overflow-hidden">
-                    
-                    {/* 모바일 메뉴 버튼 */}
-                    <div className="md:hidden flex-none sticky top-0 z-20 bg-[#F5F5F7]/90 backdrop-blur-sm p-4 border-b flex items-center gap-2">
-                        <SidebarTrigger className="p-2 hover:bg-gray-200 rounded-md" />
-                        <span className="font-bold text-[#1d1d1f]">메뉴</span>
-                    </div>
-
-                    {/* 자식 컴포넌트(LibraryClient)가 높이를 100% 쓸 수 있게 함 */}
-                    <div className="flex-1 w-full h-full overflow-hidden">
+                {/* [2] 우측 영역: 콘텐츠(위) + 푸터(아래) 스택 [cite: 464] */}
+                <div className="flex-1 flex flex-col h-full overflow-hidden">
+                    {/* 콘텐츠 영역: 독립적인 스크롤 적용  */}
+                    <main className="flex-1 overflow-y-auto bg-[#F5F5F7] scrollbar-hide">
                         {children}
-                    </div>
-                </main>
+                    </main>
+
+                    {/* [3] 푸터: 사이드바 오른쪽 경계선부터 시작 [cite: 667] */}
+                    <footer className="flex-none bg-white border-t border-gray-200">
+                        <Footer />
+                    </footer>
+                </div>
             </div>
         </SidebarProvider>
     );

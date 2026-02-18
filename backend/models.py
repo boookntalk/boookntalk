@@ -8,11 +8,11 @@ class Contributor(Base):
     __tablename__ = "contributors"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True, nullable=False)   # 예: J.K. 롤링
-    original_name = Column(String, nullable=True)       # 예: J.K. Rowling
-    description = Column(String, nullable=True)         # 동명이인 구분용 메모
+    name = Column(String, index=True, nullable=False)
+    aladin_author_id = Column(Integer, unique=True, nullable=True) # [추가] 알라딘 작가 고유 ID
+    original_name = Column(String, nullable=True)
+    description = Column(String, nullable=True)
 
-    # 관계 설정
     work_participations = relationship("WorkContributor", back_populates="contributor")
 
 # [2] 작품-참여자 연결 테이블 (NEW - 다대다 관계)
