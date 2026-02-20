@@ -62,7 +62,7 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
 
     try {
       setIsLoading(true);
-
+      
       const payload = {
         user_email: userEmail,
         title: searchResult.title,
@@ -72,32 +72,43 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
         description: searchResult.description,
         isbn: searchResult.isbn,      
         isbn10: searchResult.isbn10,
-        
-        // [핵심] 사용자가 입력한 5자리 부가기호 전송
         addon_code: addonInput.trim(), 
-        
         cover: searchResult.cover,
         pageCount: searchResult.pageCount,
         categoryName: searchResult.categoryName,
+        detailed_authors: searchResult.detailed_authors,
+        // [서지정보]
         originalTitle: searchResult.originalTitle,
-        detailed_authors: searchResult.detailed_authors
+        binding_type: searchResult.binding_type,
+        kdc_code: searchResult.kdc_code,
+        language: searchResult.language,
+        size_mm: searchResult.size_mm,
+        price: searchResult.price
       };
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/books`, {
+      console.log("🚀 백엔드로 전송하는 데이터:", payload);
+
+      const res = await fetch("http://localhost:8000/api/books", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-    });
+      });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || '도서 등록에 실패했습니다.');
+        // 만약 여기서도 에러가 나면 응답이 JSON인지 확인하기 위해 text로 먼저 받습니다.
+        const errorText = await res.text();
+        console.error("❌ 서버 에러 응답 원본:", errorText);
+        try {
+            const errorData = JSON.parse(errorText);
+            throw new Error(errorData.detail || '도서 등록에 실패했습니다.');
+        } catch (e) {
+            throw new Error(`서버 에러 발생: ${res.status}`);
+        }
       }
 
       alert('도서가 성공적으로 등록되었습니다!');
       onClose();
-      window.location.reload(); 
-
+      //window.location.reload(); 
     } catch (err: any) {
       alert(err.message);
     } finally {

@@ -87,6 +87,20 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
         setIsEditModalOpen(true);
     };
 
+    // ▼▼▼ [NEW] 전체 새로고침 없이 백그라운드에서 데이터만 가져오는 함수 ▼▼▼
+    const fetchLibrarySilently = async () => {
+        if (!user?.email) return;
+        try {
+            const res = await fetch(`http://localhost:8000/api/my-library/${user.email}`);
+            if (res.ok) {
+                const data = await res.json();
+                setBooks(data); // 화면 깜빡임 없이 리스트만 싹 교체됩니다.
+            }
+        } catch (error) {
+            console.error("Failed to fetch library", error);
+        }
+    };
+
     // [핸들러] 책 삭제
     const handleDeleteBook = async (e: React.MouseEvent, libraryId: number) => {
         e.stopPropagation();
@@ -246,11 +260,15 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                     {selectedBook && (
                         <BookDetailForm 
                             initialData={selectedBook} 
-                            onClose={() => {
-                                setIsEditModalOpen(false);
-                                // 수정 후 목록 새로고침 로직이 필요하다면 여기에 추가 (예: router.refresh())
-                                window.location.reload(); // 임시: 간단한 새로고침
-                            }} 
+                            onClose={() => setIsEditModalOpen(false)} // [핵심] reload 제거
+                            onSaved={(updatedData) => {
+                                // [핵심] 낙관적 업데이트: 서버 응답 대기 없이 프론트엔드 리스트를 0.1초 만에 갱신
+                                setBooks(prev => prev.map(book => 
+                                    book.library_id === (selectedBook.library_id || selectedBook.id)
+                                        ? { ...book, ...updatedData } 
+                                        : book
+                                ));
+                            }}
                         />
                     )}
                 </DialogContent>
@@ -262,7 +280,7 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                     isOpen={isAddBookOpen} 
                     onClose={() => {
                         setIsAddBookOpen(false);
-                        window.location.reload();
+                        fetchLibrarySilently(); // [핵심] reload 대신 조용히 리스트 갱신
                     }}
                     userEmail={user?.email} 
                 />

@@ -395,6 +395,7 @@ FILE PATH: frontend/package.json
     "next-auth": "^4.24.13",
     "react": "^18",
     "react-dom": "^18",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7"
   },
@@ -1864,10 +1865,12 @@ FILE PATH: frontend/src/app/(main)/library/LibraryClient.tsx
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+
 import { 
     Star, Search, BookOpen, MoreVertical, 
-    Share2, Plus, Trash2, Edit 
-} from 'lucide-react'; 
+    Share2, Plus, Trash2, Edit, MessageSquare
+} from 'lucide-react';
+
 import { DESIGN_TOKEN } from '@/constants/styles';
 import BookDetailForm from './BookDetailForm'; // 수정 모달 컴포넌트
 import Container from '@/components/layout/Container'; 
@@ -2053,15 +2056,25 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                         </div>
 
                                         {/* 책 정보 */}
-                                        <div className="text-left px-1 flex flex-col flex-grow">
+                                        <div className="mt-3 px-1">
                                             <h3 className="font-bold text-[#1d1d1f] text-[16px] mb-1 line-clamp-1">{book.title}</h3>
                                             <p className="text-[13px] text-[#86868b] mb-4 line-clamp-1">{book.author}</p>
                                             
                                             <div className="mt-auto flex items-center justify-between">
-                                                <BadgeByStatus status={book.status} />
-                                                <div className="flex items-center gap-1 text-yellow-500">
-                                                    <Star size={12} fill="currentColor" />
-                                                    <span className="text-xs font-bold pt-0.5">{book.rating || 0}</span>
+                                                <BadgeByStatus status={book.status} /> 
+                                                
+                                                <div className="flex items-center gap-2"> {/* gap 추가 */}
+                                                    {/* ✨ 리뷰 아이콘 추가: short_review가 비어있지 않을 때만 표시 */}
+                                                    {book.short_review && book.short_review.trim().length > 0 && (
+                                                        <div className="flex items-center text-blue-500" title="리뷰 작성됨">
+                                                            <MessageSquare size={14} fill="currentColor" className="opacity-80" />
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex items-center gap-1 text-yellow-500">
+                                                        <Star size={12} fill="currentColor" />
+                                                        <span className="text-xs font-bold pt-0.5">{book.rating || 0}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -4858,7 +4871,7 @@ export default function Header() {
     };
 
     return (
-        <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-gray-100">
+        <header className="sticky top-0 z-[100] w-full bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
             <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between">
                 
                 {/* [1] 좌측: 로고 및 메뉴 그룹 (flex-1로 영역 확보) */}
@@ -4981,12 +4994,10 @@ export default function BookTopInfo({
     onRecordChange 
 }: BookTopInfoProps) {
 
-    // 날짜 포맷팅
     const pubDate = edition.pubDate 
         ? new Date(edition.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit' }) 
         : '';
 
-    // 별점 렌더링 헬퍼
     const renderStars = (rating: number) => {
         return (
             <div className="flex text-yellow-400">
@@ -5003,14 +5014,15 @@ export default function BookTopInfo({
     };
 
     return (
-        <section className="bg-white border-b border-gray-200 shadow-sm">
-            <div className="max-w-[1080px] mx-auto px-6 py-10 md:py-12">
+        /* [수정] bg-white는 유지하되, 헤더와 중복되는 border-b 및 shadow 제거 */
+        <section className="bg-white">
+            {/* [수정] max-w를 1440px로 확장하고, 상단 padding(pt-4)을 조절하여 내 서재와 높이감 통일 */}
+            <div className="max-w-[1440px] mx-auto px-8 pt-4 pb-12">
                 <div className="flex flex-col md:flex-row gap-10">
                     
-                    {/* [Left] 책 표지 (알라딘 스타일 + 3D 효과) */}
+                    {/* [Left] 책 표지 영역 */}
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px]">
                         <div className="relative aspect-[1/1.5] shadow-[0_10px_30px_rgba(0,0,0,0.15)] rounded-r-lg group perspective-[1000px]">
-                             {/* 3D 회전 효과 */}
                             <div className="relative w-full h-full transition-transform duration-500 transform-style-3d group-hover:rotate-y-[-10deg]">
                                 {edition.cover ? (
                                     <Image 
@@ -5023,21 +5035,18 @@ export default function BookTopInfo({
                                 ) : (
                                     <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">No Cover</div>
                                 )}
-                                {/* 책등 효과 */}
                                 <div className="absolute left-0 top-0 bottom-0 w-3 bg-gray-800 -translate-x-full origin-right rotate-y-90 opacity-80" />
                             </div>
                         </div>
                         
-                        {/* 미리보기 버튼 */}
                         <Button variant="outline" className="w-full mt-6 border-blue-200 text-blue-600 hover:bg-blue-50 h-10 rounded-lg text-sm font-medium">
                             미리보기
                         </Button>
                     </div>
 
-                    {/* [Right] 정보 + 나의 기록 통합 영역 */}
+                    {/* [Right] 정보 영역 */}
                     <div className="flex-1 flex flex-col justify-between">
                         <div>
-                            {/* 1. 카테고리 & 에디션 스위처 */}
                             <div className="flex justify-between items-start mb-4">
                                 <Badge variant="secondary" className="text-gray-500 bg-gray-100 font-normal hover:bg-gray-200 px-2 py-1">
                                     {work.category || "장르 미상"}
@@ -5067,17 +5076,15 @@ export default function BookTopInfo({
                                 )}
                             </div>
 
-                            {/* 2. 타이틀 & 저자 정보 */}
                             <h1 className="text-3xl md:text-4xl font-bold text-[#1d1d1f] leading-snug mb-3 tracking-tight break-keep">
                                 {work.title}
                             </h1>
                             <p className="text-lg text-gray-700 font-medium mb-6">
-                                {work.author} <span className="text-gray-400 text-base font-normal">지음</span>
+                                {work.author} <span className="text-gray-400 text-sm font-normal">지음</span>
                                 <span className="mx-2 text-gray-300">|</span>
                                 {edition.publisher} <span className="text-gray-400 text-base font-normal">펴냄</span>
                             </p>
 
-                            {/* 3. 상세 메타 정보 (Grid) */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-2 text-sm text-gray-600 mb-6 border-t border-b border-gray-100 py-4">
                                 <div><span className="text-gray-400 mr-2">발행일</span> {pubDate}</div>
                                 <div><span className="text-gray-400 mr-2">쪽수</span> {edition.page_count}p</div>
@@ -5085,7 +5092,6 @@ export default function BookTopInfo({
                                 <div><span className="text-gray-400 mr-2">ISBN</span> {edition.isbn}</div>
                             </div>
 
-                            {/* 4. 책 소개 (짧게) */}
                             <div className="mb-6">
                                 <h3 className="font-bold text-[#1d1d1f] mb-2 text-sm">책 소개</h3>
                                 <p className="text-sm text-gray-600 leading-relaxed line-clamp-3 md:line-clamp-4">
@@ -5094,11 +5100,8 @@ export default function BookTopInfo({
                             </div>
                         </div>
 
-                        {/* 5. [핵심] 나의 기록 요약 (카드형 배치) */}
                         <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-                            
                             <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
-                                {/* 상태 뱃지 */}
                                 <div className={`px-3 py-1.5 rounded-full text-xs font-bold border ${
                                     record.status === 'READING' ? 'bg-blue-100 text-blue-700 border-blue-200' :
                                     record.status === 'COMPLETED' ? 'bg-green-100 text-green-700 border-green-200' :
@@ -5107,7 +5110,6 @@ export default function BookTopInfo({
                                     {record.status === 'READING' ? '읽는 중' : record.status === 'COMPLETED' ? '완독함' : '읽고 싶음'}
                                 </div>
                                 
-                                {/* 독서 기간 */}
                                 {record.start_date && (
                                     <div className="text-sm text-gray-500 flex items-center gap-1.5">
                                         <Calendar size={14} />
@@ -5118,13 +5120,11 @@ export default function BookTopInfo({
 
                             <div className="h-4 w-px bg-gray-300 hidden sm:block"></div>
 
-                            {/* 별점 */}
                             <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
                                 <span className="text-sm font-bold text-gray-500">나의 별점</span>
                                 {renderStars(record.rating || 0)}
                             </div>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -5301,8 +5301,6 @@ import { ChevronLeft } from 'lucide-react';
 export default function BookDetailClient({ initialData, user }: { initialData: any, user: any }) {
     const router = useRouter();
     
-    // API 응답 데이터 분해
-    // backend/main.py에서 보낸 키 값들과 일치해야 함
     const { record, work, current_edition, my_editions } = initialData;
 
     // [핸들러] 에디션 변경 (다른 기록 ID로 페이지 이동)
@@ -5313,14 +5311,15 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
     return (
         <div className="min-h-screen bg-[#F5F5F7]">
             {/* 1. 글로벌 네비게이션 대용 (뒤로가기) */}
-            <div className="bg-white border-b border-gray-100 sticky top-0 z-50">
-                <Container className="h-12 flex items-center">
-                     <button 
+            <div className="bg-white border-b border-gray-200">
+                {/* h-12 대신 수직 패딩(py-6)을 사용하여 내 서재의 타이틀 볼륨감을 맞춤 */}
+                <Container className="pt-5 pb-6 flex items-center">
+                    <button 
                         onClick={() => router.back()} 
-                        className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-[#1d1d1f] py-2"
+                        className="flex items-center gap-2 text-[15px] font-medium text-[#86868b] hover:text-[#1d1d1f] transition-colors group"
                     >
-                        <ChevronLeft size={16} />
-                        서재 목록으로 돌아가기
+                        <ChevronLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" />
+                        <span className="tracking-tight">서재 목록으로 돌아가기</span>
                     </button>
                 </Container>
             </div>
@@ -5330,12 +5329,12 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                 record={record}
                 edition={current_edition}
                 work={work}
-                myEditions={my_editions} // '내가 가진 에디션' 목록 전달
-                onRecordChange={handleRecordChange}
+                myEditions={my_editions}
+                onRecordChange={(targetRecordId) => router.push(`/library/${targetRecordId}`)}
             />
 
             {/* 3. [Bottom Section] 사용자 콘텐츠 (UGC) - 다음 단계 개발 영역 */}
-            <Container className="py-12 max-w-[1080px]">
+            <Container className="py-12 max-w-[1440px]">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
                     
                     {/* 왼쪽: 콘텐츠 네비게이션 (Sticky Menu) */}

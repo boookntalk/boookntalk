@@ -33,6 +33,7 @@ sys.path.append(current_dir)
 load_dotenv()
 ALADIN_TTB_KEY = os.getenv("ALADIN_TTB_KEY")
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
+NLK_API_KEY = os.getenv("NLK_API_KEY")
 
 # -------------------------------------------------------------------
 # [2] 데이터 스키마 정의 (Pydantic Schemas)
@@ -49,6 +50,10 @@ class LibraryUpdate(BaseModel):
     short_review: Optional[str] = None
     start_date: Optional[str] = None
     finish_date: Optional[str] = None
+    # ▼▼▼ [NEW] 진행률, 매체, 태그 필드 추가 ▼▼▼
+    current_page: Optional[int] = None
+    reading_format: Optional[str] = None
+    tags: Optional[list] = None
 
 # [수정] 도서 등록 요청 데이터 검증 모델
 class RegisterBookRequest(BaseModel):
@@ -62,20 +67,37 @@ class RegisterBookRequest(BaseModel):
     # ISBN 관련
     isbn: str
     isbn10: Optional[str] = None
-    addon_code: Optional[str] = None  # [NEW] 5자리 부가기호 필드 추가!
+    addon_code: Optional[str] = None
     
     cover: str
     pageCount: int
     categoryName: Optional[str] = None
-    originalTitle: Optional[str] = None
     itemPage: Optional[int] = None
     detailed_authors: Optional[list] = None
+    
+    # ▼▼▼ [NEW] 서지정보 Level 2 & 3 확장 필드 추가 ▼▼▼
+    originalTitle: Optional[str] = None
+    binding_type: Optional[str] = None
+    kdc_code: Optional[str] = None
+    language: Optional[str] = "한국어"
+    size_mm: Optional[str] = None
+    price: Optional[int] = None
 
 # [추가] 상세 페이지용 응답 스키마
 class RecordDetailResponse(BaseModel):
     record: dict
     work: dict
     related_editions: list
+
+class MemoCreate(BaseModel):
+    page_number: int
+    sentence: str
+    thought: Optional[str] = None
+
+class MemoCreate(BaseModel):
+    page_number: int
+    sentence: str
+    thought: Optional[str] = None
 
 # -------------------------------------------------------------------
 # [3] 앱 수명주기 및 미들웨어 (Lifespan & Middleware)
@@ -171,28 +193,35 @@ async def search_external_books(isbn: str, extra: Optional[str] = None):
         aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={ALADIN_TTB_KEY}&itemIdType=ISBN&ItemId={isbn}&output=js&Version=20131101&OptResult=itemPage,fullSentence,originalTitle,authors"
         google_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}&key={GOOGLE_BOOKS_API_KEY}"
 
+        # 국립중앙도서관 서지정보 API (KDC 추출용)
+        nlk_url = f"https://www.nl.go.kr/seoji/SearchApi.do?cert_key={NLK_API_KEY}&result_style=json&page_no=1&page_size=10&isbn={isbn}"
+
         try:
+            # 3개 API 병렬 호출 (속도 최적화)
             responses = await asyncio.gather(
-                client.get(aladin_url, timeout=5.0), 
                 client.get(google_url, timeout=5.0),
+                client.get(aladin_url, timeout=5.0),
+                client.get(nlk_url, timeout=5.0),
                 return_exceptions=True
             )
         except Exception:
             raise HTTPException(status_code=503, detail="외부 도서 서비스 연결 실패")
         
-        # 1. API 응답 기본 처리
-        aladin_res = responses[0] if not isinstance(responses[0], Exception) else None
-        google_res = responses[1] if not isinstance(responses[1], Exception) else None
+        # 1. 응답 데이터 파싱
+        google_res = responses[0] if not isinstance(responses[0], Exception) else None
+        aladin_res = responses[1] if not isinstance(responses[1], Exception) else None
+        nlk_res = responses[2] if not isinstance(responses[2], Exception) else None
 
-        aladin_data = aladin_res.json() if aladin_res and aladin_res.status_code == 200 else {}
         google_data = google_res.json() if google_res and google_res.status_code == 200 else {}
+        aladin_data = aladin_res.json() if aladin_res and aladin_res.status_code == 200 else {}
+        nlk_data = nlk_res.json() if nlk_res and nlk_res.status_code == 200 else {}
 
+        google_info = google_data.get('items', [{}])[0].get('volumeInfo', {}) if google_data.get('items') else {}
         aladin_item = aladin_data.get('item', [{}])[0] if aladin_data.get('item') else {}
-        google_items = google_data.get('items', [])
-        google_info = google_items[0].get('volumeInfo', {}) if google_items else {}
+        nlk_item = nlk_data.get('docs', [{}])[0] if nlk_data.get('docs') else {}
 
         # 2. 제목 확인 (검색 실패 여부 판단)
-        title = google_info.get('title') or aladin_item.get('title')
+        title = google_info.get('title') or aladin_item.get('title') or nlk_item.get('TITLE')
         if not title:
             raise HTTPException(status_code=404, detail="도서 정보를 찾을 수 없습니다.")
 
@@ -257,6 +286,23 @@ async def search_external_books(isbn: str, extra: Optional[str] = None):
         if "subInfo" in aladin_item and "authors" in aladin_item["subInfo"]:
             detailed_authors = aladin_item["subInfo"]["authors"] # [{authorId: 123, authorName: '...', ...}]
 
+        # ▼▼▼ [NEW] 서지정보 Level 2 & 3 데이터 파싱 로직 ▼▼▼
+        sub_info = aladin_item.get('subInfo', {})
+        packing = sub_info.get('packing', {})
+        
+        # 1. 제본 형태 (알라딘 packing.styleDesc 활용, 없으면 기본값)
+        binding_type = packing.get('styleDesc') or "양장본" # API에 없을 시 기본 물성
+        
+        # 2. 크기(판형) 계산 (가로x세로mm)
+        size_width = packing.get('sizeWidth')
+        size_height = packing.get('sizeHeight')
+        size_mm = f"{size_width}x{size_height}mm" if size_width and size_height else None
+        
+        # 3. 언어 (구글 API 활용)
+        lang_code = google_info.get('language', 'ko')
+        language_map = {'ko': '한국어', 'en': '영어', 'ja': '일본어', 'fr': '프랑스어'}
+        language = language_map.get(lang_code, lang_code)
+
         return {
             "title": title,
             "author": author,
@@ -265,14 +311,20 @@ async def search_external_books(isbn: str, extra: Optional[str] = None):
             "categoryName": aladin_item.get('categoryName') or "미분류",
             "cover": final_cover,
             "description": google_info.get('description') or aladin_item.get('description') or "",
-            "pageCount": google_info.get('pageCount') or aladin_item.get('subInfo', {}).get('itemPage') or 0,
-            "originalTitle": aladin_item.get('subInfo', {}).get('originalTitle') or "",
+            "pageCount": google_info.get('pageCount') or sub_info.get('itemPage') or 0,
             "previewLink": google_info.get('previewLink') or "",
             
-            # [결과] 계산된 ISBN 반환
-            "isbn": final_main_isbn,  # 대표 ISBN
-            "isbn10": final_sub_isbn,  # 보조 ISBN (없으면 null/None)
-            "detailed_authors": detailed_authors # 프론트엔드 등록 시 사용 위해 전달
+            "isbn": final_main_isbn,
+            "isbn10": final_sub_isbn,
+            "detailed_authors": detailed_authors,
+            
+            # ▼▼▼ [NEW] 프론트엔드로 전달할 서지정보 ▼▼▼
+            "originalTitle": sub_info.get('originalTitle') or "",
+            "price": aladin_item.get('priceStandard') or 0,
+            "binding_type": binding_type,
+            "size_mm": size_mm,
+            "language": language,
+            "kdc_code": "" # 알라딘 API 기본 응답에 KDC가 없는 경우가 많아 빈 문자열 처리
         }
 
 # -------------------------------------------------------------------
@@ -302,12 +354,12 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
     ).first()
 
     if not work:
-        # 3-1. Work가 없으면 새로 생성
         work = models.Work(
             title=request.title, 
             author=request.author, 
             description=request.description,
-            category=request.categoryName
+            category=request.categoryName,
+            original_title=request.originalTitle # [NEW] 원서명 저장
         )
         db.add(work)
         db.commit()
@@ -378,6 +430,8 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
     # ---------------------------------------------------------
     edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
 
+    edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
+
     if not edition:
         edition = models.Edition(
             isbn=final_isbn,           
@@ -387,7 +441,14 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
             publisher=request.publisher,
             cover_image=request.cover, 
             page_count=request.pageCount,
-            is_bnt_isbn=is_bnt_generated 
+            is_bnt_isbn=is_bnt_generated,
+            
+            # ▼▼▼ [NEW] 서지 상세 데이터 저장 ▼▼▼
+            binding_type=request.binding_type,
+            kdc_code=request.kdc_code,
+            language=request.language,
+            size_mm=request.size_mm,
+            price=request.price
         )
         db.add(edition)
         db.commit()
@@ -439,16 +500,19 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
     if not user:
         return []
 
-    # Record 테이블 조회 (최신순 정렬 등을 원하면 .order_by 추가 가능)
     records = db.query(models.Record).filter(models.Record.user_id == user.id).all()
     
     results = []
     for record in records:
         edition = record.edition
         work = edition.work
-        
-        # 데이터가 없을 때를 대비한 안전한 처리
         rating_val = record.rating if record.rating is not None else 0.0
+        
+        # [NEW] 태그 목록 조회 (RecordTag 테이블 조인)
+        record_tags = db.query(models.Tag).join(
+            models.RecordTag, models.Tag.id == models.RecordTag.tag_id
+        ).filter(models.RecordTag.record_id == record.id).all()
+        tag_list = [t.name for t in record_tags]
         
         results.append({
             "library_id": record.id,
@@ -459,25 +523,56 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
             "cover": edition.cover_image,
             "rating": rating_val,
             "short_review": record.short_review or "",
-            "start_date": record.start_date,
-            "finish_date": record.finish_date
+            "start_date": record.start_date.isoformat() if record.start_date else None,
+            "finish_date": record.finish_date.isoformat() if record.finish_date else None,
+            
+            # ▼▼▼ [핵심] 새로 추가된 데이터 반환 ▼▼▼
+            "current_page": record.current_page,
+            "reading_format": record.reading_format,
+            "tags": tag_list,
+            
+            "isbn": edition.isbn,
+            "isbn10": edition.isbn10
         })
     return results
 
 @app.patch("/api/my-library/{library_id}")
 async def update_library_entry(library_id: int, update_data: LibraryUpdate, db: Session = Depends(get_db)):
     """
-    서재 기록 수정 (상태, 별점, 코멘트 등)
+    서재 기록 수정 (상태, 별점, 코멘트, 태그, 매체 등)
     """
     record = db.query(models.Record).filter(models.Record.id == library_id).first()
     
     if not record:
         raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
 
-    # None이 아닌 값만 업데이트
     update_dict = update_data.dict(exclude_unset=True)
+    
+    # 1. 태그 데이터는 별도 테이블에 저장해야 하므로 빼냅니다.
+    tags_data = update_dict.pop('tags', None)
+
+    # 2. 일반 컬럼(current_page, reading_format 등) 업데이트
     for key, value in update_dict.items():
         setattr(record, key, value)
+
+    # 3. 태그 관계 저장 로직 (Many-to-Many)
+    if tags_data is not None:
+        # 기존 연결된 태그 삭제 후 재등록 (가장 깔끔한 동기화 방식)
+        db.query(models.RecordTag).filter(models.RecordTag.record_id == library_id).delete()
+        for tag_name in tags_data:
+            tag_name = tag_name.strip()
+            if not tag_name: continue
+            
+            # Tags 테이블에 이미 있는 태그인지 확인
+            tag = db.query(models.Tag).filter(models.Tag.name == tag_name).first()
+            if not tag:
+                tag = models.Tag(name=tag_name)
+                db.add(tag)
+                db.commit() # ID 발급을 위해 즉시 커밋
+                db.refresh(tag)
+            
+            # Record와 Tag 연결
+            db.add(models.RecordTag(record_id=library_id, tag_id=tag.id))
 
     try:
         db.commit()
@@ -542,6 +637,10 @@ async def read_user_records(
         work_title = record.edition.work.title if record.edition.work else "제목 없음"
         work_author = record.edition.work.author if record.edition.work else "작가 미상"
 
+        # ▼ [NEW] 연결된 태그 조회
+        record_tags = db.query(models.Tag).join(models.RecordTag).filter(models.RecordTag.record_id == record.id).all()
+        tag_list = [t.name for t in record_tags]
+
         # 프론트엔드로 보낼 최종 데이터 조립
         book_info = {
             "library_id": record.id,       # 내 서재에서의 고유 ID (삭제/수정 시 필요)
@@ -556,7 +655,14 @@ async def read_user_records(
             
             # ▼▼▼ [핵심] ISBN 정보 포함 (이제 화면에 나옵니다!) ▼▼▼
             "isbn": record.edition.isbn,      # ISBN 13
-            "isbn10": record.edition.isbn10   # ISBN 10
+            "isbn10": record.edition.isbn10,   # ISBN 10
+
+            # ▼▼▼ [NEW] 모달에 다시 띄워주기 위한 확장 데이터 반환 ▼▼▼
+            "start_date": record.start_date.isoformat() if record.start_date else None,
+            "finish_date": record.finish_date.isoformat() if record.finish_date else None,
+            "current_page": record.current_page,
+            "reading_format": record.reading_format,
+            "tags": tag_list
         }
         
         response_data.append(book_info)
@@ -564,16 +670,11 @@ async def read_user_records(
     # 6. 가공된 데이터 반환
     return response_data
 
-# backend/main.py
-
-# ... (기존 import 문 유지)
-
 @app.get("/api/records/{record_id}")
 async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
     """
     특정 독서 기록 상세 조회 + '내 서재'에 있는 같은 작품의 다른 에디션 목록 반환
     """
-    # 1. 현재 기록 조회
     record = db.query(models.Record).filter(models.Record.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="독서 기록을 찾을 수 없습니다.")
@@ -582,30 +683,25 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
     work = current_edition.work
     user_id = record.user_id
 
-    # 2. [핵심 로직] '나의 서재'에 있는 '같은 작품'의 '다른 에디션' 기록들 조회
-    # (Record -> Edition -> Work가 같은지 확인)
+    # 내 서재에 있는 다른 에디션 기록 조회
     my_other_records = db.query(models.Record).join(models.Edition).filter(
-        models.Record.user_id == user_id,           # 내 기록만
-        models.Edition.work_id == work.id,          # 같은 작품만
-        models.Record.id != record_id               # 현재 보고 있는 기록은 제외 (리스트에는 포함시킬 것이므로 여기선 제외했다가 아래에서 병합)
+        models.Record.user_id == user_id,
+        models.Edition.work_id == work.id,
+        models.Record.id != record_id
     ).all()
 
-    # 3. 스위처용 데이터 가공 (내 서재에 있는 에디션 목록)
     my_editions_data = []
-    
-    # 3-1. 현재 보고 있는 기록을 가장 먼저 추가
     my_editions_data.append({
-        "record_id": record.id,      # 이동할 링크의 핵심 ID
+        "record_id": record.id,
         "edition_id": current_edition.id,
         "title": work.title,
         "publisher": current_edition.publisher,
         "publish_date": current_edition.publish_date,
         "cover_image": current_edition.cover_image,
-        "status": record.status,     # 읽음 상태 표시
-        "is_current": True           # 현재 선택됨
+        "status": record.status,
+        "is_current": True
     })
 
-    # 3-2. 다른 기록들 추가
     for rec in my_other_records:
         ed = rec.edition
         my_editions_data.append({
@@ -619,21 +715,29 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "is_current": False
         })
 
-    # 4. 최종 응답 구성
+    # [NEW] 태그 목록 조회
+    record_tags = db.query(models.Tag).join(
+        models.RecordTag, models.Tag.id == models.RecordTag.tag_id
+    ).filter(models.RecordTag.record_id == record.id).all()
+    tag_list = [t.name for t in record_tags]
+
     return {
         "record": {
             "id": record.id,
             "status": record.status,
-            "start_date": record.start_date,
-            "finish_date": record.finish_date,
+            "start_date": record.start_date.isoformat() if record.start_date else None,
+            "finish_date": record.finish_date.isoformat() if record.finish_date else None,
             "rating": record.rating,
             "short_review": record.short_review,
+            # ▼▼▼ [핵심] 상세 페이지용 데이터 반환 ▼▼▼
+            "current_page": record.current_page,
+            "reading_format": record.reading_format,
+            "tags": tag_list
         },
         "work": {
             "title": work.title,
             "author": work.author,
             "category": work.category,
-            # 모델에 original_title 컬럼이 없다면 title로 대체하거나 비워둠
             "original_title": getattr(work, 'original_title', None) 
         },
         "current_edition": {
@@ -643,8 +747,57 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "publisher": current_edition.publisher,
             "pubDate": current_edition.publish_date,
             "page_count": current_edition.page_count,
-            # 모델에 description 컬럼이 없다면 빈 문자열
-            "description": getattr(current_edition, 'description', "") 
+            "description": getattr(current_edition, 'description', ""),
+            "binding_type": getattr(current_edition, 'binding_type', None),
+            "kdc_code": getattr(current_edition, 'kdc_code', None),
+            "language": getattr(current_edition, 'language', "한국어"),
+            "size_mm": getattr(current_edition, 'size_mm', None),
+            "price": getattr(current_edition, 'price', None)
         },
-        "my_editions": my_editions_data # Frontend에서 사용할 내 에디션 리스트
+        "my_editions": my_editions_data
     }
+
+@app.post("/api/records/{record_id}/memos")
+async def create_memo(record_id: int, memo_data: MemoCreate, db: Session = Depends(get_db)):
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+        
+    new_memo = models.Memo(
+        user_id=record.user_id,
+        record_id=record_id,
+        page_number=memo_data.page_number,
+        sentence=memo_data.sentence,
+        thought=memo_data.thought
+    )
+    db.add(new_memo)
+    db.commit()
+    db.refresh(new_memo)
+    return {"status": "success", "memo_id": new_memo.id}
+
+@app.get("/api/records/{record_id}/memos")
+async def get_memos(record_id: int, db: Session = Depends(get_db)):
+    memos = db.query(models.Memo).filter(models.Memo.record_id == record_id).order_by(models.Memo.created_at.desc()).all()
+    
+    result = []
+    for m in memos:
+        user = m.user
+        result.append({
+            "id": m.id,
+            "page_number": m.page_number,
+            "sentence": m.sentence,
+            "thought": m.thought,
+            "created_at": m.created_at.isoformat(),
+            "author_name": user.nickname or user.email.split('@')[0],
+            "author_image": user.profile_image or ""
+        })
+    return result
+
+@app.delete("/api/memos/{memo_id}")
+async def delete_memo(memo_id: int, db: Session = Depends(get_db)):
+    memo = db.query(models.Memo).filter(models.Memo.id == memo_id).first()
+    if not memo:
+        raise HTTPException(status_code=404, detail="메모를 찾을 수 없습니다.")
+    db.delete(memo)
+    db.commit()
+    return {"status": "success"}

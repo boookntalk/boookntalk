@@ -58,7 +58,10 @@ class Work(Base):
     description = Column(Text, nullable=True)
     category = Column(String, nullable=True)
     
-    # [추가] 참여자 목록 관계
+    # [추가] 서지정보 Level 2/3: 원서명 (번역서 식별 및 UI 표기용)
+    original_title = Column(String, nullable=True) 
+    
+    # 참여자 목록 관계
     contributors = relationship("WorkContributor", back_populates="work")
     editions = relationship("Edition", back_populates="work")
 
@@ -69,38 +72,51 @@ class Edition(Base):
     id = Column(Integer, primary_key=True, index=True)
     isbn = Column(String, unique=True, index=True)
     isbn10 = Column(String, nullable=True)
-    addon_code = Column(String, nullable=True) # 지난번에 추가한 것
+    addon_code = Column(String, nullable=True)
     work_id = Column(Integer, ForeignKey("works.id"))
     publisher = Column(String, index=True)
     publish_date = Column(DateTime, nullable=True) 
     cover_image = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     page_count = Column(Integer, nullable=True)
+    
+    # --- [추가] 서지정보 Level 2 & 3 대응 물리적/메타 데이터 ---
+    binding_type = Column(String, nullable=True) # 제본 형태 (예: 양장본, 반양장본, 전자책)
+    kdc_code = Column(String, nullable=True)     # 도서 분류 기호 (KDC)
+    language = Column(String, default="한국어")  # 출간 언어
+    size_mm = Column(String, nullable=True)      # 물리적 크기 (예: 152x223mm)
+    price = Column(Integer, nullable=True)       # 정가
+    # -----------------------------------------------------------
+    
     is_bnt_isbn = Column(Boolean, default=False)
+    
+    # 관계 설정
     work = relationship("Work", back_populates="editions")
     records = relationship("Record", back_populates="edition")
 
 # 4. 기록 (Record) - 핵심 기능: 독서 세션 (구 user_library)
 class Record(Base):
-    __tablename__ = "user_library" # DB 테이블명 유지
+    __tablename__ = "user_library"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     edition_id = Column(Integer, ForeignKey("editions.id"))
 
-    status = Column(String(50), default="READING") # 읽는 중, 완독, 중단 (추가됨)
+    status = Column(String(50), default="READING")
     rating = Column(Float, default=0.0)
-    short_review = Column(Text) # 한줄평
+    short_review = Column(Text)
     
     start_date = Column(DateTime, nullable=True)
     finish_date = Column(DateTime, nullable=True)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # 관계
+    # ▼▼▼ [NEW] 독서 진행률 및 매체 기록용 ▼▼▼
+    current_page = Column(Integer, default=0)
+    reading_format = Column(String(50), default="PAPER") # PAPER(종이책), EBOOK(전자책), AUDIO(오디오북)
+
+    # 관계 (기존 유지)
     user = relationship("User", back_populates="records")
     edition = relationship("Edition")
-    
-    # Memo와의 관계 (Record에 종속된 메모들)
     memos = relationship("Memo", back_populates="record")
 
 # 5. 메모 (Memo) - 구 posts (문장 수집 및 생각)
