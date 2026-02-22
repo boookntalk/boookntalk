@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from database import engine, Base, get_db
 from pydantic import BaseModel
@@ -8,6 +7,8 @@ from typing import Optional
 from datetime import datetime
 from utils import parse_author_string
 from sqlalchemy import or_
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 import models
 import httpx
@@ -34,6 +35,8 @@ load_dotenv()
 ALADIN_TTB_KEY = os.getenv("ALADIN_TTB_KEY")
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
 NLK_API_KEY = os.getenv("NLK_API_KEY")
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
 
 # -------------------------------------------------------------------
 # [2] 데이터 스키마 정의 (Pydantic Schemas)
@@ -50,10 +53,12 @@ class LibraryUpdate(BaseModel):
     short_review: Optional[str] = None
     start_date: Optional[str] = None
     finish_date: Optional[str] = None
-    # ▼▼▼ [NEW] 진행률, 매체, 태그 필드 추가 ▼▼▼
     current_page: Optional[int] = None
     reading_format: Optional[str] = None
     tags: Optional[list] = None
+    
+    # ▼▼▼ [NEW] 공개/비공개 업데이트 파라미터 ▼▼▼
+    is_public: Optional[bool] = None
 
 # [수정] 도서 등록 요청 데이터 검증 모델
 class RegisterBookRequest(BaseModel):
@@ -98,6 +103,13 @@ class MemoCreate(BaseModel):
     page_number: int
     sentence: str
     thought: Optional[str] = None
+
+# -------------------------------------------------------------------
+# [스키마] 프로필 업데이트 요청용 데이터 모델
+# -------------------------------------------------------------------
+class ProfileUpdateRequest(BaseModel):
+    nickname: str
+    bio: Optional[str] = None
 
 # -------------------------------------------------------------------
 # [3] 앱 수명주기 및 미들웨어 (Lifespan & Middleware)
@@ -177,155 +189,252 @@ def generate_btk_isbn():
 # [5] 도서 검색 API (External Search API)
 # -------------------------------------------------------------------
 
+# -------------------------------------------------------------------
+# [추가] 키워드 통합 검색 API (도서명 / 저자명)
+# -------------------------------------------------------------------
+from sqlalchemy import or_ # 상단에 없을 경우를 대비해 필요합니다.
+
+# =========================================================
+# 1. 키워드 검색 API (BoooknTalk 로컬 DB 전용 검색)
+# =========================================================
+@app.get("/api/books/search/keyword")
+async def search_books_by_keyword(
+    query: str, 
+    display: int = 20, 
+    start: int = 1, 
+    db: Session = Depends(get_db) # DB 접근을 위해 추가된 필수 파라미터
+):
+    """
+    [상용화 대비 로컬 DB 통합 검색 API]
+    외부 API(네이버)를 호출하지 않고, BoooknTalk 회원들이 한 번이라도 
+    등록한 도서(Edition)들을 대상으로만 검색합니다.
+    """
+    search_pattern = f"%{query}%"
+
+    # Work(작품)와 Edition(판본) 테이블을 조인하여 제목, 작가, 출판사에 키워드가 포함된 데이터 검색
+    # (ilike를 사용하여 대소문자 구분 없이 부분 일치 검색 수행)
+    editions = db.query(models.Edition).join(models.Work).filter(
+        or_(
+            models.Work.title.ilike(search_pattern),
+            models.Work.author.ilike(search_pattern),
+            models.Edition.publisher.ilike(search_pattern)
+        )
+    ).order_by(models.Edition.id.desc()).limit(60).all() # 최신순, 최대 60개 제한
+
+    results = []
+    for ed in editions:
+        work = ed.work
+        results.append({
+            "title": work.title,
+            "author": work.author,
+            "publisher": ed.publisher or "출판사 미상",
+            "pubDate": ed.publish_date.strftime("%Y%m%d") if ed.publish_date else "",
+            "cover": ed.cover_image or "",
+            "description": ed.description or work.description or "",
+            "isbn": ed.isbn,
+            "price": ed.price or 0,
+            
+            # 프론트엔드 [서재 담기] 호환성을 위한 데이터
+            "pageCount": ed.page_count or 0,
+            "categoryName": ed.kdc_code or work.category or "미분류"
+        })
+
+    # 프론트엔드가 기존 네이버 API 포맷에 맞춰져 있으므로 동일한 형태로 응답 반환
+    return {
+        "total": len(results),
+        "start": start,
+        "display": len(results),
+        "items": results
+    }
+    
 @app.get("/api/books/search/{isbn}")
-async def search_external_books(isbn: str, extra: Optional[str] = None):
+async def search_external_books(isbn: str, extra: Optional[str] = None, db: Session = Depends(get_db)):
     """
-    알라딘 + 구글 북스 API 병렬 검색
-    [수정 사항] 
-    1. ISBN 13/10 우선순위 로직 적용 (13 > 10 > Input)
-    2. 두 API 결과를 교차하여 누락된 ISBN 정보 보완
+    [상용화(BoooknTalk Pro) 대비 2 Tier 검색 아키텍처] 
+    1. 국립중앙도서관(NLK): 법적 제약 없는 완벽한 핵심 서지정보 (1순위)
+    2. 네이버 오픈 API: 표지 이미지 및 책 소개글 보완 (2순위)
     """
-    if not ALADIN_TTB_KEY or not GOOGLE_BOOKS_API_KEY:
-        print("Error: API Keys missing.")
+    
+    clean_isbn = isbn.replace("-", "").strip()
+    
+    # --- [NEW] 1. 우리 DB(캐시) 먼저 확인 ---
+    existing_edition = db.query(models.Edition).filter(
+        (models.Edition.isbn == clean_isbn) | (models.Edition.isbn10 == clean_isbn)
+    ).first()
+
+    if existing_edition:
+        work = existing_edition.work
+        print(f"⚡ DB 캐시 적중: {work.title}") # 서버 터미널 확인용 로그
+        
+        # ▼▼▼ [추가 1] 최초 발견자 닉네임 찾기 ▼▼▼
+        discoverer_name = "익명의 여행자"
+        if getattr(existing_edition, 'creator', None):
+            discoverer_name = existing_edition.creator.nickname or existing_edition.creator.email.split('@')[0]
+    
+        return {
+            "title": work.title,
+            "author": work.author,
+            "publisher": existing_edition.publisher,
+            "pubDate": existing_edition.publish_date.strftime("%Y%m%d") if existing_edition.publish_date else "",
+            "categoryName": existing_edition.kdc_code or work.category or "미분류",
+            "cover": existing_edition.cover_image or "",
+            "description": existing_edition.description or work.description or "",
+            "pageCount": existing_edition.page_count or 0,
+            "previewLink": "",
+            "isbn": existing_edition.isbn,
+            "isbn10": existing_edition.isbn10 or "",
+            "detailed_authors": [],
+            "originalTitle": work.original_title or "",
+            "price": existing_edition.price or 0,
+            "binding_type": existing_edition.binding_type or "알 수 없음",
+            "size_mm": existing_edition.size_mm or "",
+            "language": existing_edition.language or "한국어",
+            "kdc_code": existing_edition.kdc_code or "",
+            "first_discoverer": discoverer_name
+        }
+    
+    if not NLK_API_KEY:
+        print("Warning: NLK_API_KEY is missing. Core metadata might fail.")
+    if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
+        print("Warning: Naver API Keys missing. Cover images and descriptions will not be loaded.")
     
     async with httpx.AsyncClient() as client:
-        # itemIdType=ISBN으로 설정하여 10/13자리 모두 유연하게 검색
-        aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={ALADIN_TTB_KEY}&itemIdType=ISBN&ItemId={isbn}&output=js&Version=20131101&OptResult=itemPage,fullSentence,originalTitle,authors"
-        google_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}&key={GOOGLE_BOOKS_API_KEY}"
-
-        # 국립중앙도서관 서지정보 API (KDC 추출용)
+        # 1. 국립중앙도서관 서지정보 API (JSON 포맷 지정)
         nlk_url = f"https://www.nl.go.kr/seoji/SearchApi.do?cert_key={NLK_API_KEY}&result_style=json&page_no=1&page_size=10&isbn={isbn}"
+        
+        # 2. 네이버 도서 검색 API (상세 검색)
+        naver_url = f"https://openapi.naver.com/v1/search/book_adv.json?d_isbn={isbn}"
+        naver_headers = {
+            "X-Naver-Client-Id": NAVER_CLIENT_ID or "",
+            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET or ""
+        }
 
         try:
-            # 3개 API 병렬 호출 (속도 최적화)
+            # 병렬 호출로 검색 속도 최적화
             responses = await asyncio.gather(
-                client.get(google_url, timeout=5.0),
-                client.get(aladin_url, timeout=5.0),
                 client.get(nlk_url, timeout=5.0),
+                client.get(naver_url, headers=naver_headers, timeout=5.0),
                 return_exceptions=True
             )
         except Exception:
             raise HTTPException(status_code=503, detail="외부 도서 서비스 연결 실패")
         
-        # 1. 응답 데이터 파싱
-        google_res = responses[0] if not isinstance(responses[0], Exception) else None
-        aladin_res = responses[1] if not isinstance(responses[1], Exception) else None
-        nlk_res = responses[2] if not isinstance(responses[2], Exception) else None
+        # 응답 데이터 안전 파싱
+        nlk_res = responses[0] if not isinstance(responses[0], Exception) else None
+        naver_res = responses[1] if not isinstance(responses[1], Exception) else None
 
-        google_data = google_res.json() if google_res and google_res.status_code == 200 else {}
-        aladin_data = aladin_res.json() if aladin_res and aladin_res.status_code == 200 else {}
         nlk_data = nlk_res.json() if nlk_res and nlk_res.status_code == 200 else {}
+        naver_data = naver_res.json() if naver_res and naver_res.status_code == 200 else {}
 
-        google_info = google_data.get('items', [{}])[0].get('volumeInfo', {}) if google_data.get('items') else {}
-        aladin_item = aladin_data.get('item', [{}])[0] if aladin_data.get('item') else {}
         nlk_item = nlk_data.get('docs', [{}])[0] if nlk_data.get('docs') else {}
+        naver_items = naver_data.get('items', [])
+        naver_item = naver_items[0] if naver_items else {}
 
-        # 2. 제목 확인 (검색 실패 여부 판단)
-        title = google_info.get('title') or aladin_item.get('title') or nlk_item.get('TITLE')
+        # =========================================================
+        # [핵심 로직] 데이터 병합 (1순위: NLK, 2순위: 네이버)
+        # =========================================================
+        
+        # 제목 확인 (검색 실패 여부 판단)
+        title = nlk_item.get('TITLE') or naver_item.get('title')
         if not title:
             raise HTTPException(status_code=404, detail="도서 정보를 찾을 수 없습니다.")
 
-        # =========================================================
-        # [핵심 로직] ISBN 13자리 및 10자리 정밀 추출
-        # =========================================================
-        found_isbn13 = None
-        found_isbn10 = None
+        # ISBN 정제 (NLK 우선)
+        nlk_isbn = nlk_item.get('EA_ISBN') or ""
+        naver_isbn = naver_item.get('isbn') or ""
+        final_main_isbn = nlk_isbn if len(nlk_isbn) == 13 else (naver_isbn if len(naver_isbn) == 13 else isbn)
 
-        # (1) Google Books에서 추출
-        if google_info:
-            identifiers = google_info.get('industryIdentifiers', [])
-            for ident in identifiers:
-                if ident['type'] == 'ISBN_13':
-                    found_isbn13 = ident['identifier']
-                elif ident['type'] == 'ISBN_10':
-                    found_isbn10 = ident['identifier']
-        
-        # (2) Aladin에서 보완 (구글에 없는 경우 채워넣기)
-        if aladin_item:
-            # 13자리가 아직 없다면 알라딘 확인
-            if not found_isbn13:
-                found_isbn13 = aladin_item.get('isbn13')
-            
-            # 10자리가 아직 없다면 알라딘 확인
-            if not found_isbn10:
-                raw_isbn = aladin_item.get('isbn') # 알라딘 'isbn' 필드는 10자리일 수도, 13자리일 수도 있음
-                if raw_isbn and len(raw_isbn) == 10:
-                    found_isbn10 = raw_isbn
-                # 만약 알라딘 isbn 필드에 13자리가 있고, found_isbn13이 비어있다면 채움 (안전장치)
-                elif raw_isbn and len(raw_isbn) == 13 and not found_isbn13:
-                    found_isbn13 = raw_isbn
+        # 핵심 서지정보 (NLK 공공데이터 우선)
+        author = nlk_item.get('AUTHOR') or naver_item.get('author') or "저자 미상"
+        publisher = nlk_item.get('PUBLISHER') or naver_item.get('publisher') or "출판사 미상"
+        pubDate = nlk_item.get('PUBLISH_PREDATE') or naver_item.get('pubdate') or ""
+        kdc_code = nlk_item.get('KDC') or ""
 
-        # (3) 최종 반환값 결정 (요건: 13 > 10 > Input)
-        final_main_isbn = found_isbn13 if found_isbn13 else (found_isbn10 if found_isbn10 else isbn)
-        final_sub_isbn = found_isbn10  # 없으면 None
+        # 리치 미디어 (네이버 API 전담)
+        cover = naver_item.get('image') or ""
+        description = naver_item.get('description') or ""
 
-        # =========================================================
-        # 기존 메타데이터 로직 (저자, 표지 등) 유지
-        # =========================================================
-        google_authors = google_info.get('authors')
-        author = ", ".join(google_authors) if google_authors else aladin_item.get('author', "저자 미상")
+        # 물리적 속성 (NLK 데이터 파싱)
+        page_raw = nlk_item.get('PAGE') or ""
+        page_count = 0
+        if page_raw:
+            import re
+            nums = re.findall(r'\d+', str(page_raw))
+            page_count = int(nums[0]) if nums else 0
 
-        # 고화질 표지 우선순위 (Google ExtraLarge -> ... -> Aladin)
-        image_links = google_info.get('imageLinks', {})
-        google_cover = (
-            image_links.get('extraLarge') or 
-            image_links.get('large') or 
-            image_links.get('medium') or 
-            image_links.get('small') or 
-            image_links.get('thumbnail')
-        )
-        
-        if google_cover:
-            # Google 표지 품질 개선 옵션
-            final_cover = google_cover.replace("&zoom=1", "&zoom=0").replace("&edge=curl", "").replace("http://", "https://")
-        else:
-            final_cover = aladin_item.get('cover', "")
-        
-        # [추가] 작가 상세 정보(ID 포함) 추출 로직
-        detailed_authors = []
-        if "subInfo" in aladin_item and "authors" in aladin_item["subInfo"]:
-            detailed_authors = aladin_item["subInfo"]["authors"] # [{authorId: 123, authorName: '...', ...}]
+        price_raw = nlk_item.get('PRC') or naver_item.get('discount') or 0
+        price = 0
+        if price_raw:
+            import re
+            nums = re.findall(r'\d+', str(price_raw))
+            price = int(nums[0]) if nums else 0
 
-        # ▼▼▼ [NEW] 서지정보 Level 2 & 3 데이터 파싱 로직 ▼▼▼
-        sub_info = aladin_item.get('subInfo', {})
-        packing = sub_info.get('packing', {})
-        
-        # 1. 제본 형태 (알라딘 packing.styleDesc 활용, 없으면 기본값)
-        binding_type = packing.get('styleDesc') or "양장본" # API에 없을 시 기본 물성
-        
-        # 2. 크기(판형) 계산 (가로x세로mm)
-        size_width = packing.get('sizeWidth')
-        size_height = packing.get('sizeHeight')
-        size_mm = f"{size_width}x{size_height}mm" if size_width and size_height else None
-        
-        # 3. 언어 (구글 API 활용)
-        lang_code = google_info.get('language', 'ko')
-        language_map = {'ko': '한국어', 'en': '영어', 'ja': '일본어', 'fr': '프랑스어'}
-        language = language_map.get(lang_code, lang_code)
+        form_data = nlk_item.get('FORM') or ""
+        binding_type = "양장본" if "양장" in form_data else ("전자책" if "전자" in form_data else "반양장본")
+        size_mm = form_data if "cm" in form_data or "mm" in form_data else None
 
         return {
             "title": title,
             "author": author,
-            "publisher": google_info.get('publisher') or aladin_item.get('publisher') or "출판사 미상",
-            "pubDate": google_info.get('publishedDate') or aladin_item.get('pubDate') or "",
-            "categoryName": aladin_item.get('categoryName') or "미분류",
-            "cover": final_cover,
-            "description": google_info.get('description') or aladin_item.get('description') or "",
-            "pageCount": google_info.get('pageCount') or sub_info.get('itemPage') or 0,
-            "previewLink": google_info.get('previewLink') or "",
-            
+            "publisher": publisher,
+            "pubDate": pubDate,
+            "categoryName": kdc_code, 
+            "cover": cover,
+            "description": description,
+            "pageCount": page_count,
+            "previewLink": naver_item.get('link') or "",
             "isbn": final_main_isbn,
-            "isbn10": final_sub_isbn,
-            "detailed_authors": detailed_authors,
-            
-            # ▼▼▼ [NEW] 프론트엔드로 전달할 서지정보 ▼▼▼
-            "originalTitle": sub_info.get('originalTitle') or "",
-            "price": aladin_item.get('priceStandard') or 0,
+            "isbn10": "", 
+            "detailed_authors": [], 
+            "originalTitle": "", 
+            "price": price,
             "binding_type": binding_type,
             "size_mm": size_mm,
-            "language": language,
-            "kdc_code": "" # 알라딘 API 기본 응답에 KDC가 없는 경우가 많아 빈 문자열 처리
+            "language": "한국어",
+            "kdc_code": kdc_code,
+            "first_discoverer": None
         }
+
+# -------------------------------------------------------------------
+# [NEW] 도서 상세 정보 조회 API (최초 발견자 정보 포함)
+# -------------------------------------------------------------------
+@app.get("/api/books/detail/{isbn}")
+async def get_book_public_detail(isbn: str, db: Session = Depends(get_db)):
+    """
+    BoooknTalk DB에 등록된 도서의 상세 정보를 조회합니다.
+    최초 등록자(First Discoverer)의 닉네임을 함께 반환합니다.
+    """
+    # 1. Edition 조회 (Work 정보 포함)
+    edition = db.query(models.Edition).filter(models.Edition.isbn == isbn).first()
+    
+    if not edition:
+        raise HTTPException(status_code=404, detail="BoooknTalk에 등록되지 않은 도서입니다.")
+
+    # 2. 최초 발견자 닉네임 추출
+    # models.py에서 설정한 relationship("User")인 edition.creator를 사용합니다.
+    discoverer_name = "익명의 여행자"
+    if edition.creator:
+        discoverer_name = edition.creator.nickname or edition.creator.email.split('@')[0]
+
+    work = edition.work
+    
+    return {
+        "isbn": edition.isbn,
+        "title": work.title,
+        "author": work.author,
+        "publisher": edition.publisher,
+        "pubDate": edition.publish_date.strftime("%Y-%m-%d") if edition.publish_date else "",
+        "cover": edition.cover_image,
+        "description": edition.description or work.description or "",
+        "pageCount": edition.page_count,
+        "categoryName": edition.kdc_code or work.category or "미분류",
+        "price": edition.price or 0,
+        "binding_type": edition.binding_type,
+        "size_mm": edition.size_mm,
+        
+        # ▼▼▼ [핵심] 최초 발견자 데이터 박제 ▼▼▼
+        "first_discoverer": discoverer_name
+    }
 
 # -------------------------------------------------------------------
 # [6] 서재 관리 API (Library Management)
@@ -424,15 +533,51 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
                     
         except Exception as e:
             print(f"⚠️ 작가 정보 저장 중 오류 발생 (무시됨): {e}")
+    else:
+        # [NEW] 기존 데이터와 비교하여 더 나은 정보가 들어오면 업데이트
+        work_updated = False
+        if request.description and request.description != work.description:
+            work.description = request.description
+            work_updated = True
+        if request.originalTitle and request.originalTitle != work.original_title:
+            work.original_title = request.originalTitle
+            work_updated = True
+        if request.categoryName and request.categoryName != work.category:
+            work.category = request.categoryName
+            work_updated = True
+        if work_updated:
+            db.commit()
+            db.refresh(work)
 
     # ---------------------------------------------------------
     # [4. Edition (판본) 생성]
     # ---------------------------------------------------------
     edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
 
-    edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
+    # 날짜 파싱 공통 로직
+    parsed_pub_date = None
+    if request.pubDate:
+        clean_date = request.pubDate.replace(".", "").replace("-", "").strip()
+        try:
+            if len(clean_date) >= 8:
+                parsed_pub_date = datetime.strptime(clean_date[:8], "%Y%m%d")
+            elif len(clean_date) == 4:
+                parsed_pub_date = datetime.strptime(clean_date, "%Y")
+        except Exception:
+            pass
 
     if not edition:
+        parsed_pub_date = None
+        if request.pubDate:
+            clean_date = request.pubDate.replace(".", "").replace("-", "").strip()
+            try:
+                if len(clean_date) >= 8:
+                    parsed_pub_date = datetime.strptime(clean_date[:8], "%Y%m%d")
+                elif len(clean_date) == 4:
+                    parsed_pub_date = datetime.strptime(clean_date, "%Y")
+            except Exception as e:
+                print(f"Date parsing error: {e}")
+        
         edition = models.Edition(
             isbn=final_isbn,           
             isbn10=request.isbn10,
@@ -442,27 +587,51 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
             cover_image=request.cover, 
             page_count=request.pageCount,
             is_bnt_isbn=is_bnt_generated,
-            
-            # ▼▼▼ [NEW] 서지 상세 데이터 저장 ▼▼▼
+            publish_date=parsed_pub_date,
             binding_type=request.binding_type,
             kdc_code=request.kdc_code,
             language=request.language,
             size_mm=request.size_mm,
-            price=request.price
+            price=request.price,
+            
+            # ▼▼▼ [NEW] BoooknTalk 최초 발견자(등록자) 영구 박제 ▼▼▼
+            created_by_id=user.id
         )
         db.add(edition)
         db.commit()
         db.refresh(edition)
     else:
-        updated = False
-        if request.addon_code and not edition.addon_code:
-            edition.addon_code = request.addon_code
-            updated = True
+        # [NEW] 기존 판본 데이터에 빈칸이 있거나 값이 다르면 업데이트 (created_by_id는 건드리지 않음)
+        ed_updated = False
+        
         if request.isbn10 and not edition.isbn10:
             edition.isbn10 = request.isbn10
-            updated = True
-        if updated:
+            ed_updated = True
+        if request.cover and request.cover != edition.cover_image:
+            edition.cover_image = request.cover
+            ed_updated = True
+        if request.pageCount and request.pageCount != edition.page_count:
+            edition.page_count = request.pageCount
+            ed_updated = True
+        if request.price and request.price != edition.price:
+            edition.price = request.price
+            ed_updated = True
+        if request.kdc_code and request.kdc_code != edition.kdc_code:
+            edition.kdc_code = request.kdc_code
+            ed_updated = True
+        if request.binding_type and request.binding_type != edition.binding_type:
+            edition.binding_type = request.binding_type
+            ed_updated = True
+        if request.size_mm and request.size_mm != edition.size_mm:
+            edition.size_mm = request.size_mm
+            ed_updated = True
+        if parsed_pub_date and parsed_pub_date != edition.publish_date:
+            edition.publish_date = parsed_pub_date
+            ed_updated = True
+
+        if ed_updated:
             db.commit()
+            db.refresh(edition)
 
     # ---------------------------------------------------------
     # [5. Record (서재) 생성]
@@ -532,7 +701,10 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
             "tags": tag_list,
             
             "isbn": edition.isbn,
-            "isbn10": edition.isbn10
+            "isbn10": edition.isbn10,
+            # ▼▼▼ [NEW] 총 페이지 수 응답 추가 ▼▼▼
+            "page_count": edition.page_count,
+            "is_public": record.is_public
         })
     return results
 
@@ -662,12 +834,15 @@ async def read_user_records(
             "finish_date": record.finish_date.isoformat() if record.finish_date else None,
             "current_page": record.current_page,
             "reading_format": record.reading_format,
-            "tags": tag_list
+            "tags": tag_list,
+            
+            # ▼▼▼ [NEW] 총 페이지 수 응답 추가 ▼▼▼
+            "page_count": record.edition.page_count,
+            "is_public": record.is_public
         }
         
         response_data.append(book_info)
 
-    # 6. 가공된 데이터 반환
     return response_data
 
 @app.get("/api/records/{record_id}")
@@ -682,6 +857,10 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
     current_edition = record.edition
     work = current_edition.work
     user_id = record.user_id
+    
+    discoverer_name = "익명의 여행자"
+    if getattr(current_edition, 'creator', None):
+        discoverer_name = current_edition.creator.nickname or current_edition.creator.email.split('@')[0]
 
     # 내 서재에 있는 다른 에디션 기록 조회
     my_other_records = db.query(models.Record).join(models.Edition).filter(
@@ -721,6 +900,8 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
     ).filter(models.RecordTag.record_id == record.id).all()
     tag_list = [t.name for t in record_tags]
 
+    final_description = getattr(current_edition, 'description', None) or getattr(work, 'description', "")
+    
     return {
         "record": {
             "id": record.id,
@@ -729,16 +910,17 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "finish_date": record.finish_date.isoformat() if record.finish_date else None,
             "rating": record.rating,
             "short_review": record.short_review,
-            # ▼▼▼ [핵심] 상세 페이지용 데이터 반환 ▼▼▼
             "current_page": record.current_page,
             "reading_format": record.reading_format,
-            "tags": tag_list
+            "tags": tag_list,
+            "is_public": record.is_public
         },
         "work": {
             "title": work.title,
             "author": work.author,
             "category": work.category,
-            "original_title": getattr(work, 'original_title', None) 
+            "original_title": getattr(work, 'original_title', None),
+            "description": getattr(work, 'description', "") # Work 설명도 함께 전달
         },
         "current_edition": {
             "id": current_edition.id,
@@ -747,12 +929,16 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "publisher": current_edition.publisher,
             "pubDate": current_edition.publish_date,
             "page_count": current_edition.page_count,
-            "description": getattr(current_edition, 'description', ""),
+            
+            # ▼▼▼ [핵심] 빵꾸난 설명을 막아주는 최종 설명 데이터 ▼▼▼
+            "description": final_description, 
+            
             "binding_type": getattr(current_edition, 'binding_type', None),
             "kdc_code": getattr(current_edition, 'kdc_code', None),
             "language": getattr(current_edition, 'language', "한국어"),
             "size_mm": getattr(current_edition, 'size_mm', None),
-            "price": getattr(current_edition, 'price', None)
+            "price": getattr(current_edition, 'price', None),
+            "first_discoverer": discoverer_name
         },
         "my_editions": my_editions_data
     }
@@ -801,3 +987,93 @@ async def delete_memo(memo_id: int, db: Session = Depends(get_db)):
     db.delete(memo)
     db.commit()
     return {"status": "success"}
+
+@app.delete("/api/library/{library_id}")
+async def delete_library_entry(library_id: int, db: Session = Depends(get_db)):
+    """
+    내 서재에서 특정 도서 기록 삭제 
+    (관련된 태그, 메모 등도 함께 안전하게 삭제)
+    """
+    # 1. 삭제할 기록(Record) 조회
+    record = db.query(models.Record).filter(models.Record.id == library_id).first()
+    
+    if not record:
+        raise HTTPException(status_code=404, detail="삭제할 도서 기록을 찾을 수 없습니다.")
+
+    try:
+        # 2. 연관된 데이터 먼저 삭제 (외래키 제약조건 충돌 방지)
+        # - 해당 도서에 달린 태그 연결 정보 삭제
+        db.query(models.RecordTag).filter(models.RecordTag.record_id == library_id).delete()
+        
+        # - 해당 도서에 작성한 '기억의 지층' 메모들 삭제
+        db.query(models.Memo).filter(models.Memo.record_id == library_id).delete()
+
+        # 3. 최종 서재 기록 삭제
+        db.delete(record)
+        db.commit()
+        
+        return {"status": "success", "message": "서재에서 성공적으로 삭제되었습니다."}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"삭제 중 오류가 발생했습니다: {str(e)}")
+
+# -------------------------------------------------------------------
+# [API] 1. 유저 프로필 조회
+# -------------------------------------------------------------------
+@app.get("/api/users/{user_email}/profile")
+async def get_user_profile(user_email: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+    
+    return {
+        "email": user.email,
+        "nickname": user.nickname or "",
+        "bio": user.bio or "",
+        "profile_image": user.profile_image or ""
+    }
+
+# -------------------------------------------------------------------
+# [API] 2. 유저 프로필(닉네임, 한줄소개) 업데이트
+# -------------------------------------------------------------------
+@app.put("/api/users/{user_email}/profile")
+async def update_user_profile(user_email: str, profile_data: ProfileUpdateRequest, db: Session = Depends(get_db)):
+    # 1. 대상 유저 조회
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+    
+    # 2. 닉네임 중복 검사 (내 닉네임이 아닌데, 다른 사람이 쓰고 있는 경우)
+    if profile_data.nickname != user.nickname:
+        existing_user = db.query(models.User).filter(models.User.nickname == profile_data.nickname).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="이미 사용 중인 닉네임입니다.")
+
+    try:
+        # ▼▼▼ [핵심] 3. 닉네임이 변경되었을 경우 히스토리 테이블에 이력 기록 ▼▼▼
+        if profile_data.nickname != user.nickname:
+            history_record = models.NicknameHistory(
+                user_id=user.id,
+                old_nickname=user.nickname,  # 기존 닉네임 (최초 설정 시에는 None)
+                new_nickname=profile_data.nickname # 새 닉네임
+            )
+            db.add(history_record) # 이력을 세션에 추가
+
+        # 4. 유저 테이블의 닉네임 및 한 줄 소개 업데이트
+        user.nickname = profile_data.nickname
+        user.bio = profile_data.bio
+        
+        # 5. DB 커밋 (유저 정보 업데이트와 히스토리 기록이 하나의 트랜잭션으로 안전하게 저장됨)
+        db.commit()
+        db.refresh(user)
+        
+        return {
+            "status": "success", 
+            "message": "프로필이 성공적으로 업데이트되었습니다.",
+            "nickname": user.nickname,
+            "bio": user.bio
+        }
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="프로필 업데이트 중 데이터베이스 오류가 발생했습니다.")

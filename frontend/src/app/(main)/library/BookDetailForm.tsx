@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Star, Calendar as CalendarIcon, X, Book, Smartphone, Headphones, Hash } from 'lucide-react';
+import { Star, Calendar as CalendarIcon, X, Book, Smartphone, Headphones, Hash, Globe, Lock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,7 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
     const [readingFormat, setReadingFormat] = useState<string>(initialData?.reading_format || 'PAPER');
     const [tagInput, setTagInput] = useState('');
     const [tags, setTags] = useState<string[]>(initialData?.tags || []);
+    const [isPublic, setIsPublic] = useState<boolean>(initialData?.is_public ?? true);
 
     // 날짜 자동 세팅
     useEffect(() => {
@@ -104,7 +105,8 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
             finish_date: finishDate || null,
             current_page: currentPage,
             reading_format: readingFormat,
-            tags: tags
+            tags: tags,
+            is_public: isPublic
         };
 
         try {
@@ -281,6 +283,31 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
                 </div>
             </div>
 
+            {/* 공개/비공개 설정 토글 */}
+            <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-100 mt-2">
+                <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full transition-colors ${isPublic ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-500'}`}>
+                        {isPublic ? <Globe size={18} /> : <Lock size={18} />}
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold text-[#1d1d1f]">
+                            {isPublic ? '전체 공개' : '나만 보기'}
+                        </span>
+                        <span className="text-xs text-gray-500 font-medium">
+                            {isPublic ? '타인 서재에서 이 기록이 노출됩니다.' : '이 기록은 나에게만 비공개로 보입니다.'}
+                        </span>
+                    </div>
+                </div>
+                {/* 토글 스위치 컴포넌트 */}
+                <button
+                    type="button"
+                    onClick={() => setIsPublic(!isPublic)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isPublic ? 'bg-[#0066cc]' : 'bg-gray-300'}`}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${isPublic ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+            
             {/* 5. 하단 버튼 */}
             <div className="flex justify-end gap-3 pt-4 border-t mt-2">
                 <Button variant="outline" onClick={onClose} disabled={isSaving} className="w-24">취소</Button>

@@ -104,7 +104,6 @@ export default function BookDetailView({ book, open, onOpenChange }: BookDetailV
                     {/* 2. 메인 컨텐츠 */}
                     <main className="flex-1 px-8 pb-10">
                         <div className="bg-white rounded-[32px] p-8 shadow-sm border border-gray-100 grid grid-cols-1 lg:grid-cols-12 gap-10">
-                            
                             {/* 좌측: 책 정보 */}
                             <div className="lg:col-span-4 flex flex-col items-center text-center lg:border-r lg:border-gray-100 lg:pr-10">
                                 <div className="relative w-48 aspect-[1/1.5] shadow-[0_20px_40px_rgba(0,0,0,0.2)] rounded-lg mb-8 transition-transform hover:scale-105 duration-500">

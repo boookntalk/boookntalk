@@ -41,6 +41,31 @@ interface Book {
 
 const API_URL = "http://localhost:8000"; // 실제 환경변수로 교체 권장
 
+const formatCardAuthor = (authorStr: string) => {
+    if (!authorStr) return "저자 미상";
+
+    return authorStr
+        .replace(/\)\s*,\s*/g, ') ; ') // 역할이 다른 저자 그룹 구분
+        .replace(/\(지은이\)/g, '지음')
+        .replace(/\(저자\)/g, '지음')
+        .replace(/\(글\)/g, '글')
+        .replace(/\(옮긴이\)/g, '옮김')
+        .replace(/\(역자\)/g, '옮김')
+        .replace(/\(번역\)/g, '옮김')
+        .replace(/\(그림\)/g, '그림')
+        .replace(/\(삽화\)/g, '그림')
+        .replace(/\(엮은이\)/g, '엮음')
+        .replace(/\(편저\)/g, '엮음')
+        .replace(/\(감수\)/g, '감수')
+        .replace(/\(author\)/gi, '지음')
+        .replace(/\(writer\)/gi, '지음')
+        .replace(/\(translator\)/gi, '옮김')
+        .replace(/\(illustrator\)/gi, '그림')
+        .replace(/\(editor\)/gi, '엮음')
+        .replace(/[()]/g, '')
+        .trim();
+};
+
 export default function LibraryClient({ initialBooks, user }: { initialBooks: any[], user: any }) {
     const router = useRouter();
 
@@ -210,8 +235,9 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                         {/* 책 정보 */}
                                         <div className="mt-3 px-1">
                                             <h3 className="font-bold text-[#1d1d1f] text-[16px] mb-1 line-clamp-1">{book.title}</h3>
-                                            <p className="text-[13px] text-[#86868b] mb-4 line-clamp-1">{book.author}</p>
-                                            
+                                            <p className="text-[13px] text-[#86868b] mb-4 line-clamp-1">
+                                                {formatCardAuthor(book.author)}
+                                            </p>
                                             <div className="mt-auto flex items-center justify-between">
                                                 <BadgeByStatus status={book.status} /> 
                                                 

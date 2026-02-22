@@ -36,8 +36,9 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True) # OAuth 필수
-    nickname = Column(String(255))
-    profile_image = Column(String(1024)) # 구글 프로필 이미지 URL 저장 (추가됨)
+    nickname = Column(String(50), unique=True, index=True, nullable=True) # 닉네임 (중복 불가)
+    bio = Column(String(200), nullable=True) # 한 줄 소개
+    profile_image = Column(String, nullable=True) # 프로필 이미지 URL
     
     is_premium = Column(Boolean, default=False) # 프로 버전 멤버십 여부
     subscription_end_date = Column(DateTime(timezone=True), nullable=True)
@@ -93,6 +94,13 @@ class Edition(Base):
     # 관계 설정
     work = relationship("Work", back_populates="editions")
     records = relationship("Record", back_populates="edition")
+    
+    # ▼▼▼ [NEW] BoooknTalk 최초 발견자(등록자) 기록 ▼▼▼
+    # 회원이 탈퇴하더라도 '누군가 등록했다'는 기록이 남도록 SET NULL 처리하거나, nullable=True로 둡니다.
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    # User 테이블과의 관계 설정 (작성자 정보를 쉽게 가져오기 위함)
+    creator = relationship("User", foreign_keys=[created_by_id])
 
 # 4. 기록 (Record) - 핵심 기능: 독서 세션 (구 user_library)
 class Record(Base):
@@ -110,11 +118,12 @@ class Record(Base):
     finish_date = Column(DateTime, nullable=True)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # ▼▼▼ [NEW] 독서 진행률 및 매체 기록용 ▼▼▼
     current_page = Column(Integer, default=0)
-    reading_format = Column(String(50), default="PAPER") # PAPER(종이책), EBOOK(전자책), AUDIO(오디오북)
+    reading_format = Column(String(50), default="PAPER") 
 
-    # 관계 (기존 유지)
+    # ▼▼▼ [NEW] 타인 서재 방문 시 공개 여부 설정 ▼▼▼
+    is_public = Column(Boolean, default=True) # True: 공개, False: 나만 보기
+
     user = relationship("User", back_populates="records")
     edition = relationship("Edition")
     memos = relationship("Memo", back_populates="record")
@@ -150,3 +159,16 @@ class RecordTag(Base):
     __tablename__ = "record_tags"
     record_id = Column(Integer, ForeignKey("user_library.id"), primary_key=True)
     tag_id = Column(Integer, ForeignKey("tags.id"), primary_key=True)
+
+# ▼▼▼ [NEW] 관리자용 닉네임 변경 이력 테이블 ▼▼▼
+class NicknameHistory(Base):
+    __tablename__ = "nickname_histories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    old_nickname = Column(String(50), nullable=True) # 최초 설정 시에는 이전 닉네임이 없을 수 있으므로 True
+    new_nickname = Column(String(50), nullable=False)
+    changed_at = Column(DateTime(timezone=True), server_default=func.now()) # 변경된 시간 자동 기록
+
+    # User 모델과 양방향 조회를 위한 관계 설정 (선택 사항이지만 관리자 페이지 만들 때 매우 유용합니다)
+    user = relationship("User", backref="nickname_histories")

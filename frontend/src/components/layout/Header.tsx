@@ -4,10 +4,11 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, LogOut, Lock, X, ChevronRight } from 'lucide-react';
+import { Search, LogOut, Lock, X, ChevronRight, ArrowRight } from 'lucide-react';
 import { signIn, signOut, useSession } from "next-auth/react";
 import { toast } from 'sonner';
 import { DESIGN_TOKEN } from '@/constants/styles';
+import ProfileEditModal from '@/components/profile/ProfileEditModal';
 
 export default function Header() {
     const { data: session } = useSession();
@@ -15,20 +16,18 @@ export default function Header() {
     
     // [추가] 검색어 상태 관리
     const [keyword, setKeyword] = useState('');
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
     // [추가] 검색 핸들러
     const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault(); // 폼 제출 시 새로고침 방지
+        e.preventDefault(); 
         if (!keyword.trim()) return;
 
-        // 검색 결과 페이지로 이동 (쿼리 스트링 전달)
-        // 실제 구현 시 /search/page.tsx가 필요합니다.
         router.push(`/search?q=${encodeURIComponent(keyword)}`);
     };
 
     const handleLibraryClick = () => {
         if (!session) {
-            // [기존 코드 유지] 파스텔 톤 토스트
             toast.custom((t) => (
                 <div className={`${DESIGN_TOKEN.ROUND.CARD} relative overflow-hidden bg-blue-50/95 backdrop-blur-md p-5 shadow-[0_8px_30px_rgba(0,102,204,0.15)] border border-blue-100 w-[340px] animate-in fade-in slide-in-from-top-2 duration-300`}>
                     <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-100/50 rounded-full blur-2xl pointer-events-none" />
@@ -59,71 +58,96 @@ export default function Header() {
     };
 
     return (
-        <header className="sticky top-0 z-[100] w-full bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
-            <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between">
-                
-                {/* [1] 좌측: 로고 및 메뉴 그룹 (flex-1로 영역 확보) */}
-                <div className="flex items-center gap-8 flex-1">
-                    <Link href="/" className="flex items-center gap-2 cursor-pointer shrink-0 group">
-                        <div className="relative w-8 h-8 transition-transform group-hover:scale-105"> 
-                            <Image src="/logo.png" alt="BT Logo" fill className="object-contain" priority />
-                        </div>
-                        <span className="text-[17px] font-semibold tracking-tight text-[#1d1d1f]">boookntalk</span>
-                    </Link>
+        // ▼▼▼ [수정 핵심] Fragment(빈 태그)로 전체를 감싸서 모달을 header 바깥으로 꺼냄 ▼▼▼
+        <>
+            <header className="sticky top-0 z-[100] w-full bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+                <div className="max-w-[1440px] mx-auto px-6 h-14 flex items-center justify-between">
+                    
+                    {/* [1] 좌측: 로고 및 메뉴 그룹 */}
+                    <div className="flex items-center gap-8 flex-1">
+                        <Link href="/" className="flex items-center gap-2 cursor-pointer shrink-0 group">
+                            <div className="relative w-8 h-8 transition-transform group-hover:scale-105"> 
+                                <Image src="/logo.png" alt="BT Logo" fill className="object-contain" priority />
+                            </div>
+                            <span className="text-[17px] font-semibold tracking-tight text-[#1d1d1f]">boookntalk</span>
+                        </Link>
 
-                    {/* 데스크탑 메뉴 */}
-                    <button 
-                        onClick={handleLibraryClick}
-                        className="hidden md:block text-[15px] font-medium text-[#1d1d1f]/80 hover:text-[#0066cc] transition-colors"
-                    >
-                        나의 서재
-                    </button>
-                </div>
-
-                {/* [2] 중앙: 검색바 (새로운 영역) */}
-                {/* flex-1로 남은 공간을 차지하되 max-w로 너비 제한 */}
-                <div className="flex-1 flex justify-center max-w-[500px] px-4">
-                    <form 
-                        onSubmit={handleSearch}
-                        className="relative w-full group"
-                    >
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#0066cc] transition-colors">
-                            <Search size={16} />
-                        </div>
-                        <input 
-                            type="text" 
-                            value={keyword}
-                            onChange={(e) => setKeyword(e.target.value)}
-                            placeholder="도서명, 작가로 검색..." 
-                            className="w-full h-10 bg-[#f5f5f7] border border-transparent hover:bg-white hover:border-[#0066cc] rounded-2xl pl-10 pr-4 text-[14px] text-[#1d1d1f] placeholder:text-gray-400 outline-none transition-all focus:bg-white focus:border-[#0066cc] focus:ring-4 focus:ring-[#0066cc]/10 focus:shadow-sm"
-                        />
-                    </form>
-                </div>
-
-                {/* [3] 우측: 유틸리티 영역 (flex-1로 좌측과 균형 맞춤 -> 우측 정렬) */}
-                <div className="flex items-center justify-end gap-3 flex-1">
-                    {session ? (
-                        <div className="flex items-center gap-2 pl-2 ml-1">
-                            {session.user?.image ? (
-                                <img src={session.user.image} className="w-8 h-8 rounded-full border border-gray-100 shadow-sm" alt="profile" />
-                            ) : (
-                                <div className="w-8 h-8 rounded-full bg-gray-200" />
-                            )}
-                             
-                            <button onClick={() => signOut()} className="text-gray-400 hover:text-red-500 transition p-1.5 hover:bg-red-50 rounded-full ml-1" title="로그아웃">
-                                <LogOut size={18} />
-                            </button>
-                        </div>
-                    ) : (
                         <button 
-                            onClick={() => signIn('google')}
-                            className="text-[13px] font-medium bg-[#1d1d1f] text-white px-5 py-2 rounded-full hover:bg-[#333] transition-colors shadow-sm"
+                            onClick={handleLibraryClick}
+                            className="hidden md:block text-[15px] font-medium text-[#1d1d1f]/80 hover:text-[#0066cc] transition-colors"
                         >
-                            Sign In
+                            나의 서재
                         </button>
-                    )}
+                    </div>
+
+                    {/* [2] 중앙: 검색바 */}
+                    <div className="flex-1 flex justify-center max-w-[500px] px-4">
+                        <form 
+                            onSubmit={handleSearch}
+                            className="relative w-full group"
+                        >
+                            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#0066cc] transition-colors pointer-events-none">
+                                <Search size={16} />
+                            </div>
+                            <input 
+                                type="text" 
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                                placeholder="도서명, 작가로 검색..." 
+                                className="w-full h-10 bg-[#f5f5f7] border border-transparent hover:bg-white hover:border-[#0066cc] rounded-2xl pl-10 pr-12 text-[14px] text-[#1d1d1f] placeholder:text-gray-400 outline-none transition-all focus:bg-white focus:border-[#0066cc] focus:ring-4 focus:ring-[#0066cc]/10 focus:shadow-sm"
+                            />
+                            <button 
+                                type="submit"
+                                title="검색하기"
+                                className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-xl transition-all duration-200 ${
+                                    keyword.trim().length > 0 
+                                    ? 'bg-[#0066cc] text-white shadow-sm hover:bg-[#0052a3] scale-100 opacity-100 cursor-pointer' 
+                                    : 'bg-transparent text-gray-300 scale-95 opacity-50 pointer-events-none'
+                                }`}
+                            >
+                                <ArrowRight size={14} strokeWidth={2.5} />
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* [3] 우측: 유틸리티 영역 */}
+                    <div className="flex items-center justify-end gap-3 flex-1">
+                        {session ? (
+                            <div className="flex items-center gap-1 pl-2 ml-1">
+                                <button 
+                                    onClick={() => setIsProfileModalOpen(true)}
+                                    className="w-8 h-8 rounded-full border border-gray-200 shadow-sm overflow-hidden hover:ring-2 hover:ring-[#0066cc]/50 transition-all cursor-pointer mr-1"
+                                    title="프로필 설정"
+                                >
+                                    {session.user?.image ? (
+                                        <img src={session.user.image} className="w-full h-full object-cover" alt="profile" />
+                                    ) : (
+                                        <div className="w-full h-full bg-gray-200" />
+                                    )}
+                                </button>
+
+                                <button onClick={() => signOut()} className="text-gray-400 hover:text-red-500 transition p-1.5 hover:bg-red-50 rounded-full" title="로그아웃">
+                                    <LogOut size={18} />
+                                </button>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => signIn('google')}
+                                className="text-[13px] font-medium bg-[#1d1d1f] text-white px-5 py-2 rounded-full hover:bg-[#333] transition-colors shadow-sm"
+                            >
+                                Sign In
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
-        </header>
+            </header>
+
+            {/* ▼▼▼ [수정 핵심] 모달이 header의 backdrop-blur 영향을 받지 않도록 분리됨 ▼▼▼ */}
+            <ProfileEditModal 
+                isOpen={isProfileModalOpen} 
+                onClose={() => setIsProfileModalOpen(false)} 
+                session={session} 
+            />
+        </>
     );
 }
