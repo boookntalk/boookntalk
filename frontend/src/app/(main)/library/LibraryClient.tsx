@@ -203,10 +203,12 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                                     <Button 
                                                         variant="secondary" 
                                                         size="icon" 
-                                                        className="h-8 w-8 rounded-full bg-white/90 shadow-sm hover:bg-white"
-                                                        onClick={(e) => e.stopPropagation()} // 중요: 카드 클릭 방지
+                                                        // 배경 50% 투명도(bg-white/50) 및 고급스러운 블러 효과(backdrop-blur-sm) 추가
+                                                        className="h-8 w-8 rounded-full bg-white/1 backdrop-blur-sm shadow-sm hover:bg-white/70 transition-colors"
+                                                        onClick={(e) => e.stopPropagation()} 
                                                     >
-                                                        <MoreVertical size={16} className="text-gray-600" />
+                                                        {/* 점점점 색상을 빨간색(text-red-500)으로 변경 */}
+                                                        <MoreVertical size={16} className="text-red-500" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-40">
@@ -244,7 +246,7 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                                 <div className="flex items-center gap-2"> {/* gap 추가 */}
                                                     {/* ✨ 리뷰 아이콘 추가: short_review가 비어있지 않을 때만 표시 */}
                                                     {book.short_review && book.short_review.trim().length > 0 && (
-                                                        <div className="flex items-center text-blue-500" title="리뷰 작성됨">
+                                                        <div className="flex items-center text-blue-500" title="한줄평 작성됨">
                                                             <MessageSquare size={14} fill="currentColor" className="opacity-80" />
                                                         </div>
                                                     )}

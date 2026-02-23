@@ -50,7 +50,8 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
     const [readingFormat, setReadingFormat] = useState<string>(initialData?.reading_format || 'PAPER');
     const [tagInput, setTagInput] = useState('');
     const [tags, setTags] = useState<string[]>(initialData?.tags || []);
-    const [isPublic, setIsPublic] = useState<boolean>(initialData?.is_public ?? true);
+    //const [isPublic, setIsPublic] = useState<boolean>(initialData?.is_public ?? true);
+    const [isShortReviewPublic, setIsShortReviewPublic] = useState<boolean>(initialData?.is_short_review_public ?? true);
 
     // 날짜 자동 세팅
     useEffect(() => {
@@ -106,7 +107,8 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
             current_page: currentPage,
             reading_format: readingFormat,
             tags: tags,
-            is_public: isPublic
+            // is_public 대신 아래 변수명 사용
+            is_short_review_public: isShortReviewPublic
         };
 
         try {
@@ -208,42 +210,45 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
             </div>
 
             {/* 3. 진행률 & 날짜 (Progressive Disclosure) */}
+            {/* 3. 진행률 & 날짜 (Progressive Disclosure) */}
             {status !== 'wish' && (
-                <div className="bg-gray-50 p-4 rounded-xl grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                    {/* 날짜 입력 */}
-                    <div className="grid gap-3">
-                        <div className="grid gap-1.5">
-                            <Label className="text-xs text-gray-500 flex items-center gap-1"><CalendarIcon size={12} /> 시작일</Label>
-                            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm bg-white" />
-                        </div>
-                        {status === 'finished' && (
-                            <div className="grid gap-1.5 animate-in fade-in duration-300">
-                                <Label className="text-xs text-gray-500 flex items-center gap-1"><CalendarIcon size={12} /> 완독일</Label>
-                                <Input type="date" value={finishDate} onChange={(e) => setFinishDate(e.target.value)} className="text-sm bg-white" />
-                            </div>
-                        )}
+                <div className="bg-gray-50 p-4 rounded-xl grid grid-cols-2 gap-4 items-start animate-in fade-in slide-in-from-top-2 duration-300">
+                    
+                    {/* 왼쪽: 시작일 (공통) */}
+                    <div className="grid gap-1.5">
+                        <Label className="text-xs text-gray-500 flex items-center gap-1"><CalendarIcon size={12} /> 시작일</Label>
+                        <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm bg-white h-9" />
                     </div>
 
-                    {/* 독서 진행률 (읽는 중일 때만) */}
+                    {/* 오른쪽: 완독일 (완독 상태일 때) */}
+                    {status === 'finished' && (
+                        <div className="grid gap-1.5 animate-in fade-in duration-300">
+                            <Label className="text-xs text-gray-500 flex items-center gap-1"><CalendarIcon size={12} /> 완독일</Label>
+                            <Input type="date" value={finishDate} onChange={(e) => setFinishDate(e.target.value)} className="text-sm bg-white h-9" />
+                        </div>
+                    )}
+
+                    {/* 오른쪽: 현재 페이지 & 진행률 (읽는 중일 때) */}
                     {status === 'reading' && (
                         <div className="grid gap-1.5 animate-in fade-in duration-300">
                             <Label className="text-xs text-gray-500 flex items-center justify-between">
                                 <span>현재 페이지</span>
                                 <span className="font-bold text-blue-600">{Math.round((currentPage / totalPage) * 100)}%</span>
                             </Label>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2">
                                 <Input 
                                     type="number" 
                                     value={currentPage || ''} 
                                     onChange={(e) => setCurrentPage(Number(e.target.value))} 
-                                    className="text-sm bg-white font-mono" 
+                                    className="text-sm bg-white font-mono h-9" 
                                     placeholder="0"
                                     min="0"
                                     max={totalPage}
                                 />
-                                <span className="text-sm text-gray-400 font-mono">/ {totalPage}p</span>
+                                <span className="text-sm text-gray-400 font-mono whitespace-nowrap">/ {totalPage}p</span>
                             </div>
-                            <div className="w-full h-1.5 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                            {/* 진행률 바 (Input 하단에 타이트하게 배치) */}
+                            <div className="w-full h-1.5 bg-gray-200 rounded-full mt-0.5 overflow-hidden">
                                 <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min((currentPage / totalPage) * 100, 100)}%` }} />
                             </div>
                         </div>
@@ -254,10 +259,31 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
             {/* 4. 한줄평 및 태그 */}
             <div className="grid gap-4">
                 <div className="grid gap-2">
-                    <Label className="text-sm font-semibold">한 줄 평</Label>
+                    <div className="flex items-center justify-between">
+                        <Label className="text-sm font-semibold">한줄평</Label>
+                        
+                        {/* [NEW] 직관적인 스위치형 공개/비공개 토글 */}
+                        <div 
+                            className="flex items-center gap-2 cursor-pointer group"
+                            onClick={() => setIsShortReviewPublic(!isShortReviewPublic)}
+                        >
+                            <span className={`flex items-center gap-1 text-[12px] font-bold transition-colors ${isShortReviewPublic ? 'text-[#0066cc]' : 'text-gray-400'}`}>
+                                {isShortReviewPublic ? <Globe size={13} /> : <Lock size={13} />}
+                                {isShortReviewPublic ? '공개' : '비공개'}
+                            </span>
+                            <button
+                                type="button"
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isShortReviewPublic ? 'bg-[#0066cc]' : 'bg-gray-200'}`}
+                            >
+                                <span 
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${isShortReviewPublic ? 'translate-x-6' : 'translate-x-1'}`} 
+                                />
+                            </button>
+                        </div>
+                    </div>
                     <Textarea
                         placeholder="이 책에서 얻은 영감이나 문장을 기록해보세요."
-                        className="resize-none min-h-[80px] text-sm"
+                        className="resize-none min-h-[60px] text-sm"
                         value={shortReview}
                         onChange={(e) => setShortReview(e.target.value)}
                     />
@@ -281,31 +307,6 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
                         className="text-sm"
                     />
                 </div>
-            </div>
-
-            {/* 공개/비공개 설정 토글 */}
-            <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-100 mt-2">
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-full transition-colors ${isPublic ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-500'}`}>
-                        {isPublic ? <Globe size={18} /> : <Lock size={18} />}
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-sm font-bold text-[#1d1d1f]">
-                            {isPublic ? '전체 공개' : '나만 보기'}
-                        </span>
-                        <span className="text-xs text-gray-500 font-medium">
-                            {isPublic ? '타인 서재에서 이 기록이 노출됩니다.' : '이 기록은 나에게만 비공개로 보입니다.'}
-                        </span>
-                    </div>
-                </div>
-                {/* 토글 스위치 컴포넌트 */}
-                <button
-                    type="button"
-                    onClick={() => setIsPublic(!isPublic)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isPublic ? 'bg-[#0066cc]' : 'bg-gray-300'}`}
-                >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${isPublic ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
             </div>
             
             {/* 5. 하단 버튼 */}

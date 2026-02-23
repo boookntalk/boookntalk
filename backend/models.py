@@ -121,28 +121,29 @@ class Record(Base):
     current_page = Column(Integer, default=0)
     reading_format = Column(String(50), default="PAPER") 
 
-    # ▼▼▼ [NEW] 타인 서재 방문 시 공개 여부 설정 ▼▼▼
-    is_public = Column(Boolean, default=True) # True: 공개, False: 나만 보기
+    # [수정] 한줄평 공개/비공개 토글 전용 플래그
+    is_short_review_public = Column(Boolean, default=True) 
 
     user = relationship("User", back_populates="records")
     edition = relationship("Edition")
     memos = relationship("Memo", back_populates="record")
 
+
 # 5. 메모 (Memo) - 구 posts (문장 수집 및 생각)
 class Memo(Base):
-    __tablename__ = "posts" # DB 테이블명 유지
+    __tablename__ = "posts" 
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
-    
-    # 기획 변경 제안: Memo는 Work가 아니라 특정 'Record(독서세션)'에 연결되는 것이 자연스러움
-    # 기존: work_id -> 변경: record_id (하위 호환을 위해 둘 다 두거나 record_id 권장)
     record_id = Column(Integer, ForeignKey("user_library.id"), nullable=True) 
-    work_id = Column(Integer, ForeignKey("works.id"), nullable=True) # 레거시 지원
+    work_id = Column(Integer, ForeignKey("works.id"), nullable=True)
 
     sentence = Column(Text, nullable=False) # 발췌 문장
     thought = Column(Text, nullable=True)   # 내 생각
-    page_number = Column(Integer, nullable=True) # 몇 페이지에서? (추가됨)
+    page_number = Column(Integer, nullable=True) # 페이지 번호
+    
+    # [추가] 상세 메모 및 발췌문 공개/비공개 토글 플래그
+    is_public = Column(Boolean, default=True) 
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

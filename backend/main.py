@@ -99,10 +99,12 @@ class MemoCreate(BaseModel):
     sentence: str
     thought: Optional[str] = None
 
+# [1] 상단 Pydantic Schema 수정 (약 80번째 줄 부근)
 class MemoCreate(BaseModel):
     page_number: int
     sentence: str
     thought: Optional[str] = None
+    is_public: Optional[bool] = True # ▼▼▼ 추가
 
 # -------------------------------------------------------------------
 # [스키마] 프로필 업데이트 요청용 데이터 모델
@@ -669,7 +671,7 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
     if not user:
         return []
 
-    records = db.query(models.Record).filter(models.Record.user_id == user.id).all()
+    records = db.query(models.Record).filter(models.Record.user_id == user.id).order_by(models.Record.added_at.desc()).all()
     
     results = []
     for record in records:
@@ -704,7 +706,7 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
             "isbn10": edition.isbn10,
             # ▼▼▼ [NEW] 총 페이지 수 응답 추가 ▼▼▼
             "page_count": edition.page_count,
-            "is_public": record.is_public
+            "is_short_review_public": record.is_short_review_public
         })
     return results
 
@@ -838,7 +840,7 @@ async def read_user_records(
             
             # ▼▼▼ [NEW] 총 페이지 수 응답 추가 ▼▼▼
             "page_count": record.edition.page_count,
-            "is_public": record.is_public
+            "is_short_review_public": record.is_short_review_public
         }
         
         response_data.append(book_info)
@@ -913,9 +915,10 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "current_page": record.current_page,
             "reading_format": record.reading_format,
             "tags": tag_list,
-            "is_public": record.is_public
+            "is_short_review_public": record.is_short_review_public
         },
         "work": {
+            "id": work.id,
             "title": work.title,
             "author": work.author,
             "category": work.category,
@@ -954,7 +957,8 @@ async def create_memo(record_id: int, memo_data: MemoCreate, db: Session = Depen
         record_id=record_id,
         page_number=memo_data.page_number,
         sentence=memo_data.sentence,
-        thought=memo_data.thought
+        thought=memo_data.thought,
+        is_public=memo_data.is_public # ▼▼▼ 추가
     )
     db.add(new_memo)
     db.commit()
@@ -975,7 +979,8 @@ async def get_memos(record_id: int, db: Session = Depends(get_db)):
             "thought": m.thought,
             "created_at": m.created_at.isoformat(),
             "author_name": user.nickname or user.email.split('@')[0],
-            "author_image": user.profile_image or ""
+            "author_image": user.profile_image or "",
+            "is_public": m.is_public # ▼▼▼ 추가
         })
     return result
 
@@ -1077,3 +1082,28 @@ async def update_user_profile(user_email: str, profile_data: ProfileUpdateReques
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="프로필 업데이트 중 데이터베이스 오류가 발생했습니다.")
+
+# [추가] 특정 책(Work)의 공개된 한줄평 목록 가져오기 API
+@app.get("/api/works/{work_id}/short-reviews")
+async def get_work_short_reviews(work_id: int, db: Session = Depends(get_db)):
+    # Edition 테이블을 조인하여, 해당 Work에 속한 모든 Edition의 기록을 가져옵니다.
+    records = db.query(models.Record).join(models.Edition).filter(
+        models.Edition.work_id == work_id,
+        models.Record.short_review.isnot(None),       # 한줄평 내용이 null이 아니고
+        models.Record.short_review != "",             # 빈 문자열이 아니며
+        models.Record.is_short_review_public == True  # 공개 설정된 데이터만
+    ).order_by(models.Record.added_at.desc()).all()   # 최신순 정렬
+
+    results = []
+    for r in records:
+        user = r.user
+        results.append({
+            "id": r.id,
+            "user_name": user.nickname or user.email.split('@')[0],
+            "user_image": user.profile_image or "",
+            "rating": r.rating,
+            "short_review": r.short_review,
+            "created_at": r.added_at.isoformat() if r.added_at else ""
+        })
+    
+    return results

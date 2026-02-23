@@ -28,7 +28,7 @@ const menuItems = [
 
 const analyticsItems = [
     { title: "독서 통계", icon: BarChart2, code: "STATS" },
-    { title: "기록 조각 (리뷰)", icon: MessageSquare, code: "REVIEW" },
+    { title: "기록 조각 (한줄평)", icon: MessageSquare, code: "REVIEW" },
 ];
 
 export function LibrarySidebar() {

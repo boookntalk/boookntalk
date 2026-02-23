@@ -8,6 +8,7 @@ import Container from '@/components/layout/Container';
 import BookTopInfo from './BookTopInfo'; // 위에서 만든 컴포넌트 import
 import { ChevronLeft, Database, Copy, Check } from 'lucide-react';
 import MemoryLayer from './MemoryLayer';
+import ShortReviewSection from './ShortReviewSection';
 
 export default function BookDetailClient({ initialData, user }: { initialData: any, user: any }) {
     const router = useRouter();
@@ -74,7 +75,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                                     onClick={() => setActiveTab('review')}
                                     className={`cursor-pointer transition-all ${activeTab === 'review' ? 'font-bold text-[#1d1d1f] -ml-[17px] border-l-2 border-black pl-3.5' : 'hover:text-gray-800'}`}
                                 >
-                                    심층 리뷰
+                                    한줄평
                                 </li>
                                 <li 
                                     onClick={() => setActiveTab('report')}
@@ -106,8 +107,8 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
 
                         {/* 탭: 심층 리뷰 */}
                         {activeTab === 'review' && (
-                            <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 min-h-[400px] flex items-center justify-center text-gray-300 font-bold animate-in fade-in duration-300">
-                                심층 리뷰 영역
+                            <div className="animate-in fade-in duration-300">
+                                <ShortReviewSection workId={work.id} />
                             </div>
                         )}
 
