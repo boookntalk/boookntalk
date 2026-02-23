@@ -113,6 +113,13 @@ class ProfileUpdateRequest(BaseModel):
     nickname: str
     bio: Optional[str] = None
 
+# [1] 기존 MemoCreate 스키마 아래에 Update 스키마 추가 (약 85번째 줄 부근)
+class MemoUpdate(BaseModel):
+    page_number: Optional[int] = None
+    sentence: Optional[str] = None
+    thought: Optional[str] = None
+    is_public: Optional[bool] = None
+
 # -------------------------------------------------------------------
 # [3] 앱 수명주기 및 미들웨어 (Lifespan & Middleware)
 # -------------------------------------------------------------------
@@ -990,6 +997,24 @@ async def delete_memo(memo_id: int, db: Session = Depends(get_db)):
     if not memo:
         raise HTTPException(status_code=404, detail="메모를 찾을 수 없습니다.")
     db.delete(memo)
+    db.commit()
+    return {"status": "success"}
+
+# [2] 하단 메모 삭제 API(delete_memo) 바로 위쪽에 아래 코드 추가
+@app.patch("/api/memos/{memo_id}")
+async def update_memo(memo_id: int, memo_data: MemoUpdate, db: Session = Depends(get_db)):
+    """
+    기존에 작성된 메모(기억의 지층) 수정 API
+    """
+    memo = db.query(models.Memo).filter(models.Memo.id == memo_id).first()
+    if not memo:
+        raise HTTPException(status_code=404, detail="메모를 찾을 수 없습니다.")
+
+    # 전달받은 데이터 중 값이 있는 것만 업데이트
+    update_dict = memo_data.dict(exclude_unset=True)
+    for key, value in update_dict.items():
+        setattr(memo, key, value)
+
     db.commit()
     return {"status": "success"}
 

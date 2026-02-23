@@ -5,6 +5,98 @@ PROJECT ROOT: boookntalk
 
 
 ============================================================
+FILE PATH: 기획.txt
+============================================================
+📚 [BoooknTalk] Project Master Context (AI 리마인드용)
+1. Project Identity (프로젝트 정체성)
+서비스명: BoooknTalk (절대 한글 표기 '북앤톡'을 혼용하지 않으며, 반드시 영문 BoooknTalk으로 표기)
+
+서비스 목적: 단순한 독서 관리를 넘어, 책에서 얻은 '사색'과 '영감'을 기록하고 나누는 유료 상용화 기반의 프리미엄 독서 기록 서비스
+
+핵심 철학: 직관적이고 세련된 UI/UX, 사용자 데이터 단위별 세밀한 권한 제어, 파편화된 정보를 논리적으로 그룹화하여 스크롤/높이 부담을 최소화하는 디자인
+
+2. Development Methodology (개발 7단계 프로세스)
+나의 작업 방식은 아래의 순서를 엄격하게 따른다.
+
+전체 서비스의 화면 정리
+
+화면의 개발 우선순위 산정
+
+각 화면의 기능 정의
+
+화면의 구성 컨텐츠 정의
+
+필요한 DB 테이블 및 스키마 정의
+
+화면 개발(프론트엔드) 및 백엔드(API) 연동 개발
+
+테스트 및 QA (전체 플로우 검증)
+
+3. Tech Stack & Environment (기술 스택 및 환경)
+Frontend: Next.js (React), Tailwind CSS, shadcn/ui (Radix UI 기반)
+
+Backend: Python, FastAPI, SQLAlchemy (ORM)
+
+Database: PostgreSQL
+
+Environment: 로컬 직접 구동 (uvicorn 및 npm run dev) / VS Code / GitHub
+
+Open API: 국립중앙도서관(NLK) API (핵심 서지정보), 네이버 도서 검색 API (표지/소개글 보완)
+
+4. Core Policy: Privacy & Sharing (콘텐츠 공개/비공개 정책)
+데이터베이스 설계 및 API 응답의 핵심 기준
+
+고정 공개 (Always Public): 별점(Rating), 태그(Tags)
+
+고정 비공개 (Always Private): 독서 상태(Wish, Reading, Completed), 독서 기간, 현재 진행률 등
+
+사용자 선택 1 (한줄평): Record(user_library) 테이블의 is_short_review_public (Boolean) 컬럼으로 독립 제어
+
+사용자 선택 2 (상세 기록): Memo(posts) 테이블의 is_public (Boolean) 컬럼으로 개별 메모마다 독립 제어
+
+미결정 사항: 기획 및 개발 진행 상황에 맞춰 유연하게 결정 (Agile 대응)
+
+5. UI/UX & Terminology Standards (디자인 및 용어 규격)
+간격 규격: 섹션 간 기본 여백은 --spacing-1cm (fallback: 40px~48px)를 준수하여 시각적 일관성 유지.
+
+용어 통일: 짧은 감상평은 무조건 **한줄평**으로 통일 (리뷰, 심층 리뷰 등의 용어 혼용 금지).
+
+공간 최적화: 성격이 비슷한 데이터는 논리적 그룹(Group A, B, C, D)으로 묶고, Inline Text 및 가로 배치(Grid/Flex)를 적극 활용하여 수직 높이 최소화.
+
+직관성: 공개/비공개 제어 등 사용자의 상태 변경 액션은 텍스트가 아닌 '토글 스위치', '명확한 아이콘(자물쇠/지구본)' 등으로 즉각적인 인지가 가능하게 구현.
+
+6. Current Status & Next Steps (현재 상태 및 향후 방향성)
+완료된 주요 작업:
+
+도서 검색(2 Tier 아키텍처) 및 서재 등록 플로우 구축
+
+내 서재 목록(Library) 최신순 정렬 및 도서 카드 UI (Hover 메뉴 투명도/색상 최적화)
+
+도서 상세/수정 폼(BookDetailForm) UI 높이 최적화 (날짜/진행률 Grid 배치, 직관적 스위치 토글 적용)
+
+데이터베이스에 공개/비공개 컬럼(is_short_review_public, is_public) 반영 및 API 통신 매핑 완료
+
+도서 상세 페이지 내 타 회원들의 '공개된 한줄평' 모아보기 탭 구현
+
+현재 개발 단계: 7단계. 테스트 (QA 점검 및 전체 플로우 검증) 진행 중
+
+향후 방향성:
+
+개별 도서의 데이터 CRUD(생성, 읽기, 수정, 삭제) 무결성 최종 테스트
+
+'기억의 지층(Memo)' 공개된 메모들의 커뮤니티 공유 뷰(View) 구상
+
+상용화 수준(Paid Service)에 걸맞은 결제/구독 모델 DB 설계 준비 (User 테이블의 is_premium 속성 활용 예정)
+
+7. AI Action Guidelines (AI 작동 지침)
+추측 금지: 확신이 서지 않거나 기획 의도가 불분명한 경우 절대 임의로 코드를 작성하지 말고 사용자에게 질문할 것.
+
+오류 점검: 코드나 솔루션을 제시한 후, 스스로 논리적 모순이나 오타가 없는지 한 번 더 검증할 것.
+
+코드 분석 우선: 새로운 기능 추가 시, 관련된 기존 소스 파일 구조를 먼저 파악하고 컨벤션에 맞춰 코드를 생성할 것.
+
+
+============================================================
 FILE PATH: export_code.py
 ============================================================
 import os
@@ -185,6 +277,196 @@ services:
 
 ============================================================
 FILE PATH: boookntalk_full_source.txt
+============================================================
+================================================================
+PROJECT ROOT: boookntalk
+================================================================
+
+
+
+============================================================
+FILE PATH: 기획.txt
+============================================================
+📚 [BoooknTalk] Project Master Context (AI 리마인드용)
+1. Project Identity (프로젝트 정체성)
+서비스명: BoooknTalk (절대 한글 표기 '북앤톡'을 혼용하지 않으며, 반드시 영문 BoooknTalk으로 표기)
+
+서비스 목적: 단순한 독서 관리를 넘어, 책에서 얻은 '사색'과 '영감'을 기록하고 나누는 유료 상용화 기반의 프리미엄 독서 기록 서비스
+
+핵심 철학: 직관적이고 세련된 UI/UX, 사용자 데이터 단위별 세밀한 권한 제어, 파편화된 정보를 논리적으로 그룹화하여 스크롤/높이 부담을 최소화하는 디자인
+
+2. Development Methodology (개발 7단계 프로세스)
+나의 작업 방식은 아래의 순서를 엄격하게 따른다.
+
+전체 서비스의 화면 정리
+
+화면의 개발 우선순위 산정
+
+각 화면의 기능 정의
+
+화면의 구성 컨텐츠 정의
+
+필요한 DB 테이블 및 스키마 정의
+
+화면 개발(프론트엔드) 및 백엔드(API) 연동 개발
+
+테스트 및 QA (전체 플로우 검증)
+
+3. Tech Stack & Environment (기술 스택 및 환경)
+Frontend: Next.js (React), Tailwind CSS, shadcn/ui (Radix UI 기반)
+
+Backend: Python, FastAPI, SQLAlchemy (ORM)
+
+Database: PostgreSQL
+
+Environment: 로컬 직접 구동 (uvicorn 및 npm run dev) / VS Code / GitHub
+
+Open API: 국립중앙도서관(NLK) API (핵심 서지정보), 네이버 도서 검색 API (표지/소개글 보완)
+
+4. Core Policy: Privacy & Sharing (콘텐츠 공개/비공개 정책)
+데이터베이스 설계 및 API 응답의 핵심 기준
+
+고정 공개 (Always Public): 별점(Rating), 태그(Tags)
+
+고정 비공개 (Always Private): 독서 상태(Wish, Reading, Completed), 독서 기간, 현재 진행률 등
+
+사용자 선택 1 (한줄평): Record(user_library) 테이블의 is_short_review_public (Boolean) 컬럼으로 독립 제어
+
+사용자 선택 2 (상세 기록): Memo(posts) 테이블의 is_public (Boolean) 컬럼으로 개별 메모마다 독립 제어
+
+미결정 사항: 기획 및 개발 진행 상황에 맞춰 유연하게 결정 (Agile 대응)
+
+5. UI/UX & Terminology Standards (디자인 및 용어 규격)
+간격 규격: 섹션 간 기본 여백은 --spacing-1cm (fallback: 40px~48px)를 준수하여 시각적 일관성 유지.
+
+용어 통일: 짧은 감상평은 무조건 **한줄평**으로 통일 (리뷰, 심층 리뷰 등의 용어 혼용 금지).
+
+공간 최적화: 성격이 비슷한 데이터는 논리적 그룹(Group A, B, C, D)으로 묶고, Inline Text 및 가로 배치(Grid/Flex)를 적극 활용하여 수직 높이 최소화.
+
+직관성: 공개/비공개 제어 등 사용자의 상태 변경 액션은 텍스트가 아닌 '토글 스위치', '명확한 아이콘(자물쇠/지구본)' 등으로 즉각적인 인지가 가능하게 구현.
+
+6. Current Status & Next Steps (현재 상태 및 향후 방향성)
+완료된 주요 작업:
+
+도서 검색(2 Tier 아키텍처) 및 서재 등록 플로우 구축
+
+내 서재 목록(Library) 최신순 정렬 및 도서 카드 UI (Hover 메뉴 투명도/색상 최적화)
+
+도서 상세/수정 폼(BookDetailForm) UI 높이 최적화 (날짜/진행률 Grid 배치, 직관적 스위치 토글 적용)
+
+데이터베이스에 공개/비공개 컬럼(is_short_review_public, is_public) 반영 및 API 통신 매핑 완료
+
+도서 상세 페이지 내 타 회원들의 '공개된 한줄평' 모아보기 탭 구현
+
+현재 개발 단계: 7단계. 테스트 (QA 점검 및 전체 플로우 검증) 진행 중
+
+향후 방향성:
+
+개별 도서의 데이터 CRUD(생성, 읽기, 수정, 삭제) 무결성 최종 테스트
+
+'기억의 지층(Memo)' 공개된 메모들의 커뮤니티 공유 뷰(View) 구상
+
+상용화 수준(Paid Service)에 걸맞은 결제/구독 모델 DB 설계 준비 (User 테이블의 is_premium 속성 활용 예정)
+
+7. AI Action Guidelines (AI 작동 지침)
+추측 금지: 확신이 서지 않거나 기획 의도가 불분명한 경우 절대 임의로 코드를 작성하지 말고 사용자에게 질문할 것.
+
+오류 점검: 코드나 솔루션을 제시한 후, 스스로 논리적 모순이나 오타가 없는지 한 번 더 검증할 것.
+
+코드 분석 우선: 새로운 기능 추가 시, 관련된 기존 소스 파일 구조를 먼저 파악하고 컨벤션에 맞춰 코드를 생성할 것.
+
+
+============================================================
+FILE PATH: export_code.py
+============================================================
+import os
+
+# ---------------------------------------------------------
+# [설정] 무시할 폴더 및 파일 목록
+# ---------------------------------------------------------
+IGNORE_DIRS = {
+    "node_modules", ".next", ".git", ".vscode", "venv", 
+    "__pycache__", "dist", "build", "coverage", ".idea"
+}
+
+# 분석에 필요한 파일 확장자만 포함 (이미지, 폰트 등 제외)
+TARGET_EXTENSIONS = {
+    ".py", ".ts", ".tsx", ".js", ".jsx", 
+    ".css", ".html", ".sql", ".json", ".md", 
+    ".txt", ".yml", ".yaml", ".toml"
+}
+
+# 굳이 분석 필요 없는 파일들 (패키지 락 파일 등)
+IGNORE_FILES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", 
+    "poetry.lock", ".DS_Store", ".env", ".env.local"
+}
+
+OUTPUT_FILE = "boookntalk_full_source.txt"
+
+def is_target_file(filename):
+    """분석 대상 파일인지 확인"""
+    if filename in IGNORE_FILES:
+        return False
+    _, ext = os.path.splitext(filename)
+    return ext in TARGET_EXTENSIONS
+
+def main():
+    root_dir = os.getcwd() # 현재 폴더 기준
+    
+    print(f"📂 프로젝트 소스 코드 병합 시작... (위치: {root_dir})")
+    
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as outfile:
+        # 프로젝트 구조(트리) 먼저 기록
+        outfile.write("================================================================\n")
+        outfile.write(f"PROJECT ROOT: {os.path.basename(root_dir)}\n")
+        outfile.write("================================================================\n\n")
+        
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            # 무시할 폴더 건너뛰기
+            dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+            
+            for filename in filenames:
+                if is_target_file(filename):
+                    file_path = os.path.join(dirpath, filename)
+                    rel_path = os.path.relpath(file_path, root_dir)
+                    
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as infile:
+                            content = infile.read()
+                            
+                            # 파일 구분자 및 내용 쓰기
+                            outfile.write(f"\n\n{'='*60}\n")
+                            outfile.write(f"FILE PATH: {rel_path}\n")
+                            outfile.write(f"{'='*60}\n")
+                            outfile.write(content)
+                            outfile.write("\n")
+                            
+                            print(f"✅ 추가됨: {rel_path}")
+                    except Exception as e:
+                        print(f"⚠️ 읽기 실패 (건너뜀): {rel_path} - {e}")
+
+    print(f"\n🎉 완료! '{OUTPUT_FILE}' 파일이 생성되었습니다.")
+    print("이 파일을 AI에게 업로드하세요.")
+
+if __name__ == "__main__":
+    main()
+
+
+============================================================
+FILE PATH: package.json
+============================================================
+{
+  "dependencies": {
+    "next-auth": "^4.24.13",
+    "sonner": "^2.0.7"
+  }
+}
+
+
+
+============================================================
+FILE PATH: test_api.py
 ============================================================
 
 
@@ -1077,7 +1359,8 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
     const [readingFormat, setReadingFormat] = useState<string>(initialData?.reading_format || 'PAPER');
     const [tagInput, setTagInput] = useState('');
     const [tags, setTags] = useState<string[]>(initialData?.tags || []);
-    const [isPublic, setIsPublic] = useState<boolean>(initialData?.is_public ?? true);
+    //const [isPublic, setIsPublic] = useState<boolean>(initialData?.is_public ?? true);
+    const [isShortReviewPublic, setIsShortReviewPublic] = useState<boolean>(initialData?.is_short_review_public ?? true);
 
     // 날짜 자동 세팅
     useEffect(() => {
@@ -1133,7 +1416,8 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
             current_page: currentPage,
             reading_format: readingFormat,
             tags: tags,
-            is_public: isPublic
+            // is_public 대신 아래 변수명 사용
+            is_short_review_public: isShortReviewPublic
         };
 
         try {
@@ -1235,42 +1519,45 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
             </div>
 
             {/* 3. 진행률 & 날짜 (Progressive Disclosure) */}
+            {/* 3. 진행률 & 날짜 (Progressive Disclosure) */}
             {status !== 'wish' && (
-                <div className="bg-gray-50 p-4 rounded-xl grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                    {/* 날짜 입력 */}
-                    <div className="grid gap-3">
-                        <div className="grid gap-1.5">
-                            <Label className="text-xs text-gray-500 flex items-center gap-1"><CalendarIcon size={12} /> 시작일</Label>
-                            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm bg-white" />
-                        </div>
-                        {status === 'finished' && (
-                            <div className="grid gap-1.5 animate-in fade-in duration-300">
-                                <Label className="text-xs text-gray-500 flex items-center gap-1"><CalendarIcon size={12} /> 완독일</Label>
-                                <Input type="date" value={finishDate} onChange={(e) => setFinishDate(e.target.value)} className="text-sm bg-white" />
-                            </div>
-                        )}
+                <div className="bg-gray-50 p-4 rounded-xl grid grid-cols-2 gap-4 items-start animate-in fade-in slide-in-from-top-2 duration-300">
+                    
+                    {/* 왼쪽: 시작일 (공통) */}
+                    <div className="grid gap-1.5">
+                        <Label className="text-xs text-gray-500 flex items-center gap-1"><CalendarIcon size={12} /> 시작일</Label>
+                        <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm bg-white h-9" />
                     </div>
 
-                    {/* 독서 진행률 (읽는 중일 때만) */}
+                    {/* 오른쪽: 완독일 (완독 상태일 때) */}
+                    {status === 'finished' && (
+                        <div className="grid gap-1.5 animate-in fade-in duration-300">
+                            <Label className="text-xs text-gray-500 flex items-center gap-1"><CalendarIcon size={12} /> 완독일</Label>
+                            <Input type="date" value={finishDate} onChange={(e) => setFinishDate(e.target.value)} className="text-sm bg-white h-9" />
+                        </div>
+                    )}
+
+                    {/* 오른쪽: 현재 페이지 & 진행률 (읽는 중일 때) */}
                     {status === 'reading' && (
                         <div className="grid gap-1.5 animate-in fade-in duration-300">
                             <Label className="text-xs text-gray-500 flex items-center justify-between">
                                 <span>현재 페이지</span>
                                 <span className="font-bold text-blue-600">{Math.round((currentPage / totalPage) * 100)}%</span>
                             </Label>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2">
                                 <Input 
                                     type="number" 
                                     value={currentPage || ''} 
                                     onChange={(e) => setCurrentPage(Number(e.target.value))} 
-                                    className="text-sm bg-white font-mono" 
+                                    className="text-sm bg-white font-mono h-9" 
                                     placeholder="0"
                                     min="0"
                                     max={totalPage}
                                 />
-                                <span className="text-sm text-gray-400 font-mono">/ {totalPage}p</span>
+                                <span className="text-sm text-gray-400 font-mono whitespace-nowrap">/ {totalPage}p</span>
                             </div>
-                            <div className="w-full h-1.5 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                            {/* 진행률 바 (Input 하단에 타이트하게 배치) */}
+                            <div className="w-full h-1.5 bg-gray-200 rounded-full mt-0.5 overflow-hidden">
                                 <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min((currentPage / totalPage) * 100, 100)}%` }} />
                             </div>
                         </div>
@@ -1281,10 +1568,31 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
             {/* 4. 한줄평 및 태그 */}
             <div className="grid gap-4">
                 <div className="grid gap-2">
-                    <Label className="text-sm font-semibold">한 줄 평</Label>
+                    <div className="flex items-center justify-between">
+                        <Label className="text-sm font-semibold">한줄평</Label>
+                        
+                        {/* [NEW] 직관적인 스위치형 공개/비공개 토글 */}
+                        <div 
+                            className="flex items-center gap-2 cursor-pointer group"
+                            onClick={() => setIsShortReviewPublic(!isShortReviewPublic)}
+                        >
+                            <span className={`flex items-center gap-1 text-[12px] font-bold transition-colors ${isShortReviewPublic ? 'text-[#0066cc]' : 'text-gray-400'}`}>
+                                {isShortReviewPublic ? <Globe size={13} /> : <Lock size={13} />}
+                                {isShortReviewPublic ? '공개' : '비공개'}
+                            </span>
+                            <button
+                                type="button"
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isShortReviewPublic ? 'bg-[#0066cc]' : 'bg-gray-200'}`}
+                            >
+                                <span 
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${isShortReviewPublic ? 'translate-x-6' : 'translate-x-1'}`} 
+                                />
+                            </button>
+                        </div>
+                    </div>
                     <Textarea
                         placeholder="이 책에서 얻은 영감이나 문장을 기록해보세요."
-                        className="resize-none min-h-[80px] text-sm"
+                        className="resize-none min-h-[60px] text-sm"
                         value={shortReview}
                         onChange={(e) => setShortReview(e.target.value)}
                     />
@@ -1308,31 +1616,6 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
                         className="text-sm"
                     />
                 </div>
-            </div>
-
-            {/* 공개/비공개 설정 토글 */}
-            <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-100 mt-2">
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-full transition-colors ${isPublic ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-500'}`}>
-                        {isPublic ? <Globe size={18} /> : <Lock size={18} />}
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-sm font-bold text-[#1d1d1f]">
-                            {isPublic ? '전체 공개' : '나만 보기'}
-                        </span>
-                        <span className="text-xs text-gray-500 font-medium">
-                            {isPublic ? '타인 서재에서 이 기록이 노출됩니다.' : '이 기록은 나에게만 비공개로 보입니다.'}
-                        </span>
-                    </div>
-                </div>
-                {/* 토글 스위치 컴포넌트 */}
-                <button
-                    type="button"
-                    onClick={() => setIsPublic(!isPublic)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isPublic ? 'bg-[#0066cc]' : 'bg-gray-300'}`}
-                >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${isPublic ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
             </div>
             
             {/* 5. 하단 버튼 */}
@@ -1908,10 +2191,12 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                                     <Button 
                                                         variant="secondary" 
                                                         size="icon" 
-                                                        className="h-8 w-8 rounded-full bg-white/90 shadow-sm hover:bg-white"
-                                                        onClick={(e) => e.stopPropagation()} // 중요: 카드 클릭 방지
+                                                        // 배경 50% 투명도(bg-white/50) 및 고급스러운 블러 효과(backdrop-blur-sm) 추가
+                                                        className="h-8 w-8 rounded-full bg-white/1 backdrop-blur-sm shadow-sm hover:bg-white/70 transition-colors"
+                                                        onClick={(e) => e.stopPropagation()} 
                                                     >
-                                                        <MoreVertical size={16} className="text-gray-600" />
+                                                        {/* 점점점 색상을 빨간색(text-red-500)으로 변경 */}
+                                                        <MoreVertical size={16} className="text-red-500" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-40">
@@ -1949,7 +2234,7 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                                 <div className="flex items-center gap-2"> {/* gap 추가 */}
                                                     {/* ✨ 리뷰 아이콘 추가: short_review가 비어있지 않을 때만 표시 */}
                                                     {book.short_review && book.short_review.trim().length > 0 && (
-                                                        <div className="flex items-center text-blue-500" title="리뷰 작성됨">
+                                                        <div className="flex items-center text-blue-500" title="한줄평 작성됨">
                                                             <MessageSquare size={14} fill="currentColor" className="opacity-80" />
                                                         </div>
                                                     )}
@@ -5128,6 +5413,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+
 import { Star, Info, Quote, Layers, BookType, ExternalLink, MessageSquare } from 'lucide-react';
 
 interface BookTopInfoProps {
@@ -5375,12 +5661,12 @@ import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Quote, BookOpen, Send, Trash2 } from 'lucide-react';
+import { Quote, BookOpen, Send, Trash2, Globe, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface MemoryLayerProps {
     recordId: number;
-    user: any; 
+    user: any;
 }
 
 export default function MemoryLayer({ recordId, user }: MemoryLayerProps) {
@@ -5389,8 +5675,10 @@ export default function MemoryLayer({ recordId, user }: MemoryLayerProps) {
     const [thought, setThought] = useState('');
     const [memos, setMemos] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    
+    // [NEW] 개별 메모의 공개/비공개 상태 (기본값: 공개)
+    const [isPublic, setIsPublic] = useState(true);
 
-    // [API] 메모 목록 불러오기
     const fetchMemos = async () => {
         try {
             const res = await fetch(`http://localhost:8000/api/records/${recordId}/memos`);
@@ -5407,7 +5695,6 @@ export default function MemoryLayer({ recordId, user }: MemoryLayerProps) {
         fetchMemos();
     }, [recordId]);
 
-    // [API] 메모 저장
     const handleSubmit = async () => {
         if (!sentence.trim()) {
             toast.error("수집할 문장을 입력해 주세요.");
@@ -5422,7 +5709,8 @@ export default function MemoryLayer({ recordId, user }: MemoryLayerProps) {
                 body: JSON.stringify({
                     page_number: parseInt(pageNumber) || 0,
                     sentence,
-                    thought
+                    thought,
+                    is_public: isPublic // [NEW] 공개 여부 데이터 추가
                 })
             });
 
@@ -5431,7 +5719,8 @@ export default function MemoryLayer({ recordId, user }: MemoryLayerProps) {
                 setPageNumber('');
                 setSentence('');
                 setThought('');
-                fetchMemos(); // 리스트 갱신
+                setIsPublic(true); // 전송 후 기본값으로 초기화
+                fetchMemos();
             }
         } catch (error) {
             toast.error("저장에 실패했습니다.");
@@ -5440,10 +5729,8 @@ export default function MemoryLayer({ recordId, user }: MemoryLayerProps) {
         }
     };
 
-    // [API] 메모 삭제
     const handleDelete = async (memoId: number) => {
         if (!confirm("이 기억을 삭제하시겠습니까?")) return;
-
         try {
             const res = await fetch(`http://localhost:8000/api/memos/${memoId}`, { method: 'DELETE' });
             if (res.ok) {
@@ -5458,13 +5745,51 @@ export default function MemoryLayer({ recordId, user }: MemoryLayerProps) {
     return (
         <div className="flex flex-col gap-[var(--spacing-1cm)] animate-in fade-in duration-500">
             {/* 1. 메모 입력 폼 */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                {/* ... (이전 UI 코드 유지) ... */}
-                <div className="flex justify-end pt-2">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4">
+                
+                <div className="flex items-center gap-3">
+                    <BookOpen size={16} className="text-gray-400" />
+                    <Input 
+                        type="number" 
+                        placeholder="페이지 (선택)" 
+                        value={pageNumber} 
+                        onChange={(e) => setPageNumber(e.target.value)}
+                        className="w-32 bg-gray-50 text-sm"
+                    />
+                </div>
+                
+                <div className="relative">
+                    <Quote className="absolute left-3 top-3 w-4 h-4 text-gray-300" />
+                    <Textarea 
+                        placeholder="기억하고 싶은 문장을 발췌해 보세요." 
+                        value={sentence}
+                        onChange={(e) => setSentence(e.target.value)}
+                        className="pl-10 min-h-[80px] bg-gray-50 resize-none text-sm"
+                    />
+                </div>
+
+                <Textarea 
+                    placeholder="이 문장에 대한 나의 생각이나 영감을 덧붙여 보세요. (선택)" 
+                    value={thought}
+                    onChange={(e) => setThought(e.target.value)}
+                    className="min-h-[80px] bg-gray-50 resize-none text-sm"
+                />
+
+                {/* [NEW] 하단 컨트롤 영역: 좌측(공개토글) / 우측(저장버튼) */}
+                <div className="flex justify-between items-center pt-2 border-t border-gray-50 mt-2">
+                    <button
+                        type="button"
+                        onClick={() => setIsPublic(!isPublic)}
+                        className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500 hover:text-[#1d1d1f] transition-colors"
+                    >
+                        {isPublic ? <Globe size={16} className="text-blue-500" /> : <Lock size={16} className="text-gray-400" />}
+                        {isPublic ? "전체 공개" : "나만 보기"}
+                    </button>
+
                     <Button 
                         onClick={handleSubmit}
                         disabled={isLoading}
-                        className="bg-[#1d1d1f] hover:bg-[#333] text-white flex items-center gap-2 px-6"
+                        className="bg-[#1d1d1f] hover:bg-[#333] text-white flex items-center gap-2 px-6 rounded-xl"
                     >
                         <Send size={14} />
                         {isLoading ? "저장 중..." : "기록 저장"}
@@ -5493,11 +5818,15 @@ export default function MemoryLayer({ recordId, user }: MemoryLayerProps) {
                                     <span className="text-gray-300 text-xs mx-1">•</span>
                                     <span className="text-xs text-gray-400">{memo.created_at.split('T')[0]}</span>
                                 </div>
+                                
                                 <div className="flex items-center gap-3">
+                                    {/* [NEW] 비공개 메모일 경우 자물쇠 아이콘 표시 */}
+                                    {memo.is_public === false && (
+                                        <Lock size={14} className="text-gray-400" />
+                                    )}
                                     <span className="bg-gray-100 text-gray-500 text-xs font-bold px-2.5 py-1 rounded-full font-mono">
                                         p. {memo.page_number > 0 ? memo.page_number : '-'}
                                     </span>
-                                    {/* 본인이 쓴 글만 삭제 가능하도록 처리할 수 있습니다 */}
                                     <button onClick={() => handleDelete(memo.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <Trash2 size={16} />
                                     </button>
@@ -5671,6 +6000,106 @@ export default function EditionMaster({
 
 
 ============================================================
+FILE PATH: frontend/src/components/book-detail/ShortReviewSection.tsx
+============================================================
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { Star, MessageSquare } from 'lucide-react';
+
+interface ShortReviewSectionProps {
+    workId: number;
+}
+
+export default function ShortReviewSection({ workId }: ShortReviewSectionProps) {
+    const [reviews, setReviews] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchReviews = async () => {
+            try {
+                const res = await fetch(`http://localhost:8000/api/works/${workId}/short-reviews`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setReviews(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch short reviews", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        if (workId) fetchReviews();
+    }, [workId]);
+
+    const renderStars = (rating: number) => {
+        return (
+            <div className="flex text-[#FFCC00]">
+                {[1, 2, 3, 4, 5].map((star) => (
+                    <Star 
+                        key={star} 
+                        size={14} 
+                        fill={star <= rating ? "currentColor" : "none"} 
+                        className={star <= rating ? "text-[#FFCC00]" : "text-gray-200"}
+                    />
+                ))}
+            </div>
+        );
+    };
+
+    if (isLoading) {
+        return <div className="py-10 text-center text-gray-400 text-sm font-medium animate-pulse">한줄평을 불러오는 중입니다...</div>;
+    }
+
+    return (
+        <section className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100 mt-[var(--spacing-1cm,40px)]">
+            <div className="flex items-center gap-2 mb-6">
+                <MessageSquare className="text-[#0066cc]" size={22} />
+                <h3 className="text-lg md:text-xl font-extrabold text-[#1d1d1f]">BoooknTalkers' 한줄평</h3>
+                <span className="text-[13px] font-bold text-[#0066cc] bg-blue-50 px-2.5 py-0.5 rounded-full ml-1">
+                    {reviews.length}
+                </span>
+            </div>
+
+            {reviews.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm bg-gray-50 rounded-xl border border-gray-100 border-dashed">
+                    아직 공개된 한줄평이 없습니다. 이 책의 첫 번째 한줄평을 남겨보세요!
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {reviews.map((review) => (
+                        <div key={review.id} className="bg-gray-50 p-5 rounded-xl flex flex-col gap-3 transition-colors hover:bg-gray-100 border border-gray-100/50">
+                            <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-2.5">
+                                    {review.user_image ? (
+                                        <img src={review.user_image} alt="profile" className="w-8 h-8 rounded-full object-cover border border-gray-200 shadow-sm" />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-[12px] text-gray-500 font-extrabold shadow-sm">
+                                            {review.user_name.charAt(0)}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-bold text-[#1d1d1f]">{review.user_name}</span>
+                                        <span className="text-[11px] text-gray-400 font-medium">{review.created_at.split('T')[0]}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-white px-2 py-1 rounded-md shadow-sm border border-gray-100">
+                                    {renderStars(review.rating)}
+                                </div>
+                            </div>
+                            <p className="text-[14px] text-gray-700 leading-relaxed font-medium break-keep mt-1">
+                                "{review.short_review}"
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </section>
+    );
+}
+
+
+============================================================
 FILE PATH: frontend/src/components/book-detail/BookDetailClient.tsx
 ============================================================
 // frontend/src/components/book-detail/BookDetailClient.tsx
@@ -5683,6 +6112,7 @@ import Container from '@/components/layout/Container';
 import BookTopInfo from './BookTopInfo'; // 위에서 만든 컴포넌트 import
 import { ChevronLeft, Database, Copy, Check } from 'lucide-react';
 import MemoryLayer from './MemoryLayer';
+import ShortReviewSection from './ShortReviewSection';
 
 export default function BookDetailClient({ initialData, user }: { initialData: any, user: any }) {
     const router = useRouter();
@@ -5749,7 +6179,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                                     onClick={() => setActiveTab('review')}
                                     className={`cursor-pointer transition-all ${activeTab === 'review' ? 'font-bold text-[#1d1d1f] -ml-[17px] border-l-2 border-black pl-3.5' : 'hover:text-gray-800'}`}
                                 >
-                                    심층 리뷰
+                                    한줄평
                                 </li>
                                 <li 
                                     onClick={() => setActiveTab('report')}
@@ -5781,8 +6211,8 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
 
                         {/* 탭: 심층 리뷰 */}
                         {activeTab === 'review' && (
-                            <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 min-h-[400px] flex items-center justify-center text-gray-300 font-bold animate-in fade-in duration-300">
-                                심층 리뷰 영역
+                            <div className="animate-in fade-in duration-300">
+                                <ShortReviewSection workId={work.id} />
                             </div>
                         )}
 
@@ -5891,7 +6321,7 @@ const menuItems = [
 
 const analyticsItems = [
     { title: "독서 통계", icon: BarChart2, code: "STATS" },
-    { title: "기록 조각 (리뷰)", icon: MessageSquare, code: "REVIEW" },
+    { title: "기록 조각 (한줄평)", icon: MessageSquare, code: "REVIEW" },
 ];
 
 export function LibrarySidebar() {
@@ -6628,10 +7058,12 @@ class MemoCreate(BaseModel):
     sentence: str
     thought: Optional[str] = None
 
+# [1] 상단 Pydantic Schema 수정 (약 80번째 줄 부근)
 class MemoCreate(BaseModel):
     page_number: int
     sentence: str
     thought: Optional[str] = None
+    is_public: Optional[bool] = True # ▼▼▼ 추가
 
 # -------------------------------------------------------------------
 # [스키마] 프로필 업데이트 요청용 데이터 모델
@@ -7198,7 +7630,7 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
     if not user:
         return []
 
-    records = db.query(models.Record).filter(models.Record.user_id == user.id).all()
+    records = db.query(models.Record).filter(models.Record.user_id == user.id).order_by(models.Record.added_at.desc()).all()
     
     results = []
     for record in records:
@@ -7233,7 +7665,7 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
             "isbn10": edition.isbn10,
             # ▼▼▼ [NEW] 총 페이지 수 응답 추가 ▼▼▼
             "page_count": edition.page_count,
-            "is_public": record.is_public
+            "is_short_review_public": record.is_short_review_public
         })
     return results
 
@@ -7367,7 +7799,7 @@ async def read_user_records(
             
             # ▼▼▼ [NEW] 총 페이지 수 응답 추가 ▼▼▼
             "page_count": record.edition.page_count,
-            "is_public": record.is_public
+            "is_short_review_public": record.is_short_review_public
         }
         
         response_data.append(book_info)
@@ -7442,9 +7874,10 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "current_page": record.current_page,
             "reading_format": record.reading_format,
             "tags": tag_list,
-            "is_public": record.is_public
+            "is_short_review_public": record.is_short_review_public
         },
         "work": {
+            "id": work.id,
             "title": work.title,
             "author": work.author,
             "category": work.category,
@@ -7483,7 +7916,8 @@ async def create_memo(record_id: int, memo_data: MemoCreate, db: Session = Depen
         record_id=record_id,
         page_number=memo_data.page_number,
         sentence=memo_data.sentence,
-        thought=memo_data.thought
+        thought=memo_data.thought,
+        is_public=memo_data.is_public # ▼▼▼ 추가
     )
     db.add(new_memo)
     db.commit()
@@ -7504,7 +7938,8 @@ async def get_memos(record_id: int, db: Session = Depends(get_db)):
             "thought": m.thought,
             "created_at": m.created_at.isoformat(),
             "author_name": user.nickname or user.email.split('@')[0],
-            "author_image": user.profile_image or ""
+            "author_image": user.profile_image or "",
+            "is_public": m.is_public # ▼▼▼ 추가
         })
     return result
 
@@ -7606,6 +8041,31 @@ async def update_user_profile(user_email: str, profile_data: ProfileUpdateReques
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="프로필 업데이트 중 데이터베이스 오류가 발생했습니다.")
+
+# [추가] 특정 책(Work)의 공개된 한줄평 목록 가져오기 API
+@app.get("/api/works/{work_id}/short-reviews")
+async def get_work_short_reviews(work_id: int, db: Session = Depends(get_db)):
+    # Edition 테이블을 조인하여, 해당 Work에 속한 모든 Edition의 기록을 가져옵니다.
+    records = db.query(models.Record).join(models.Edition).filter(
+        models.Edition.work_id == work_id,
+        models.Record.short_review.isnot(None),       # 한줄평 내용이 null이 아니고
+        models.Record.short_review != "",             # 빈 문자열이 아니며
+        models.Record.is_short_review_public == True  # 공개 설정된 데이터만
+    ).order_by(models.Record.added_at.desc()).all()   # 최신순 정렬
+
+    results = []
+    for r in records:
+        user = r.user
+        results.append({
+            "id": r.id,
+            "user_name": user.nickname or user.email.split('@')[0],
+            "user_image": user.profile_image or "",
+            "rating": r.rating,
+            "short_review": r.short_review,
+            "created_at": r.added_at.isoformat() if r.added_at else ""
+        })
+    
+    return results
 
 
 ============================================================
