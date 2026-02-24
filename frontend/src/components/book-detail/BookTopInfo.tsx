@@ -11,7 +11,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-
 import { Star, Info, Quote, Layers, BookType, ExternalLink, MessageSquare } from 'lucide-react';
 
 interface BookTopInfoProps {
@@ -86,7 +85,6 @@ export default function BookTopInfo({
                     {/* [1. 좌측 영역]: 시각 및 부가 기능 (Visual & Tools) */}
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
                         
-                        {/* ▼▼▼ [수정된 부분] 3D 입체 효과, 그림자 바 제거 및 깔끔한 플랫 디자인 적용 ▼▼▼ */}
                         <div className="relative aspect-[1/1.45] shadow-sm border border-gray-200 rounded-lg overflow-hidden group">
                             <div className="relative w-full h-full transition-transform duration-300 group-hover:scale-[1.02]">
                                 {edition.cover_image || edition.cover || work.cover_image ? (
@@ -103,10 +101,8 @@ export default function BookTopInfo({
                                         <span className="text-xs font-semibold">No Cover</span>
                                     </div>
                                 )}
-                                {/* 삭제됨: <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-r..." /> (회색 바) */}
                             </div>
                         </div>
-                        {/* ▲▲▲ [수정된 부분 끝] ▲▲▲ */}
 
                         <div className="flex gap-2 w-full">
                             <Button variant="outline" className="flex-1 border-gray-200 text-gray-700 hover:bg-gray-50 h-10 rounded-xl text-[13px] font-bold shadow-sm">
@@ -123,7 +119,7 @@ export default function BookTopInfo({
                         </div>
                     </div>
 
-                    {/* [2. 우측 영역]: 정보 및 액션 (기존 코드 100% 유지) */}
+                    {/* [2. 우측 영역]: 정보 및 액션 */}
                     <div className="flex-1 flex flex-col min-w-0">
                         
                         <div className="flex justify-between items-start mb-1">
@@ -226,10 +222,20 @@ export default function BookTopInfo({
                                     </div>
                                 )}
                                 
-                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm">
-                                    <span className="text-[12px] font-bold text-gray-500">나의 평점</span>
-                                    {renderStars(record.rating || 0)}
+                                {/* ▼▼▼ [수정된 부분] 논리적 그룹화를 통한 통합 평점 뱃지 ▼▼▼ */}
+                                <div className="flex items-center bg-white px-4 py-1.5 rounded-lg border border-gray-100 shadow-sm">
+                                    <div className="flex items-center gap-1.5 pr-4 border-r border-gray-100">
+                                        <span className="text-[12px] font-bold text-gray-500">BoooknTalk 평균</span>
+                                        <Star size={14} className="text-[#FFCC00]" fill="currentColor" />
+                                        <span className="text-[13px] font-black text-[#1d1d1f]">{work.average_rating || "0.0"}</span>
+                                        <span className="text-[11px] text-gray-400 font-medium">({work.rating_count || 0})</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 pl-4">
+                                        <span className="text-[12px] font-bold text-gray-500">나의 평점</span>
+                                        {renderStars(record.rating || 0)}
+                                    </div>
                                 </div>
+                                {/* ▲▲▲ [수정된 부분 끝] ▲▲▲ */}
                             </div>
                         </div>
                         

@@ -48,7 +48,8 @@ export default function ShortReviewSection({ workId }: ShortReviewSectionProps) 
     }
 
     return (
-        <section className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100 mt-[var(--spacing-1cm,40px)]">
+        // [수정됨] mt-[var(--spacing-1cm,40px)] 제거로 이중 여백 해결
+        <section className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100">
             <div className="flex items-center gap-2 mb-6">
                 <MessageSquare className="text-[#0066cc]" size={22} />
                 <h3 className="text-lg md:text-xl font-extrabold text-[#1d1d1f]">BoooknTalkers' 한줄평</h3>

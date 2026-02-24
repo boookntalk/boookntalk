@@ -1,101 +1,115 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { 
-    Book, BookOpen, Heart, CheckCircle, 
-    PauseCircle, MessageSquare, BarChart2 
+    Library, 
+    Edit3, 
+    MessageSquare, 
+    ScrollText, 
+    BarChart2, 
+    Globe
 } from 'lucide-react';
 import {
     Sidebar,
     SidebarContent,
     SidebarGroup,
-    SidebarGroupContent,
-    SidebarGroupLabel,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
-    SidebarHeader,
+    SidebarMenuSub,
+    SidebarMenuSubItem,
+    SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-const menuItems = [
-    { title: "전체 도서", icon: Book, code: "ALL" },
-    { title: "읽고 싶은", icon: Heart, code: "WISH" },
-    { title: "읽는 중", icon: BookOpen, code: "READING" },
-    { title: "완독", icon: CheckCircle, code: "COMPLETED" },
-    { title: "중단", icon: PauseCircle, code: "STOPPED" },
-];
-
-const analyticsItems = [
-    { title: "독서 통계", icon: BarChart2, code: "STATS" },
-    { title: "기록 조각 (한줄평)", icon: MessageSquare, code: "REVIEW" },
+const navItems = [
+    { title: "내 서재", href: "/library", icon: Library },
+    {
+        title: "나의 기록", icon: Edit3,
+        subItems: [
+            { title: '나의 한줄평', href: '/my-records/short-reviews', icon: MessageSquare },
+            { title: '나의 메모', href: '/my-records/memos', icon: ScrollText },
+        ]
+    },
+    { title: "독서 통계", href: "/statistics", icon: BarChart2 },
+    { title: "사색 라운지", href: "/community", icon: Globe }
 ];
 
 export function LibrarySidebar() {
-    // [임시] 활성화 상태 테스트용
-    const activeTab = "ALL"; 
+    const pathname = usePathname();
+
+    const isActiveRoute = (href: string) => {
+        if (href === '/' && pathname !== '/') return false;
+        return pathname.startsWith(href);
+    };
 
     return (
-        // [수정] mt-16으로 헤더 높이만큼 정확히 내리고, top-0을 주어 위치 고정
-        // border-r은 유지하되 색상을 연하게 조정
+        // top-14(글로벌 헤더 높이)에서 시작, 로고 헤더 없음
         <Sidebar 
-            className="!fixed top-0 mt-14 h-[calc(100vh-4rem)] border-r border-gray-100 bg-white z-30" 
+            className="!fixed top-14 left-0 h-[calc(100vh-3.5rem)] border-r border-gray-100 bg-white z-40 shadow-sm" 
             collapsible="none"
         >
-            <SidebarHeader className="p-6 pb-2">
-                <div className="flex items-center gap-3 px-2">
-                     <Avatar className="h-10 w-10 border border-gray-100">
-                        <AvatarImage src="/placeholder-user.jpg" alt="User" />
-                        <AvatarFallback className="bg-gray-50 text-xs font-bold text-gray-500">ME</AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col">
-                        <span className="text-sm font-bold text-[#1d1d1f]">나의 서재</span>
-                        <span className="text-xs text-gray-500">독서 기록장</span>
-                    </div>
-                </div>
-            </SidebarHeader>
-
-            <SidebarContent className="px-4 py-2">
+            {/* [핵심] pt-8을 주어 메인 컨텐츠 영역과 Y축 시작점을 완벽히 일치시킴 */}
+            <SidebarContent className="px-4 pb-2 pt-8">
                 <SidebarGroup>
-                    <SidebarGroupLabel className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-4">
-                        보관함
-                    </SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {menuItems.map((item) => (
-                                <SidebarMenuItem key={item.code}>
-                                    <SidebarMenuButton 
-                                        isActive={activeTab === item.code}
-                                        // [수정] 배경색 제거 & 텍스트 중심 스타일링
-                                        className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-[14px] font-medium text-gray-600 bg-transparent hover:bg-gray-50 hover:text-gray-900 transition-colors rounded-lg data-[active=true]:text-blue-600 data-[active=true]:font-bold data-[active=true]:bg-blue-50/50"
-                                    >
-                                        <item.icon className={`h-[18px] w-[18px] ${activeTab === item.code ? 'text-blue-600' : 'text-gray-400'}`} />
-                                        <span>{item.title}</span>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+                    <SidebarMenu className="gap-1.5">
+                        {navItems.map((item, index) => {
+                            if (item.subItems) {
+                                const isGroupActive = item.subItems.some(sub => isActiveRoute(sub.href));
+                                return (
+                                    <SidebarMenuItem key={index}>
+                                        {/* py-2.5 내부 여백을 통해 텍스트 베이스라인 확보 */}
+                                        <SidebarMenuButton 
+                                            className={`w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold transition-colors rounded-xl ${isGroupActive ? 'text-[#0066cc]' : 'text-[#1d1d1f] hover:bg-gray-50'}`}
+                                        >
+                                            <item.icon className={`h-5 w-5 ${isGroupActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
+                                            <span>{item.title}</span>
+                                        </SidebarMenuButton>
+                                        <SidebarMenuSub className="ml-2 border-l-gray-100 pl-2 my-1">
+                                            {item.subItems.map((subItem, subIndex) => {
+                                                 const isSubActive = isActiveRoute(subItem.href);
+                                                 return (
+                                                    <SidebarMenuSubItem key={subIndex}>
+                                                        <Link href={subItem.href} passHref legacyBehavior>
+                                                            <SidebarMenuSubButton
+                                                                asChild
+                                                                isActive={isSubActive}
+                                                                className="text-[14px] font-medium h-auto py-2 data-[active=true]:text-[#0066cc] data-[active=true]:font-bold data-[active=true]:bg-blue-50/50 rounded-lg"
+                                                            >
+                                                                <a className="flex items-center gap-3">
+                                                                    <subItem.icon className={`h-[18px] w-[18px] ${isSubActive ? 'text-[#0066cc]' : 'text-gray-400 opacity-80'}`} />
+                                                                    <span>{subItem.title}</span>
+                                                                </a>
+                                                            </SidebarMenuSubButton>
+                                                        </Link>
+                                                    </SidebarMenuSubItem>
+                                                );
+                                            })}
+                                        </SidebarMenuSub>
+                                    </SidebarMenuItem>
+                                );
+                            }
 
-                <SidebarGroup>
-                    <SidebarGroupLabel className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-6">
-                        분석 및 기록
-                    </SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {analyticsItems.map((item) => (
-                                <SidebarMenuItem key={item.code}>
-                                    <SidebarMenuButton 
-                                        className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-[14px] font-medium text-gray-600 bg-transparent hover:bg-gray-50 hover:text-gray-900 transition-colors rounded-lg"
-                                    >
-                                        <item.icon className="h-[18px] w-[18px] text-gray-400" />
-                                        <span>{item.title}</span>
-                                    </SidebarMenuButton>
+                            const isSingleActive = isActiveRoute(item.href);
+                            return (
+                                <SidebarMenuItem key={index}>
+                                    <Link href={item.href} passHref legacyBehavior>
+                                        <SidebarMenuButton 
+                                            asChild
+                                            isActive={isSingleActive}
+                                            className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold text-[#1d1d1f] bg-transparent hover:bg-gray-50 transition-colors rounded-xl data-[active=true]:text-[#0066cc] data-[active=true]:bg-blue-50"
+                                        >
+                                            <a className="flex items-center gap-3">
+                                                <item.icon className={`h-5 w-5 ${isSingleActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
+                                                <span>{item.title}</span>
+                                            </a>
+                                        </SidebarMenuButton>
+                                    </Link>
                                 </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
+                            );
+                        })}
+                    </SidebarMenu>
                 </SidebarGroup>
             </SidebarContent>
         </Sidebar>

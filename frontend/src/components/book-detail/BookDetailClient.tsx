@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Container from '@/components/layout/Container';
 import BookTopInfo from './BookTopInfo';
-import { ChevronLeft, Database, Copy, Check, Quote, BarChart2 } from 'lucide-react';
+import { ArrowLeft, Database, Copy, Check, Quote, BarChart2 } from 'lucide-react';
 import MemoryLayer from './MemoryLayer';
 import ShortReviewSection from './ShortReviewSection';
 
@@ -32,15 +32,16 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
 
     return (
         <div className="min-h-screen bg-[#F5F5F7] pb-32">
-            {/* 1. 뒤로가기 네비게이션 */}
-            <div className="bg-white border-b border-gray-200 sticky top-0 z-[40]">
-                <Container className="h-14 flex items-center max-w-[1440px]">
+            {/* 1. 세련된 뒤로가기 네비게이션 (Baseline 완벽 정렬) */}
+            <div className="bg-white sticky top-0 z-[40]">
+                {/* pt-6을 통해 사이드바 로고 영역과 Y축 기준선을 동일하게 맞춤 */}
+                <Container className="pt-6 pb-2 px-8 max-w-[1440px]">
                     <button 
                         onClick={() => router.back()} 
-                        className="flex items-center gap-1.5 text-[14px] font-semibold text-[#86868b] hover:text-[#1d1d1f] transition-colors group"
+                        className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-[#1d1d1f] shadow-sm transition-all group"
+                        title="서재로 돌아가기"
                     >
-                        <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-                        <span>서재로 돌아가기</span>
+                        <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
                     </button>
                 </Container>
             </div>
@@ -51,7 +52,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                 myEditions={my_editions} onRecordChange={(id) => router.push(`/library/${id}`)}
             />
 
-            {/* 3. [NEW] 스티키 가로형 탭 메뉴 */}
+            {/* 3. 스티키 가로형 탭 메뉴 */}
             <div className="sticky top-[56px] z-30 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <Container className="max-w-[1000px]">
                     <div className="flex items-center gap-8 overflow-x-auto scrollbar-hide pt-4">
@@ -74,10 +75,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
             </div>
 
             {/* 4. 메인 콘텐츠 영역 (중앙 정렬 및 넓이 최적화) */}
-            {/* min-h-[600px]를 주어 로딩 시에도 푸터가 위로 딸려 올라오지 않게 방어합니다. */}
             <Container className="py-10 max-w-[1000px] min-h-[600px]">
-                
-                {/* 조건부 렌더링(&&) 대신 className을 통한 숨김(hidden) 처리 적용 */}
                 <div className={activeTab === 'memory' ? 'block animate-in fade-in duration-300' : 'hidden'}>
                     <MemoryLayer recordId={record.id} user={user} />
                 </div>

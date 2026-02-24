@@ -3,14 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { 
     Star, Search, BookOpen, MoreVertical, 
-    Share2, Plus, Trash2, Edit, MessageSquare
+    Share2, Plus, Trash2, Edit, MessageSquare,
+    Home, ChevronRight // [NEW] Breadcrumb용 아이콘 추가
 } from 'lucide-react';
 
 import { DESIGN_TOKEN } from '@/constants/styles';
-import BookDetailForm from './BookDetailForm'; // 수정 모달 컴포넌트
+import BookDetailForm from './BookDetailForm';
 import Container from '@/components/layout/Container'; 
 import { Button } from "@/components/ui/button";
 import AddBookModal from '@/components/AddBookModal';
@@ -39,13 +41,13 @@ interface Book {
     publisher?: string;
 }
 
-const API_URL = "http://localhost:8000"; // 실제 환경변수로 교체 권장
+const API_URL = "http://localhost:8000"; 
 
 const formatCardAuthor = (authorStr: string) => {
     if (!authorStr) return "저자 미상";
 
     return authorStr
-        .replace(/\)\s*,\s*/g, ') ; ') // 역할이 다른 저자 그룹 구분
+        .replace(/\)\s*,\s*/g, ') ; ')
         .replace(/\(지은이\)/g, '지음')
         .replace(/\(저자\)/g, '지음')
         .replace(/\(글\)/g, '글')
@@ -69,20 +71,16 @@ const formatCardAuthor = (authorStr: string) => {
 export default function LibraryClient({ initialBooks, user }: { initialBooks: any[], user: any }) {
     const router = useRouter();
 
-    // 상태 관리
     const [activeTab, setActiveTab] = useState('ALL');
     const [books, setBooks] = useState<any[]>(initialBooks); 
     const [isLoading, setIsLoading] = useState(false);
     
-    // 모달 상태
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isAddBookOpen, setIsAddBookOpen] = useState(false);
     
-    // 선택된 책 (수정/삭제용)
     const [selectedBook, setSelectedBook] = useState<any>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // 탭 메뉴 정의
     const menuItems = [
         { label: '전체', code: 'ALL' },
         { label: '읽는 중', code: 'READING' },
@@ -90,7 +88,6 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
         { label: '완독', code: 'COMPLETED' },
     ];
 
-    // 필터링 로직
     const filteredBooks = books.filter(book => {
         const matchesTab = activeTab === 'ALL' || book.status === activeTab;
         const matchesSearch = book.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -98,35 +95,31 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
         return matchesTab && matchesSearch;
     });
 
-    // [핸들러] 카드 클릭 -> 상세 페이지 이동
     const handleBookClick = (book: any) => {
         if (book.library_id) {
             router.push(`/library/${book.library_id}`);
         }
     };
 
-    // [핸들러] 수정 모달 열기 (이벤트 전파 중단)
     const openEditModal = (e: React.MouseEvent, book: any) => {
-        e.stopPropagation(); // 부모(카드) 클릭 이벤트 실행 방지
+        e.stopPropagation(); 
         setSelectedBook(book);
         setIsEditModalOpen(true);
     };
 
-    // ▼▼▼ [NEW] 전체 새로고침 없이 백그라운드에서 데이터만 가져오는 함수 ▼▼▼
     const fetchLibrarySilently = async () => {
         if (!user?.email) return;
         try {
             const res = await fetch(`http://localhost:8000/api/my-library/${user.email}`);
             if (res.ok) {
                 const data = await res.json();
-                setBooks(data); // 화면 깜빡임 없이 리스트만 싹 교체됩니다.
+                setBooks(data); 
             }
         } catch (error) {
             console.error("Failed to fetch library", error);
         }
     };
 
-    // [핸들러] 책 삭제
     const handleDeleteBook = async (e: React.MouseEvent, libraryId: number) => {
         e.stopPropagation();
         if (!confirm("정말로 이 책을 서재에서 삭제하시겠습니까? 기록도 함께 삭제됩니다.")) return;
@@ -146,45 +139,61 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
     };
 
     return (
+        // [수정] 불필요한 ml-64 마진을 제거하고, 기존의 전체 꽉 찬 레이아웃으로 복구
         <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
-            {/* 1. Header & Search */}
-            <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200/50">
-                <Container className="h-16 flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-[#1d1d1f]">내 서재</h2>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                        <input 
-                            type="text" 
-                            placeholder="책 검색..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 pr-4 py-2 bg-gray-100 rounded-full text-sm w-48 focus:w-64 transition-all focus:outline-none focus:ring-2 focus:ring-blue-100"
-                        />
-                    </div>
-                </Container>
-            </header>
+            
+            {/* ▼▼▼ [해결 1] 절대 움직이지 않는 상단 고정 영역 (flex-none) ▼▼▼ */}
+            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-8 border-b border-gray-200">
+                <Container>
+                    {/* 1. 이동 경로(Breadcrumb) & 검색바 영역 */}
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2 py-2.5 text-[13px] font-bold text-gray-400">
+                            <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors">
+                                <Home size={15} />
+                                <span>홈</span>
+                            </Link>
+                            <ChevronRight size={14} className="opacity-50" />
+                            <span className="text-[#1d1d1f]">내 서재</span>
+                        </div>
 
-            {/* 2. Main Content */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
-                <Container className="py-8 pb-24">        
-                    {/* 탭 메뉴 */}
-                    <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+                        {/* 우측 검색바 */}
+                        <div className="relative">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                            <input 
+                                type="text" 
+                                placeholder="책, 저자 검색..." 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-full text-[14px] w-56 focus:w-72 transition-all duration-300 focus:outline-none focus:border-[#0066cc] focus:ring-1 focus:ring-[#0066cc] shadow-sm"
+                            />
+                        </div>
+                    </div>
+
+                    {/* 2. 상태 필터 탭 */}
+                    {/* 탭 자체의 하단 보더를 없애고, 부모 요소(flex-none)의 하단 보더에 딱 붙입니다 */}
+                    <div className="flex items-center gap-8 overflow-x-auto scrollbar-hide -mb-[1px]">
                         {menuItems.map((item) => (
                             <button
                                 key={item.code}
                                 onClick={() => setActiveTab(item.code)}
-                                className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                                className={`pb-3 text-[15px] font-bold transition-colors border-b-[3px] whitespace-nowrap ${
                                     activeTab === item.code 
-                                    ? 'bg-[#1d1d1f] text-white shadow-md' 
-                                    : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                                    ? 'text-[#0066cc] border-[#0066cc]' 
+                                    : 'text-gray-400 hover:text-[#1d1d1f] border-transparent'
                                 }`}
                             >
                                 {item.label}
                             </button>
                         ))}
                     </div>
+                </Container>
+            </div>
+            {/* ▲▲▲ 상단 고정 영역 끝 ▲▲▲ */}
 
-                    {/* 도서 그리드 */}
+            {/* ▼▼▼ [해결 2] 카드들만 스크롤되는 영역 (flex-1 + overflow-y-auto) ▼▼▼ */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide">
+                <Container className="pt-8 pb-32">
+                    {/* 3. 도서 그리드 렌더링 영역 */}
                     <div className={`transition-opacity duration-200 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
                         <main className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-10">
                             {filteredBooks.map((book, index) => (
@@ -193,21 +202,18 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                     onClick={() => handleBookClick(book)} 
                                     className="group cursor-pointer relative"
                                 >
-                                    {/* 카드 본문 */}
                                     <div className="bg-white rounded-[24px] p-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-gray-100 transition-all duration-300 group-hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] group-hover:-translate-y-1 h-full flex flex-col relative">
                                         
-                                        {/* [복구됨] 점 3개 메뉴 버튼 (Hover 시 등장) */}
+                                        {/* 점 3개 메뉴 버튼 */}
                                         <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
                                                     <Button 
                                                         variant="secondary" 
                                                         size="icon" 
-                                                        // 배경 50% 투명도(bg-white/50) 및 고급스러운 블러 효과(backdrop-blur-sm) 추가
                                                         className="h-8 w-8 rounded-full bg-white/1 backdrop-blur-sm shadow-sm hover:bg-white/70 transition-colors"
                                                         onClick={(e) => e.stopPropagation()} 
                                                     >
-                                                        {/* 점점점 색상을 빨간색(text-red-500)으로 변경 */}
                                                         <MoreVertical size={16} className="text-red-500" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -242,18 +248,15 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                             </p>
                                             <div className="mt-auto flex items-center justify-between">
                                                 <BadgeByStatus status={book.status} /> 
-                                                
-                                                <div className="flex items-center gap-2"> {/* gap 추가 */}
-                                                    {/* ✨ 리뷰 아이콘 추가: short_review가 비어있지 않을 때만 표시 */}
+                                                <div className="flex items-center gap-2">
                                                     {book.short_review && book.short_review.trim().length > 0 && (
-                                                        <div className="flex items-center text-blue-500" title="한줄평 작성됨">
+                                                        <div className="flex items-center text-[#0066cc]" title="한줄평 작성됨">
                                                             <MessageSquare size={14} fill="currentColor" className="opacity-80" />
                                                         </div>
                                                     )}
-
-                                                    <div className="flex items-center gap-1 text-yellow-500">
+                                                    <div className="flex items-center gap-1 text-[#FFCC00]">
                                                         <Star size={12} fill="currentColor" />
-                                                        <span className="text-xs font-bold pt-0.5">{book.rating || 0}</span>
+                                                        <span className="text-xs font-bold pt-0.5 text-gray-600">{book.rating || 0}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -266,9 +269,9 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
 
                     {/* Empty State */}
                     {filteredBooks.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                            <BookOpen size={48} strokeWidth={1} className="mb-4 opacity-50" />
-                            <p>해당하는 도서가 없습니다.</p>
+                        <div className="flex flex-col items-center justify-center py-32 text-gray-400">
+                            <BookOpen size={48} strokeWidth={1} className="mb-4 opacity-30" />
+                            <p className="font-medium text-[15px]">해당하는 도서가 없습니다.</p>
                         </div>
                     )}
                 </Container>
@@ -282,15 +285,14 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                 <Plus size={24} />
             </button>
 
-            {/* 모달 1: 상태 변경/수정 (BookDetailForm) */}
+            {/* 모달 영역들... */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="sm:max-w-[550px] p-6 max-h-[90vh] overflow-y-auto">
                     {selectedBook && (
                         <BookDetailForm 
                             initialData={selectedBook} 
-                            onClose={() => setIsEditModalOpen(false)} // [핵심] reload 제거
+                            onClose={() => setIsEditModalOpen(false)} 
                             onSaved={(updatedData) => {
-                                // [핵심] 낙관적 업데이트: 서버 응답 대기 없이 프론트엔드 리스트를 0.1초 만에 갱신
                                 setBooks(prev => prev.map(book => 
                                     book.library_id === (selectedBook.library_id || selectedBook.id)
                                         ? { ...book, ...updatedData } 
@@ -302,13 +304,12 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                 </DialogContent>
             </Dialog>
 
-            {/* 모달 2: 도서 추가 */}
             {isAddBookOpen && (
                 <AddBookModal 
                     isOpen={isAddBookOpen} 
                     onClose={() => {
                         setIsAddBookOpen(false);
-                        fetchLibrarySilently(); // [핵심] reload 대신 조용히 리스트 갱신
+                        fetchLibrarySilently(); 
                     }}
                     userEmail={user?.email} 
                 />

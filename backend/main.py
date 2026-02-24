@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from utils import parse_author_string
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -903,11 +903,25 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "is_current": False
         })
 
-    # [NEW] 태그 목록 조회
+    # 태그 목록 조회
     record_tags = db.query(models.Tag).join(
         models.RecordTag, models.Tag.id == models.RecordTag.tag_id
     ).filter(models.RecordTag.record_id == record.id).all()
     tag_list = [t.name for t in record_tags]
+
+    # ▼▼▼ [NEW] 전체 유저의 평균 별점 및 참여 인원수 계산 로직 ▼▼▼
+    # 해당 작품(Work)에 속한 모든 에디션의 기록 중, 평점이 0보다 큰 기록만 집계
+    rating_stats = db.query(
+        func.count(models.Record.id),
+        func.avg(models.Record.rating)
+    ).join(models.Edition).filter(
+        models.Edition.work_id == work.id,
+        models.Record.rating > 0
+    ).first()
+
+    rating_count = rating_stats[0] or 0
+    average_rating = round(rating_stats[1], 1) if rating_stats[1] else 0.0
+    # ▲▲▲ 계산 로직 끝 ▲▲▲
 
     final_description = getattr(current_edition, 'description', None) or getattr(work, 'description', "")
     
@@ -930,7 +944,11 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "author": work.author,
             "category": work.category,
             "original_title": getattr(work, 'original_title', None),
-            "description": getattr(work, 'description', "") # Work 설명도 함께 전달
+            "description": getattr(work, 'description', ""),
+            
+            # ▼▼▼ [NEW] 응답 데이터에 통계 추가 ▼▼▼
+            "average_rating": average_rating,
+            "rating_count": rating_count
         },
         "current_edition": {
             "id": current_edition.id,
@@ -939,10 +957,7 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "publisher": current_edition.publisher,
             "pubDate": current_edition.publish_date,
             "page_count": current_edition.page_count,
-            
-            # ▼▼▼ [핵심] 빵꾸난 설명을 막아주는 최종 설명 데이터 ▼▼▼
             "description": final_description, 
-            
             "binding_type": getattr(current_edition, 'binding_type', None),
             "kdc_code": getattr(current_edition, 'kdc_code', None),
             "language": getattr(current_edition, 'language', "한국어"),
@@ -1131,4 +1146,36 @@ async def get_work_short_reviews(work_id: int, db: Session = Depends(get_db)):
             "created_at": r.added_at.isoformat() if r.added_at else ""
         })
     
+    return results
+
+@app.get("/api/users/{user_email}/short-reviews")
+async def get_user_short_reviews(user_email: str, db: Session = Depends(get_db)):
+    """
+    내 서재에 남긴 '나의 한줄평' 전체 목록을 가져옵니다.
+    """
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+    # short_review가 비어있지 않은 기록만 필터링하여 최신순 정렬
+    records = db.query(models.Record).filter(
+        models.Record.user_id == user.id,
+        models.Record.short_review != None,
+        models.Record.short_review != ""
+    ).order_by(models.Record.added_at.desc()).all()
+    
+    results = []
+    for r in records:
+        edition = r.edition
+        work = edition.work
+        results.append({
+            "record_id": r.id,
+            "title": work.title,
+            "author": work.author,
+            "cover": edition.cover_image,
+            "rating": r.rating,
+            "short_review": r.short_review,
+            "is_short_review_public": r.is_short_review_public, # 공개/비공개 상태
+            "created_at": r.added_at.isoformat() if r.added_at else None
+        })
     return results

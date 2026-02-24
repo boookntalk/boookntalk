@@ -38,7 +38,7 @@ export default function Header() {
                         <div className="flex-1 pt-0.5">
                             <h3 className="text-[16px] font-bold text-[#004080] mb-1">로그인이 필요해요</h3>
                             <p className="text-[13px] text-[#475569] leading-snug mb-4">
-                                나의 서재는 회원님만의 공간입니다.<br />
+                                내 서재는 회원님만의 공간입니다.<br />
                                 3초 만에 시작하고 기록을 남겨보세요.
                             </p>
                             <div className="flex gap-2">
@@ -76,7 +76,7 @@ export default function Header() {
                             onClick={handleLibraryClick}
                             className="hidden md:block text-[15px] font-medium text-[#1d1d1f]/80 hover:text-[#0066cc] transition-colors"
                         >
-                            나의 서재
+                            내 서재
                         </button>
                     </div>
 
