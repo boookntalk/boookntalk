@@ -127,6 +127,9 @@ class Record(Base):
     user = relationship("User", back_populates="records")
     edition = relationship("Edition")
     memos = relationship("Memo", back_populates="record")
+    # ▼▼▼ 관리자 픽 스위치 추가 (기본값은 False) ▼▼▼
+    is_editor_pick = Column(Boolean, default=False, nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 # 5. 메모 (Memo) - 구 posts (문장 수집 및 생각)

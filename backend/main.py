@@ -9,6 +9,7 @@ from utils import parse_author_string
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from routers import home
 
 import models
 import httpx
@@ -135,6 +136,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.include_router(home.router)
+
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
@@ -181,7 +184,7 @@ def sync_user(user_data: UserSyncRequest, db: Session = Depends(get_db)):
         return {"status": "created", "user_id": new_user.id}
     
     # 기존 유저 업데이트
-    db_user.nickname = user_data.nickname
+    # db_user.nickname = user_data.nickname
     db_user.profile_image = user_data.profile_image
     db.commit()
     return {"status": "exists", "user_id": db_user.id}
@@ -1083,45 +1086,60 @@ async def get_user_profile(user_email: str, db: Session = Depends(get_db)):
 # [API] 2. 유저 프로필(닉네임, 한줄소개) 업데이트
 # -------------------------------------------------------------------
 @app.put("/api/users/{user_email}/profile")
-async def update_user_profile(user_email: str, profile_data: ProfileUpdateRequest, db: Session = Depends(get_db)):
+async def update_user_profile(
+    user_email: str, 
+    profile_data: ProfileUpdateRequest, 
+    db: Session = Depends(get_db)
+):
     # 1. 대상 유저 조회
     user = db.query(models.User).filter(models.User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
     
-    # 2. 닉네임 중복 검사 (내 닉네임이 아닌데, 다른 사람이 쓰고 있는 경우)
-    if profile_data.nickname != user.nickname:
+    # 2. 닉네임 중복 검사 (본인 닉네임이 아닌데 다른 사람이 쓰고 있는 경우)
+    if profile_data.nickname and profile_data.nickname != user.nickname:
         existing_user = db.query(models.User).filter(models.User.nickname == profile_data.nickname).first()
         if existing_user:
             raise HTTPException(status_code=400, detail="이미 사용 중인 닉네임입니다.")
 
     try:
-        # ▼▼▼ [핵심] 3. 닉네임이 변경되었을 경우 히스토리 테이블에 이력 기록 ▼▼▼
-        if profile_data.nickname != user.nickname:
-            history_record = models.NicknameHistory(
-                user_id=user.id,
-                old_nickname=user.nickname,  # 기존 닉네임 (최초 설정 시에는 None)
-                new_nickname=profile_data.nickname # 새 닉네임
-            )
-            db.add(history_record) # 이력을 세션에 추가
+        # 3. 닉네임 변경 이력 기록 (실제 변경이 일어났고, 기존 닉네임이 존재할 때만)
+        if profile_data.nickname and profile_data.nickname != user.nickname:
+            if user.nickname:  # 최초 등록이 아닌 '변경'인 경우만 기록
+                history_record = models.NicknameHistory(
+                    user_id=user.id,
+                    old_nickname=user.nickname,
+                    new_nickname=profile_data.nickname
+                )
+                db.add(history_record)
 
-        # 4. 유저 테이블의 닉네임 및 한 줄 소개 업데이트
-        user.nickname = profile_data.nickname
-        user.bio = profile_data.bio
+            # 유저 테이블 업데이트
+            user.nickname = profile_data.nickname
+
+        # 4. 기타 정보 업데이트 (한 줄 소개, 프로필 이미지 등)
+        if profile_data.bio is not None:
+            user.bio = profile_data.bio
         
-        # 5. DB 커밋 (유저 정보 업데이트와 히스토리 기록이 하나의 트랜잭션으로 안전하게 저장됨)
+        # 만약 프로필 이미지도 수정 가능하게 스키마에 있다면 추가
+        # if profile_data.profile_image:
+        #     user.profile_image = profile_data.profile_image
+        
         db.commit()
         db.refresh(user)
         
         return {
             "status": "success", 
             "message": "프로필이 성공적으로 업데이트되었습니다.",
-            "nickname": user.nickname,
-            "bio": user.bio
+            "data": {
+                "nickname": user.nickname,
+                "bio": user.bio,
+                "profile_image": user.profile_image
+            }
         }
-    except IntegrityError:
+    except Exception as e: # IntegrityError를 포함한 포괄적 예외 처리
         db.rollback()
-        raise HTTPException(status_code=400, detail="프로필 업데이트 중 데이터베이스 오류가 발생했습니다.")
+        print(f"Profile Update Error: {e}") # 디버깅용 로그
+        raise HTTPException(status_code=500, detail="서버 내부 오류로 프로필을 업데이트하지 못했습니다.")
 
 # [추가] 특정 책(Work)의 공개된 한줄평 목록 가져오기 API
 @app.get("/api/works/{work_id}/short-reviews")
@@ -1179,3 +1197,27 @@ async def get_user_short_reviews(user_email: str, db: Session = Depends(get_db))
             "created_at": r.added_at.isoformat() if r.added_at else None
         })
     return results
+
+@app.post("/api/feeds/{feed_id}/like")
+async def toggle_feed_like(feed_id: str, data: dict, db: Session = Depends(get_db)):
+    user_email = data.get("user_email")
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # feed_id 분석 (예: memo_123, review_456)
+    try:
+        prefix, target_id = feed_id.split("_")
+        target_id = int(target_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid feed ID format")
+
+    # [기획] 상용 서비스에서는 소셜 활동 전용 테이블(LikeLog 등)을 사용하는 것이 데이터 분석에 유리함
+    # 여기서는 유저의 행동이 정상적으로 접수되었음을 알리는 메시지를 반환합니다.
+    
+    return {
+        "status": "success", 
+        "feed_id": feed_id,
+        "is_liked": True, # 실제 로직은 DB Toggle 결과에 따라 반환
+        "message": f"User {user.nickname} liked {prefix} {target_id}"
+    }

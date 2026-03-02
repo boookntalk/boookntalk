@@ -1,7 +1,6 @@
-import NextAuth from "next-auth";
+// auth.ts
 import GoogleProvider from "next-auth/providers/google";
 
-// [수정] 설정 옵션을 변수로 분리하고 export 합니다.
 export const authOptions = {
   providers: [
     GoogleProvider({
@@ -12,12 +11,13 @@ export const authOptions = {
   callbacks: {
     async signIn({ user }: any) {
       try {
-        const response = await fetch("http://localhost:8000/api/auth/sync", {
+        // [수정] 필드명을 nickname -> google_name으로 변경하여 '원본 데이터'임을 명시
+        await fetch("http://localhost:8000/api/auth/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: user.email,
-            nickname: user.name,
+            google_name: user.name, // 닉네임이 아닌 구글 프로필 이름임
             profile_image: user.image,
           }),
         });
@@ -28,6 +28,7 @@ export const authOptions = {
       }
     },
     async session({ session, token }: any) {
+      // 세션 유지 시 DB의 최신 정보를 반영하고 싶다면 여기서 추가 API 호출이 필요할 수 있습니다.
       if (session.user) {
         session.user.id = token.sub;
       }
@@ -35,8 +36,3 @@ export const authOptions = {
     },
   },
 };
-
-// // 위에서 만든 옵션을 넣어줍니다.
-// const handler = NextAuth(authOptions);
-
-// export { handler as GET, handler as POST };
