@@ -9,7 +9,7 @@ from utils import parse_author_string
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from routers import home
+from routers import home, memos
 
 import models
 import httpx
@@ -137,6 +137,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.include_router(home.router)
+app.include_router(memos.router)
 
 # CORS 설정
 app.add_middleware(

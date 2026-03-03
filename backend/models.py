@@ -147,9 +147,7 @@ class Memo(Base):
     
     # [추가] 상세 메모 및 발췌문 공개/비공개 토글 플래그
     is_public = Column(Boolean, default=True) 
-    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
     user = relationship("User", back_populates="memos")
     record = relationship("Record", back_populates="memos")
 
