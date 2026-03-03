@@ -520,10 +520,10 @@ export default function Home() {
                 </Container>
             </section>
 
-            {/* ▼ Section 2: 실시간 사색의 파편들 (수정됨) ▼ */}
+            {/* ▼ Section 2: 실시간 사색의 파편들 (Grid Layout - 정사각형 1:1 메시지 카드형) ▼ */}
             <section className="w-full mt-[var(--spacing-1cm,48px)]">
-                {/* 1. 너비 일치: 전체를 Container로 감싸 위/아래 컨텐츠와 폭을 맞춥니다. */}
                 <Container> 
+                    {/* 1. 섹션 헤더 (제목 및 더보기 버튼) - 위치 고정 */}
                     <div className="mb-6 flex justify-between items-end">
                         <div>
                             <h2 className="text-[22px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
@@ -539,91 +539,103 @@ export default function Home() {
                         </button>
                     </div>
 
+                    {/* 2. 컨텐츠 영역 */}
                     {isLoading ? (
                         <div className="flex justify-center items-center py-12">
                             <Loader2 className="animate-spin text-[#0066cc]" size={32} />
                         </div>
                     ) : (
-                        // 2. 너비 일치: 가로 스크롤 영역이 Container 너비를 벗어나지 않도록 설정
-                        <div className="w-full overflow-x-auto scrollbar-hide pb-6 snap-x snap-mandatory">
-                            <div className="flex gap-6 w-full">
-                                {ugcFeeds.map((feed) => (
-                                    <div 
-                                        key={feed.id} 
-                                        onClick={() => handleSentenceClick(feed)}
-                                        // 3. 디자인: relative와 overflow-hidden으로 배경 블러 레이어를 가둡니다.
-                                        className="snap-start w-[280px] md:w-[320px] rounded-[24px] p-7 border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col justify-between shrink-0 h-[220px] relative overflow-hidden group"
-                                    >
-                                        {/* ▼▼▼ [핵심] 카드 배경 블러 레이어 ▼▼▼ */}
-                                        <div className="absolute inset-0 z-0 opacity-20 transition-opacity duration-500 group-hover:opacity-30">
-                                            {feed.cover ? (
+                        // [Grid 적용] PC 6열 / 태블릿 3열 / 모바일 2열
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 w-full">
+                            {ugcFeeds.map((feed) => (
+                                <div 
+                                    key={feed.id} 
+                                    onClick={() => handleSentenceClick(feed)}
+                                    // [수정] aspect-square (1:1 정사각형 비율) 적용
+                                    className="w-full aspect-square rounded-[20px] p-5 border border-gray-200/60 shadow-[0_4px_12px_rgba(0,0,0,0.04)] hover:shadow-xl hover:-translate-y-1 transition-all duration-500 cursor-pointer flex flex-col justify-between relative overflow-hidden group bg-white"
+                                >
+                                    {/* 배경 이미지 레이어 */}
+                                    <div className="absolute inset-0 z-0 bg-gray-50">
+                                        {feed.cover ? (
+                                            <>
                                                 <Image 
                                                     src={feed.cover} 
-                                                    alt="blur background"
+                                                    alt="Background Cover"
                                                     fill
-                                                    className="object-cover scale-150 blur-[40px]" 
+                                                    className="object-cover transition-transform duration-700 group-hover:scale-110 blur-[2px]" 
                                                     unoptimized 
                                                 />
-                                            ) : (
-                                                <div className="w-full h-full bg-gray-100" />
-                                            )}
-                                            {/* 가독성을 위해 흰색 오버레이를 배경 위에 살짝 덮음 */}
-                                            <div className="absolute inset-0 bg-white/60" /> 
-                                        </div>
-                                        {/* ▲▲▲ [핵심] 끝 ▲▲▲ */}
+                                                {/* 텍스트 가독성을 위해 배경을 조금 더 하얗게 덮음 (85%) */}
+                                                <div className="absolute inset-0 bg-white/85 backdrop-blur-[1px] transition-colors duration-500 group-hover:bg-white/70" />
+                                            </>
+                                        ) : (
+                                            <div className="w-full h-full bg-[#f5f5f7]" />
+                                        )}
+                                    </div>
 
-                                        {/* 컨텐츠 레이어: z-10을 주어 배경 위로 올림 */}
-                                        <div className="relative z-10">
+                                    {/* 텍스트 및 정보 레이어 (z-10으로 배경 위로 올림) */}
+                                    <div className="relative z-10 flex flex-col h-full justify-between">
+                                        <div>
+                                            {/* 아이콘 */}
                                             {feed.type === 'sentence' ? (
-                                                <Quote size={20} className="text-[#0066cc]/30 mb-3" />
+                                                <Quote size={14} className="text-[#0066cc] mb-2 opacity-90" />
                                             ) : (
-                                                <div className="flex text-[#FFCC00] mb-3">
+                                                <div className="flex text-[#FFCC00] mb-2">
                                                     {[...Array(Math.floor(feed.rating || 5))].map((_, i) => (
-                                                        <Star key={i} size={14} fill="currentColor" />
+                                                        <Star key={i} size={11} fill="currentColor" />
                                                     ))}
                                                 </div>
                                             )}
-                                            <p className={`text-[15px] leading-relaxed break-keep line-clamp-4 ${
-                                                feed.type === 'sentence' ? 'font-serif font-bold text-[#1d1d1f]' : 'font-medium text-gray-700'
+                                            
+                                            {/* [수정] 3줄 말줄임 (line-clamp-3) & 폰트 크기 최적화 */}
+                                            <p className={`text-[13px] md:text-[14px] leading-[1.5] break-keep tracking-tight line-clamp-3 ${
+                                                feed.type === 'sentence' 
+                                                ? 'font-serif font-bold text-[#1d1d1f] drop-shadow-sm' 
+                                                : 'font-medium text-gray-800'
                                             }`}>
                                                 {feed.text}
                                             </p>
                                         </div>
 
-                                        {/* 하단 영역: 상단 경계선과 정보 노출 */}
-                                        <div className="mt-4 pt-4 border-t border-gray-100/50 relative z-10">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="font-bold text-gray-500 text-[12px] truncate pr-2">{feed.book}</span>
-                                                <span className="text-gray-400 text-[11px] shrink-0">by {feed.user}</span>
+                                        {/* 하단 정보 (책 제목, 저자, 공감 버튼) */}
+                                        <div className="mt-1 pt-2 border-t border-black/10">
+                                            <div className="flex flex-col gap-0.5 mb-1.5">
+                                                <span className="font-extrabold text-[#1d1d1f] text-[11px] md:text-[12px] line-clamp-1">
+                                                    {feed.book}
+                                                </span>
+                                                <span className="text-gray-500 text-[10px] md:text-[11px]">
+                                                    by {feed.user}
+                                                </span>
                                             </div>
                                             
-                                            {/* 공감(좋아요) 버튼 */}
-                                            <div className="flex justify-end items-center mt-2.5">
+                                            <div className="flex justify-end">
                                                 <button 
                                                     onClick={(e) => handleLikeClick(e, feed.id)}
-                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-300 ${
+                                                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full transition-all duration-300 border shadow-sm ${
                                                         likedFeeds[feed.id] 
-                                                        ? 'bg-rose-50 text-rose-500 shadow-sm' 
-                                                        : 'bg-white/80 hover:bg-white text-gray-400 border border-gray-100'
+                                                        ? 'bg-rose-50 border-rose-100 text-rose-500' 
+                                                        : 'bg-white/60 border-white/40 text-gray-400 hover:bg-white hover:text-[#0066cc]'
                                                     }`}
                                                 >
                                                     <Star 
-                                                        size={14} 
+                                                        size={10} 
                                                         fill={likedFeeds[feed.id] ? "currentColor" : "none"} 
                                                         className={likedFeeds[feed.id] ? 'animate-in zoom-in duration-300' : ''}
                                                     />
-                                                    <span className="text-[11px] font-extrabold uppercase tracking-tighter">공감</span>
+                                                    <span className="text-[10px] font-bold">공감</span>
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
-                                ))}
-                                {ugcFeeds.length === 0 && (
-                                    <div className="text-gray-400 w-full text-center py-10 font-medium h-[220px] flex items-center justify-center bg-white rounded-xl border border-dashed border-gray-200">
-                                        아직 공개된 사색의 조각이 없습니다.
-                                    </div>
-                                )}
-                            </div>
+                                </div>
+                            ))}
+
+                            {/* 데이터 없음 처리 */}
+                            {ugcFeeds.length === 0 && (
+                                <div className="col-span-full text-gray-400 w-full text-center py-10 font-medium h-[200px] flex items-center justify-center bg-white rounded-xl border border-dashed border-gray-200">
+                                    아직 공개된 사색의 조각이 없습니다.
+                                </div>
+                            )}
                         </div>
                     )}
                 </Container>
