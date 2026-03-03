@@ -1,3 +1,4 @@
+//src/components/book-detail/BookTopInfo.tsx
 'use client';
 
 import React from 'react';
