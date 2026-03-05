@@ -6,16 +6,15 @@ import Container from '@/components/layout/Container';
 import BookTopInfo from './BookTopInfo';
 import RecordFragments from './MemoryLayer'; 
 import ShortReviewSection from './ShortReviewSection'; 
-import LongReviewSection from '@/components/library/LongReviewSection'; // 서평 컴포넌트
+import LongReviewSection from '@/components/library/LongReviewSection';
 import MemoWriteModal from './MemoWriteModal'; 
-import { ArrowLeft, Quote, PenTool, Plus } from 'lucide-react';
+import { ArrowLeft, Quote, PenTool, MessageSquare, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function BookDetailClient({ initialData, user }: { initialData: any, user: any }) {
     const router = useRouter();
     const { record, work, current_edition, my_editions } = initialData;
 
-    // [수정] 탭 상태 타입에서 'meta' 제거
     const [activeTab, setActiveTab] = useState<'fragments' | 'short-reviews' | 'long-review'>('fragments');
     const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,20 +23,10 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
     const [memoCount, setMemoCount] = useState<number>(0);
     const [reviewCount, setReviewCount] = useState<number>(0);
 
-    // [수정] 탭 메뉴 구성 (이름 변경 및 상세정보 삭제)
     const tabs = [
-        { 
-            id: 'fragments', 
-            label: `독서 노트 ${memoCount > 0 ? `(${memoCount})` : ''}` 
-        },
-        { 
-            id: 'short-reviews', 
-            label: `한줄평 ${reviewCount > 0 ? `(${reviewCount})` : ''}` 
-        },
-        { 
-            id: 'long-review', 
-            label: '서평' // Long Review -> 서평
-        }
+        { id: 'fragments', label: `독서 노트 ${memoCount > 0 ? `(${memoCount})` : ''}` },
+        { id: 'short-reviews', label: `한줄평 ${reviewCount > 0 ? `(${reviewCount})` : ''}` },
+        { id: 'long-review', label: '서평' }
     ] as const;
 
     const handleSaveMemo = async (data: any) => {
@@ -63,6 +52,16 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
             } else { toast.error('저장 실패'); }
         } catch (error) { toast.error('서버 오류'); } 
         finally { setIsSubmitting(false); }
+    };
+
+    const handleFabClick = () => {
+        if (activeTab === 'fragments') {
+            setIsWriteModalOpen(true);
+        } else if (activeTab === 'short-reviews') {
+            toast.info("한줄평 작성 창을 띄웁니다! (개발 연결 필요)"); 
+        } else if (activeTab === 'long-review') {
+            toast.info("서평 작성 화면으로 이동합니다! (개발 연결 필요)"); 
+        }
     };
 
     return (
@@ -100,7 +99,6 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
 
             <Container className="max-w-[1200px] min-h-[600px] pb-10 mt-8">
                 
-                {/* [Tab 1] 독서 노트 (구 기록 조각) */}
                 <div className={activeTab === 'fragments' ? 'block animate-in fade-in duration-300' : 'hidden'}>
                     {record ? (
                         <RecordFragments 
@@ -118,7 +116,6 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                     )}
                 </div>
 
-                {/* [Tab 2] 한줄평 (구 독자 한줄평) */}
                 <div className={activeTab === 'short-reviews' ? 'block animate-in fade-in duration-300' : 'hidden'}>
                     <ShortReviewSection 
                         editionId={current_edition.id} 
@@ -126,18 +123,22 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                     />
                 </div>
                 
-                {/* [Tab 3] 서평 (구 장문 리뷰) */}
                 <div className={activeTab === 'long-review' ? 'block animate-in fade-in duration-300' : 'hidden'}>
                     <LongReviewSection />
                 </div>
-                
-                {/* [Deleted] 상세 정보 탭 삭제됨 */}
 
             </Container>
 
-            <button onClick={() => setIsWriteModalOpen(true)} className="fixed bottom-8 right-6 md:right-12 w-14 h-14 bg-[#1d1d1f] hover:bg-black text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-105 z-40">
-                <PenTool size={24} />
+            {/* ▼▼▼ [수정] 업로드하신 노란색 포인트가 적용된 카멜레온 FAB ▼▼▼ */}
+            <button 
+                onClick={handleFabClick} 
+                className="fixed bottom-8 right-6 md:right-12 w-14 h-14 bg-[#FFEA00] hover:bg-[#F2D100] text-[#1d1d1f] rounded-full shadow-[0_8px_16px_rgba(255,234,0,0.25)] flex items-center justify-center transition-all duration-300 hover:scale-105 hover:-translate-y-1 z-40"
+            >
+                {activeTab === 'fragments' && <PenTool size={24} className="animate-in zoom-in duration-200" />}
+                {activeTab === 'short-reviews' && <MessageSquare size={24} className="animate-in zoom-in duration-200" />}
+                {activeTab === 'long-review' && <BookOpen size={24} className="animate-in zoom-in duration-200" />}
             </button>
+            
             <MemoWriteModal isOpen={isWriteModalOpen} onClose={() => setIsWriteModalOpen(false)} bookTitle={work?.title || ""} onSubmit={handleSaveMemo} isSubmitting={isSubmitting} />
         </div>
     );

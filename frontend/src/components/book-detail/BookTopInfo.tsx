@@ -157,7 +157,7 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
                                 {displayDesc}
                             </p>
                             {displayDesc.length > 80 && (
-                                <div className="absolute left-0 top-full mt-2 w-[calc(100%+20px)] max-w-[500px] p-5 bg-[#1d1d1f] text-white text-[14px] leading-relaxed rounded-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] shadow-2xl whitespace-pre-wrap">
+                                <div className="absolute left-0 top-full mt-2 w-[600px] md:w-[750px] max-w-[calc(100vw-3rem)] p-5 bg-[#1d1d1f] text-white text-[14px] leading-relaxed rounded-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] shadow-2xl whitespace-pre-wrap">
                                     {displayDesc}
                                 </div>
                             )}
