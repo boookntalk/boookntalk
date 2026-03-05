@@ -30,9 +30,7 @@ export default function MemoWriteModal({ isOpen, onClose, bookTitle, onSubmit, i
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            {/* [Layout] 모달 컨테이너: 책(Book)과 같은 단단한 사각형 
-               rounded-[4px] 적용 
-            */}
+            {/* [Layout] 모달 컨테이너: 책(Book)과 같은 단단한 사각형 (rounded-[4px]) */}
             <div className="w-full md:w-[500px] bg-white md:rounded-[4px] rounded-t-[4px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] md:max-h-[85vh] animate-in slide-in-from-bottom-10 duration-300 border border-gray-200">
                 
                 {/* 1. 헤더 */}
@@ -62,7 +60,6 @@ export default function MemoWriteModal({ isOpen, onClose, bookTitle, onSubmit, i
                                 value={page}
                                 onChange={(e) => setPage(e.target.value)}
                                 placeholder="0"
-                                // [수정] w-[70px]로 3자리 넉넉하게 / rounded-md (입력박스는 라운드)
                                 className="w-[70px] h-[30px] px-2 bg-white border border-gray-300 rounded-md text-[13px] font-medium text-right focus:border-black focus:ring-1 focus:ring-black/10 outline-none transition-all placeholder:text-gray-300"
                             />
                         </div>
@@ -70,11 +67,11 @@ export default function MemoWriteModal({ isOpen, onClose, bookTitle, onSubmit, i
                         {/* 구분선 */}
                         <div className="w-px h-3 bg-gray-300"></div>
 
-                        {/* 공개 설정 (아이콘 + 텍스트) */}
+                        {/* 공개 설정 (배경 제거됨) */}
                         <button 
                             onClick={() => setIsPublic(!isPublic)}
-                            // [수정] w-[90px]로 너비 확보 / rounded-md (버튼은 라운드)
-                            className="flex items-center justify-end gap-1.5 group outline-none w-[90px] h-[30px] rounded-md transition-colors hover:bg-gray-50 px-1" 
+                            // [수정] hover:bg-gray-50 제거하여 배경색 변화 없앰
+                            className="flex items-center justify-end gap-1.5 group outline-none w-[90px] h-[30px] rounded-md px-1" 
                             title={isPublic ? "전체 공개" : "나만 보기"}
                         >
                             {isPublic ? (
@@ -96,7 +93,6 @@ export default function MemoWriteModal({ isOpen, onClose, bookTitle, onSubmit, i
                         <label className="text-[13px] font-bold text-[#1d1d1f] flex items-center gap-1.5">
                             <Quote size={14} className="text-[#1d1d1f]" /> 문장 수집
                         </label>
-                        {/* [수정] rounded-md 적용 (부드러운 입력창) */}
                         <textarea 
                             value={sentence}
                             onChange={(e) => setSentence(e.target.value)}
@@ -110,7 +106,6 @@ export default function MemoWriteModal({ isOpen, onClose, bookTitle, onSubmit, i
                         <label className="text-[13px] font-bold text-[#1d1d1f] flex items-center gap-1.5">
                             <BookOpen size={14} className="text-[#1d1d1f]" /> 나의 생각
                         </label>
-                        {/* [수정] rounded-md 적용 (부드러운 입력창) */}
                         <textarea 
                             value={thought}
                             onChange={(e) => setThought(e.target.value)}
@@ -123,7 +118,6 @@ export default function MemoWriteModal({ isOpen, onClose, bookTitle, onSubmit, i
 
                 {/* 3. 하단 액션 버튼 */}
                 <div className="p-4 border-t border-gray-100 bg-white sticky bottom-0 z-10 flex gap-3">
-                    {/* [수정] rounded-md 적용 (버튼도 입력창과 같은 라운드) */}
                     <button 
                         onClick={onClose}
                         className="flex-1 h-[52px] bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-md font-bold text-[14px] transition-colors"

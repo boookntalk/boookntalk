@@ -205,9 +205,10 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
             /* 검색 결과가 있을 때 */
             <div className="border border-gray-200 rounded-2xl p-4 flex gap-5 bg-white shadow-sm hover:shadow-md transition-shadow">
               <div className="relative w-28 h-40 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-100 shadow-inner">
-                {searchResult.cover ? (
+                {/* searchResult.cover를 searchResult.cover_image로 변경 (또는 백엔드 응답 필드 확인) */}
+                {(searchResult.cover || searchResult.cover_image) ? (
                   <Image
-                    src={searchResult.cover}
+                    src={searchResult.cover || searchResult.cover_image} // 둘 다 대응하도록 수정
                     alt={searchResult.title}
                     fill
                     className="object-cover"

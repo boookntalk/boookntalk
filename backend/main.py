@@ -1,15 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from database import engine, Base, get_db
+from database import engine, Base, get_db, SessionLocal
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-from utils import parse_author_string
+from utils import parse_author_string, download_and_update_cover
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from routers import home, memos
+from routers import home, memos, editions, library
 
 import models
 import httpx
@@ -20,6 +21,7 @@ import sys
 import time
 import random
 from dotenv import load_dotenv
+from sqlalchemy.orm import joinedload
 
 # ==========================================
 # [핵심] 경로 문제 해결 코드 (이걸로 교체하세요!)
@@ -138,6 +140,8 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(home.router)
 app.include_router(memos.router)
+app.include_router(editions.router)
+app.include_router(library.router)
 
 # CORS 설정
 app.add_middleware(
@@ -147,6 +151,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 1. 이미지를 저장할 폴더가 없으면 자동으로 생성
+UPLOAD_DIR = "static/covers"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+
+# 2. 정적 파일 마운트 (이 코드가 있어야 http://localhost:8000/static/... 접근 가능)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # -------------------------------------------------------------------
 # [4] 기본 및 인증 API (Auth Endpoints)
@@ -260,6 +272,8 @@ async def search_books_by_keyword(
         "items": results
     }
     
+# main.py 내부의 search_external_books 함수 교체
+
 @app.get("/api/books/search/{isbn}")
 async def search_external_books(isbn: str, extra: Optional[str] = None, db: Session = Depends(get_db)):
     """
@@ -275,11 +289,11 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
         (models.Edition.isbn == clean_isbn) | (models.Edition.isbn10 == clean_isbn)
     ).first()
 
-    if existing_edition:
+    # 🚨 [핵심 수정] DB에 책이 존재하고, '커버 이미지'도 온전히 있을 때만 캐시를 반환합니다.
+    if existing_edition and existing_edition.cover_image:
         work = existing_edition.work
-        print(f"⚡ DB 캐시 적중: {work.title}") # 서버 터미널 확인용 로그
+        print(f"⚡ DB 캐시 적중 (완벽한 데이터): {work.title}") 
         
-        # ▼▼▼ [추가 1] 최초 발견자 닉네임 찾기 ▼▼▼
         discoverer_name = "익명의 여행자"
         if getattr(existing_edition, 'creator', None):
             discoverer_name = existing_edition.creator.nickname or existing_edition.creator.email.split('@')[0]
@@ -290,14 +304,12 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             "publisher": existing_edition.publisher,
             "pubDate": existing_edition.publish_date.strftime("%Y%m%d") if existing_edition.publish_date else "",
             "categoryName": existing_edition.kdc_code or work.category or "미분류",
-            "cover": existing_edition.cover_image or "",
+            "cover": existing_edition.cover_image, # 온전한 이미지
+            # ... (나머지 리턴 항목들은 기존과 동일하게 유지) ...
             "description": existing_edition.description or work.description or "",
             "pageCount": existing_edition.page_count or 0,
-            "previewLink": "",
             "isbn": existing_edition.isbn,
             "isbn10": existing_edition.isbn10 or "",
-            "detailed_authors": [],
-            "originalTitle": work.original_title or "",
             "price": existing_edition.price or 0,
             "binding_type": existing_edition.binding_type or "알 수 없음",
             "size_mm": existing_edition.size_mm or "",
@@ -305,106 +317,100 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             "kdc_code": existing_edition.kdc_code or "",
             "first_discoverer": discoverer_name
         }
+    elif existing_edition and not existing_edition.cover_image:
+        # DB에 책은 있지만 커버가 없는 경우
+        print(f"⚠️ DB 캐시 적중했으나 커버 이미지 누락! 외부 API로 보완합니다: {existing_edition.work.title}")
+        # 여기서 return 하지 않고 넘어가면, 아래에 있는 네이버/국립중앙도서관 API 호출 로직이 실행됩니다!
     
-    if not NLK_API_KEY:
-        print("Warning: NLK_API_KEY is missing. Core metadata might fail.")
-    if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
-        print("Warning: Naver API Keys missing. Cover images and descriptions will not be loaded.")
-    
+    # --- 외부 API 호출 준비 ---
     async with httpx.AsyncClient() as client:
-        # 1. 국립중앙도서관 서지정보 API (JSON 포맷 지정)
+        # 1. 국립중앙도서관 서지정보 API
         nlk_url = f"https://www.nl.go.kr/seoji/SearchApi.do?cert_key={NLK_API_KEY}&result_style=json&page_no=1&page_size=10&isbn={isbn}"
         
-        # 2. 네이버 도서 검색 API (상세 검색)
+        # 2. 네이버 도서 검색 API
         naver_url = f"https://openapi.naver.com/v1/search/book_adv.json?d_isbn={isbn}"
         naver_headers = {
             "X-Naver-Client-Id": NAVER_CLIENT_ID or "",
             "X-Naver-Client-Secret": NAVER_CLIENT_SECRET or ""
         }
 
-        try:
-            # 병렬 호출로 검색 속도 최적화
-            responses = await asyncio.gather(
-                client.get(nlk_url, timeout=5.0),
-                client.get(naver_url, headers=naver_headers, timeout=5.0),
-                return_exceptions=True
-            )
-        except Exception:
-            raise HTTPException(status_code=503, detail="외부 도서 서비스 연결 실패")
-        
-        # 응답 데이터 안전 파싱
-        nlk_res = responses[0] if not isinstance(responses[0], Exception) else None
-        naver_res = responses[1] if not isinstance(responses[1], Exception) else None
+        # 병렬 호출
+        nlk_res, naver_res = await asyncio.gather(
+            client.get(nlk_url, timeout=5.0),
+            client.get(naver_url, headers=naver_headers, timeout=5.0),
+            return_exceptions=True
+        )
+        # 🚨 [디버깅 로그 추가] 네이버 API 상태 집중 확인 🚨
+        print(f"--- 🔍 ISBN({isbn}) 검색 로그 ---")
 
-        nlk_data = nlk_res.json() if nlk_res and nlk_res.status_code == 200 else {}
-        naver_data = naver_res.json() if naver_res and naver_res.status_code == 200 else {}
+        naver_data = {}
+        if isinstance(naver_res, Exception):
+            print(f"❌ 네이버 API 통신 장애: {naver_res}")
+        else:
+            print(f"🌐 네이버 API 상태 코드: {naver_res.status_code}")
+            if naver_res.status_code == 200:
+                naver_data = naver_res.json()
+                print("✅ 네이버 도서 검색 성공 (데이터 수신됨)")
+            else:
+                print(f"❌ 네이버 API 에러 발생: {naver_res.text}") # 👈 여기서 원인이 밝혀집니다!
 
+        nlk_data = {}
+        if not isinstance(nlk_res, Exception) and nlk_res.status_code == 200:
+            nlk_data = nlk_res.json()
+
+        # 데이터 추출
         nlk_item = nlk_data.get('docs', [{}])[0] if nlk_data.get('docs') else {}
         naver_items = naver_data.get('items', [])
         naver_item = naver_items[0] if naver_items else {}
 
-        # =========================================================
-        # [핵심 로직] 데이터 병합 (1순위: NLK, 2순위: 네이버)
-        # =========================================================
-        
         # 제목 확인 (검색 실패 여부 판단)
         title = nlk_item.get('TITLE') or naver_item.get('title')
         if not title:
+            # 둘 다 없으면 404
             raise HTTPException(status_code=404, detail="도서 정보를 찾을 수 없습니다.")
 
-        # ISBN 정제 (NLK 우선)
-        nlk_isbn = nlk_item.get('EA_ISBN') or ""
-        naver_isbn = naver_item.get('isbn') or ""
-        final_main_isbn = nlk_isbn if len(nlk_isbn) == 13 else (naver_isbn if len(naver_isbn) == 13 else isbn)
-
-        # 핵심 서지정보 (NLK 공공데이터 우선)
+        # [핵심 수정] 이미지 주소 찾기 (네이버 > 국립중앙도서관 순서로 확인)
+        cover = ""
+        # 1순위: 네이버 이미지 (화질이 더 좋을 확률 높음)
+        if naver_item.get('image'):
+            cover = naver_item.get('image')
+        # 2순위: 국립중앙도서관 이미지 (필드명이 다양할 수 있음)
+        elif nlk_item.get('IMAGE_URL'):
+             cover = nlk_item.get('IMAGE_URL')
+        elif nlk_item.get('TITLE_URL'): # 가끔 여기에 이미지가 있기도 함
+             cover = nlk_item.get('TITLE_URL')
+        
+        print(f"🖼️ 최종 추출된 커버 이미지 URL: '{cover}'\n--------------------------")
+        
+        # 나머지 데이터 매핑
         author = nlk_item.get('AUTHOR') or naver_item.get('author') or "저자 미상"
         publisher = nlk_item.get('PUBLISHER') or naver_item.get('publisher') or "출판사 미상"
         pubDate = nlk_item.get('PUBLISH_PREDATE') or naver_item.get('pubdate') or ""
-        kdc_code = nlk_item.get('KDC') or ""
-
-        # 리치 미디어 (네이버 API 전담)
-        cover = naver_item.get('image') or ""
-        description = naver_item.get('description') or ""
-
-        # 물리적 속성 (NLK 데이터 파싱)
+        
+        # 페이지 수 파싱
         page_raw = nlk_item.get('PAGE') or ""
         page_count = 0
         if page_raw:
             import re
             nums = re.findall(r'\d+', str(page_raw))
-            page_count = int(nums[0]) if nums else 0
-
-        price_raw = nlk_item.get('PRC') or naver_item.get('discount') or 0
-        price = 0
-        if price_raw:
-            import re
-            nums = re.findall(r'\d+', str(price_raw))
-            price = int(nums[0]) if nums else 0
-
-        form_data = nlk_item.get('FORM') or ""
-        binding_type = "양장본" if "양장" in form_data else ("전자책" if "전자" in form_data else "반양장본")
-        size_mm = form_data if "cm" in form_data or "mm" in form_data else None
+            if nums: page_count = int(nums[0])
 
         return {
             "title": title,
             "author": author,
             "publisher": publisher,
             "pubDate": pubDate,
-            "categoryName": kdc_code, 
-            "cover": cover,
-            "description": description,
+            "categoryName": nlk_item.get('KDC') or "", 
+            "cover": cover, # 👈 여기가 가장 중요합니다!
+            "description": naver_item.get('description') or "",
             "pageCount": page_count,
-            "previewLink": naver_item.get('link') or "",
-            "isbn": final_main_isbn,
-            "isbn10": "", 
+            "isbn": isbn,
             "detailed_authors": [], 
             "originalTitle": "", 
-            "price": price,
-            "binding_type": binding_type,
-            "size_mm": size_mm,
+            "binding_type": "기타",
+            "size_mm": "",
             "language": "한국어",
-            "kdc_code": kdc_code,
+            "kdc_code": nlk_item.get('KDC') or "",
             "first_discoverer": None
         }
 
@@ -454,7 +460,7 @@ async def get_book_public_detail(isbn: str, db: Session = Depends(get_db)):
 # -------------------------------------------------------------------
 
 @app.post("/api/books")
-async def register_book(request: RegisterBookRequest, db: Session = Depends(get_db)):
+async def register_book(request: RegisterBookRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # 1. 사용자 조회
     user = db.query(models.User).filter(models.User.email == request.user_email).first()
     if not user:
@@ -666,6 +672,17 @@ async def register_book(request: RegisterBookRequest, db: Session = Depends(get_
     db.add(new_record)
     db.commit()
 
+    # ▼▼▼ [핵심 2] 백그라운드 이미지 다운로드 지시 ▼▼▼
+    # 외부 URL(http)이고, 아직 로컬 주소(localhost)가 아닐 때만 실행
+    if request.cover and request.cover.startswith("http") and "localhost" not in request.cover:
+        print(f"🚀 [Background] 이미지 다운로드 대기열 등록: Edition ID {edition.id}")
+        background_tasks.add_task(
+            download_and_update_cover, 
+            edition.id,         # 저장된 판본 ID
+            request.cover,      # 네이버/도서관 이미지 URL
+            SessionLocal        # 백그라운드용 독립 DB 세션 팩토리
+        )
+
     return {
         "status": "success", 
         "message": "도서가 서재에 등록되었습니다.",
@@ -772,64 +789,61 @@ async def update_library_entry(library_id: int, update_data: LibraryUpdate, db: 
 @app.get("/api/users/{user_email}/records")
 async def read_user_records(
     user_email: str, 
-    status: str = "ALL",  # 기본값은 전체
+    status: str = "ALL", 
     db: Session = Depends(get_db)
 ):
-    
-    # ▼▼▼ [감시 코드 추가] 서버 터미널에서 확인하세요! ▼▼▼
     print(f"\n[API 호출] 이메일: {user_email}, 요청된 상태: {status}")
-    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
  
     # 1. 사용자 찾기
     user = db.query(models.User).filter(models.User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 2. 기본 쿼리 생성 (이 사용자의 기록만 가져오기)
-    query = db.query(models.Record).filter(models.Record.user_id == user.id)
+    # 2. 쟁반(joinedload)에 책(Edition)과 작품(Work) 정보를 한 번에 담아서 가져오라고 지시!
+    query = db.query(models.Record).options(
+        joinedload(models.Record.edition).joinedload(models.Edition.work)
+    ).filter(models.Record.user_id == user.id)
 
-    # 3. 상태(status)에 따른 필터링 로직 분기
     if status == "ALL":
-        print(">> 필터링: 전체 보기 (ALL)") # 로그 추가
         pass
     elif status == "REVIEW":
-        print(">> 필터링: 리뷰 있는 책만") # 로그 추가
         query = query.filter(models.Record.short_review != None, models.Record.short_review != "")
     else:
-        # [나머지 탭] READING, COMPLETED, STOPPED 등
-        # 클라이언트에서 보낸 status 값과 DB의 status 컬럼이 정확히 일치하는 것만
-        print(f">> 필터링: 상태값 ({status}) 검색") # 로그 추가
         query = query.filter(models.Record.status == status)
 
+    # DB에 딱 한 번만 가서 모든 데이터를 싹 가져옵니다!
     records = query.order_by(models.Record.added_at.desc()).all()
-    print(f">> 검색된 책 개수: {len(records)}권\n") # 로그 추가
+    
+    # [태그 최적화] 태그도 책 하나하나마다 묻지 않고, 이 사용자의 모든 태그를 한 번에 가져와서 나눕니다.
+    record_ids = [r.id for r in records]
+    all_tags = []
+    if record_ids:
+        all_tags = db.query(models.RecordTag.record_id, models.Tag.name)\
+            .join(models.Tag, models.RecordTag.tag_id == models.Tag.id)\
+            .filter(models.RecordTag.record_id.in_(record_ids)).all()
+            
+    # 책 번호(record_id)를 키값으로 태그를 예쁘게 정리해 둡니다.
+    tags_by_record = {}
+    for record_id, tag_name in all_tags:
+        if record_id not in tags_by_record:
+            tags_by_record[record_id] = []
+        tags_by_record[record_id].append(tag_name)
 
-    # 4. 최신순(등록순) 정렬 후 DB에서 실행 (.all())
-    records = query.order_by(models.Record.added_at.desc()).all()
-    
-    # ---------------------------------------------------------
-    # [5. 데이터 가공 단계]
-    # DB 객체(Record)를 프론트엔드가 쓰기 편한 JSON(Dictionary) 형태로 변환
-    # ---------------------------------------------------------
+    # 3. 프론트엔드로 보낼 데이터 조립 (이제 DB를 찌르지 않습니다)
     response_data = []
-    
     for record in records:
-        # 만약 연결된 책 정보(edition)가 없으면 건너뜀 (데이터 무결성 보호)
         if not record.edition:
             continue
             
-        # Work(작품) 정보 안전하게 가져오기 (없으면 기본값)
         work_title = record.edition.work.title if record.edition.work else "제목 없음"
         work_author = record.edition.work.author if record.edition.work else "작가 미상"
+        
+        # 미리 찾아둔 태그 바구니에서 쏙 빼옵니다.
+        tag_list = tags_by_record.get(record.id, [])
 
-        # ▼ [NEW] 연결된 태그 조회
-        record_tags = db.query(models.Tag).join(models.RecordTag).filter(models.RecordTag.record_id == record.id).all()
-        tag_list = [t.name for t in record_tags]
-
-        # 프론트엔드로 보낼 최종 데이터 조립
         book_info = {
-            "library_id": record.id,       # 내 서재에서의 고유 ID (삭제/수정 시 필요)
-            "id": record.edition.id,       # 책(판본)의 ID
+            "library_id": record.id,
+            "id": record.edition.id,
             "title": work_title,
             "author": work_author,
             "cover": record.edition.cover_image,
@@ -837,23 +851,16 @@ async def read_user_records(
             "rating": record.rating,
             "short_review": record.short_review,
             "added_at": record.added_at,
-            
-            # ▼▼▼ [핵심] ISBN 정보 포함 (이제 화면에 나옵니다!) ▼▼▼
-            "isbn": record.edition.isbn,      # ISBN 13
-            "isbn10": record.edition.isbn10,   # ISBN 10
-
-            # ▼▼▼ [NEW] 모달에 다시 띄워주기 위한 확장 데이터 반환 ▼▼▼
+            "isbn": record.edition.isbn,
+            "isbn10": record.edition.isbn10,
             "start_date": record.start_date.isoformat() if record.start_date else None,
             "finish_date": record.finish_date.isoformat() if record.finish_date else None,
             "current_page": record.current_page,
             "reading_format": record.reading_format,
-            "tags": tag_list,
-            
-            # ▼▼▼ [NEW] 총 페이지 수 응답 추가 ▼▼▼
+            "tags": tag_list,  # 👈 최적화된 태그 적용
             "page_count": record.edition.page_count,
             "is_short_review_public": record.is_short_review_public
         }
-        
         response_data.append(book_info)
 
     return response_data
@@ -1221,4 +1228,41 @@ async def toggle_feed_like(feed_id: str, data: dict, db: Session = Depends(get_d
         "feed_id": feed_id,
         "is_liked": True, # 실제 로직은 DB Toggle 결과에 따라 반환
         "message": f"User {user.nickname} liked {prefix} {target_id}"
+    }
+
+# main.py 파일 맨 아래쪽에 추가해 주세요.
+
+@app.get("/api/admin/sync-covers")
+async def sync_existing_covers(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    [관리자 전용] 기존에 등록된 도서 중 외부 URL(네이버 등)을 
+    사용하고 있는 도서를 찾아 로컬로 일괄 다운로드합니다.
+    """
+    # 1. DB에서 로컬 주소(localhost)가 아닌 외부 http 주소를 가진 책들만 골라냅니다.
+    editions_to_update = db.query(models.Edition).filter(
+        models.Edition.cover_image.isnot(None),
+        models.Edition.cover_image.like("http%"),
+        ~models.Edition.cover_image.like("%localhost%"),       # 우리 서버 주소 제외
+        ~models.Edition.cover_image.like("%/static/covers/%")  # 이미 다운로드된 주소 제외
+    ).all()
+
+    count = 0
+    # 2. 찾아낸 책들을 하나씩 백그라운드 다운로드 대기열에 넣습니다.
+    for edition in editions_to_update:
+        background_tasks.add_task(
+            download_and_update_cover,
+            edition.id,
+            edition.cover_image,
+            SessionLocal
+        )
+        count += 1
+
+    # 3. 작업 지시 완료 메시지 반환
+    return {
+        "status": "success",
+        "message": f"총 {count}권의 도서 커버 이미지를 찾아 다운로드를 시작했습니다!",
+        "target_editions": [ed.id for ed in editions_to_update]
     }
