@@ -231,10 +231,18 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                             </DropdownMenu>
                                         </div>
 
-                                        {/* 책 표지 */}
+                                        {/* 책 표지 (수정됨: 성능 극대화) */}
                                         <div className="relative aspect-[1/1.4] rounded-lg mb-4 w-[70%] mx-auto shadow-[0_4px_10px_rgba(0,0,0,0.1)] transition-all duration-300 group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.15)] group-hover:-translate-y-1">
                                             {book.cover ? (
-                                                <Image src={book.cover} alt={book.title} fill className="object-cover rounded-lg" unoptimized />
+                                                <Image 
+                                                    src={book.cover} 
+                                                    alt={book.title} 
+                                                    fill 
+                                                    sizes="(max-width: 768px) 30vw, (max-width: 1200px) 20vw, 15vw" // [추가] 브라우저 크기에 맞는 작은 사이즈만 받아오기
+                                                    className="object-cover rounded-lg" 
+                                                    // [삭제] unoptimized 속성을 지워서 Next.js의 압축 마법을 켭니다!
+                                                    priority={index < 5} // [추가] 화면 상단의 5개만 먼저 빠르게 부르고 나머지는 나중에(Lazy) 부르기
+                                                />
                                             ) : ( 
                                                 <div className="w-full h-full bg-gray-100 flex items-center justify-center text-xs text-gray-400 rounded-lg">No Cover</div> 
                                             )}

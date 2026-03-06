@@ -2,6 +2,13 @@
 const nextConfig = {
   images: {
     remotePatterns: [
+      // ▼▼▼ [추가] 우리 백엔드 서버(로컬) 이미지 허용 통행증 ▼▼▼
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '8000',
+        pathname: '/**', // 8000번 포트에서 오는 모든 경로의 이미지 허용
+      },
       // [1] 공유해주신 URL에 해당하는 도메인 (필수!)
       {
         protocol: 'https',
