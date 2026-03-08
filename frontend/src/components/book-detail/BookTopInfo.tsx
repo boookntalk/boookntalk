@@ -1,7 +1,6 @@
-//src/components/book-detail/BookTopInfo.tsx
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // ▼ useState, useEffect 추가
 import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,6 +22,13 @@ const getSafeDateString = (dateString: string) => {
 };
 
 export default function BookTopInfo({ record, edition, work, myEditions = [], onRecordChange }: BookTopInfoProps) {
+    // ▼ [NEW] Hydration 에러 방지를 위한 마운트 상태 관리
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
     let pubYear = '';
     if (edition?.pubDate) {
         try {
@@ -80,7 +86,8 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
                             <h1 className="text-[28px] md:text-[32px] font-extrabold text-[#1d1d1f] leading-tight tracking-tight break-keep">
                                 {work?.title}
                             </h1>
-                            {myEditions.length > 0 && (
+                            {/* ▼ [NEW] isMounted 조건 추가: 브라우저에 마운트된 후에만 Select 컴포넌트 렌더링 */}
+                            {isMounted && myEditions.length > 0 && (
                                 <div className="flex items-center bg-gray-50 rounded-lg pr-1 shadow-sm border border-gray-100 flex-shrink-0 mt-1">
                                     <div className="pl-3 pr-2 py-1.5 flex items-center gap-1.5 border-r border-gray-200/60">
                                         <Layers size={14} className="text-gray-400" />

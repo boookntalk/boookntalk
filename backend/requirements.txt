@@ -1,3 +1,4 @@
+# 기존 유지 패키지
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
@@ -12,3 +13,9 @@ starlette==0.49.3
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.39.0
+
+# [추가] DB 및 환경 설정 (BoooknTalk 필수 패키지)
+sqlalchemy==2.0.38
+psycopg2-binary==2.9.10
+pydantic-settings==2.8.0
+python-dotenv==1.0.1

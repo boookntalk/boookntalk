@@ -174,3 +174,23 @@ class NicknameHistory(Base):
 
     # User 모델과 양방향 조회를 위한 관계 설정 (선택 사항이지만 관리자 페이지 만들 때 매우 유용합니다)
     user = relationship("User", backref="nickname_histories")
+    
+# 7. 긴줄평 (Long Review) - 독립된 테이블
+class LongReview(Base):
+    __tablename__ = "long_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    record_id = Column(Integer, ForeignKey("user_library.id", ondelete="CASCADE"), nullable=False, unique=True) # 1:1 관계를 위해 unique=True
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"), nullable=True) # 작품 단위 조회를 위한 컬럼
+
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    is_draft = Column(Boolean, default=True) # 임시저장 여부
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # 관계 설정
+    user = relationship("User")
+    record = relationship("Record", backref="long_review")

@@ -40,17 +40,16 @@ export function LibrarySidebar() {
     const pathname = usePathname();
 
     const isActiveRoute = (href: string) => {
+        if (!href) return false;
         if (href === '/' && pathname !== '/') return false;
         return pathname.startsWith(href);
     };
 
     return (
-        // top-14(글로벌 헤더 높이)에서 시작, 로고 헤더 없음
         <Sidebar 
             className="!fixed top-14 left-0 h-[calc(100vh-3.5rem)] border-r border-gray-100 bg-white z-40 shadow-sm" 
             collapsible="none"
         >
-            {/* [핵심] pt-8을 주어 메인 컨텐츠 영역과 Y축 시작점을 완벽히 일치시킴 */}
             <SidebarContent className="px-4 pb-2 pt-8">
                 <SidebarGroup>
                     <SidebarMenu className="gap-1.5">
@@ -59,7 +58,6 @@ export function LibrarySidebar() {
                                 const isGroupActive = item.subItems.some(sub => isActiveRoute(sub.href));
                                 return (
                                     <SidebarMenuItem key={index}>
-                                        {/* py-2.5 내부 여백을 통해 텍스트 베이스라인 확보 */}
                                         <SidebarMenuButton 
                                             className={`w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold transition-colors rounded-xl ${isGroupActive ? 'text-[#0066cc]' : 'text-[#1d1d1f] hover:bg-gray-50'}`}
                                         >
@@ -71,18 +69,17 @@ export function LibrarySidebar() {
                                                  const isSubActive = isActiveRoute(subItem.href);
                                                  return (
                                                     <SidebarMenuSubItem key={subIndex}>
-                                                        <Link href={subItem.href} passHref legacyBehavior>
-                                                            <SidebarMenuSubButton
-                                                                asChild
-                                                                isActive={isSubActive}
-                                                                className="text-[14px] font-medium h-auto py-2 data-[active=true]:text-[#0066cc] data-[active=true]:font-bold data-[active=true]:bg-blue-50/50 rounded-lg"
-                                                            >
-                                                                <a className="flex items-center gap-3">
-                                                                    <subItem.icon className={`h-[18px] w-[18px] ${isSubActive ? 'text-[#0066cc]' : 'text-gray-400 opacity-80'}`} />
-                                                                    <span>{subItem.title}</span>
-                                                                </a>
-                                                            </SidebarMenuSubButton>
-                                                        </Link>
+                                                        {/* [수정 1] passHref, legacyBehavior 제거 및 asChild 내부에 Link 배치 */}
+                                                        <SidebarMenuSubButton
+                                                            asChild
+                                                            isActive={isSubActive}
+                                                            className="text-[14px] font-medium h-auto py-2 data-[active=true]:text-[#0066cc] data-[active=true]:font-bold data-[active=true]:bg-blue-50/50 rounded-lg"
+                                                        >
+                                                            <Link href={subItem.href} className="flex items-center gap-3">
+                                                                <subItem.icon className={`h-[18px] w-[18px] ${isSubActive ? 'text-[#0066cc]' : 'text-gray-400 opacity-80'}`} />
+                                                                <span>{subItem.title}</span>
+                                                            </Link>
+                                                        </SidebarMenuSubButton>
                                                     </SidebarMenuSubItem>
                                                 );
                                             })}
@@ -91,21 +88,21 @@ export function LibrarySidebar() {
                                 );
                             }
 
-                            const isSingleActive = isActiveRoute(item.href);
+                            const isSingleActive = isActiveRoute(item.href || '');
                             return (
                                 <SidebarMenuItem key={index}>
-                                    <Link href={item.href} passHref legacyBehavior>
-                                        <SidebarMenuButton 
-                                            asChild
-                                            isActive={isSingleActive}
-                                            className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold text-[#1d1d1f] bg-transparent hover:bg-gray-50 transition-colors rounded-xl data-[active=true]:text-[#0066cc] data-[active=true]:bg-blue-50"
-                                        >
-                                            <a className="flex items-center gap-3">
-                                                <item.icon className={`h-5 w-5 ${isSingleActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
-                                                <span>{item.title}</span>
-                                            </a>
-                                        </SidebarMenuButton>
-                                    </Link>
+                                    {/* [수정 2] SidebarMenuButton을 최상위 부모로 두고 asChild 속성 활용 */}
+                                    <SidebarMenuButton 
+                                        asChild
+                                        isActive={isSingleActive}
+                                        className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold text-[#1d1d1f] bg-transparent hover:bg-gray-50 transition-colors rounded-xl data-[active=true]:text-[#0066cc] data-[active=true]:bg-blue-50"
+                                    >
+                                        {/* Link가 a 태그 역할을 수행하므로 불필요한 a 태그를 삭제했습니다. */}
+                                        <Link href={item.href || '#'}>
+                                            <item.icon className={`h-5 w-5 ${isSingleActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
+                                            <span>{item.title}</span>
+                                        </Link>
+                                    </SidebarMenuButton>
                                 </SidebarMenuItem>
                             );
                         })}

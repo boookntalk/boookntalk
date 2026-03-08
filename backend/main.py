@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+#backend/main.py
+
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -11,6 +13,8 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from routers import home, memos, editions, library
+from dotenv import load_dotenv
+from sqlalchemy.orm import joinedload
 
 import models
 import httpx
@@ -20,8 +24,7 @@ import os
 import sys
 import time
 import random
-from dotenv import load_dotenv
-from sqlalchemy.orm import joinedload
+import shutil
 
 # ==========================================
 # [핵심] 경로 문제 해결 코드 (이걸로 교체하세요!)
@@ -122,6 +125,11 @@ class MemoUpdate(BaseModel):
     sentence: Optional[str] = None
     thought: Optional[str] = None
     is_public: Optional[bool] = None
+
+class LongReviewRequest(BaseModel):
+    long_review_title: str
+    long_review_content: str
+    is_long_review_draft: bool
 
 # -------------------------------------------------------------------
 # [3] 앱 수명주기 및 미들웨어 (Lifespan & Middleware)
@@ -1266,3 +1274,212 @@ async def sync_existing_covers(
         "message": f"총 {count}권의 도서 커버 이미지를 찾아 다운로드를 시작했습니다!",
         "target_editions": [ed.id for ed in editions_to_update]
     }
+
+# -------------------------------------------------------------------
+# [NEW] 긴줄평 (Long Review) API (조회, 저장/수정, 삭제)
+# -------------------------------------------------------------------
+
+@app.get("/api/records/{record_id}/long-review")
+async def get_long_review(record_id: int, db: Session = Depends(get_db)):
+    """특정 독서 기록(Record)에 작성된 긴줄평 조회"""
+    review = db.query(models.LongReview).filter(models.LongReview.record_id == record_id).first()
+    if not review:
+        return {} # 작성된 긴줄평이 없으면 빈 객체 반환
+    
+    return {
+        "long_review_title": review.title,
+        "long_review_content": review.content,
+        "is_long_review_draft": review.is_draft
+    }
+
+@app.put("/api/records/{record_id}/long-review")
+async def upsert_long_review(record_id: int, req: LongReviewRequest, db: Session = Depends(get_db)):
+    """긴줄평 저장 및 수정 (Upsert)"""
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="독서 기록을 찾을 수 없습니다.")
+
+    review = db.query(models.LongReview).filter(models.LongReview.record_id == record_id).first()
+    
+    # Edition을 통해 Work ID 가져오기 (작품 단위 조회를 위함)
+    edition = db.query(models.Edition).filter(models.Edition.id == record.edition_id).first()
+    work_id = edition.work_id if edition else None
+
+    if review:
+        # 기존 긴줄평 업데이트
+        review.title = req.long_review_title
+        review.content = req.long_review_content
+        review.is_draft = req.is_long_review_draft
+    else:
+        # 새 긴줄평 생성
+        new_review = models.LongReview(
+            user_id=record.user_id,
+            record_id=record_id,
+            work_id=work_id,
+            title=req.long_review_title,
+            content=req.long_review_content,
+            is_draft=req.is_long_review_draft
+        )
+        db.add(new_review)
+    
+    db.commit()
+    return {"message": "긴줄평이 성공적으로 저장되었습니다."}
+
+@app.delete("/api/records/{record_id}/long-review")
+async def delete_long_review(record_id: int, db: Session = Depends(get_db)):
+    """긴줄평 삭제"""
+    review = db.query(models.LongReview).filter(models.LongReview.record_id == record_id).first()
+    if review:
+        db.delete(review)
+        db.commit()
+        return {"message": "긴줄평이 삭제되었습니다."}
+    raise HTTPException(status_code=404, detail="삭제할 긴줄평이 없습니다.")
+
+# 1. 긴줄평 이미지를 저장할 폴더 생성 (Static Files 설정 아래쪽에 추가 권장)
+REVIEW_UPLOAD_DIR = "static/uploads/reviews"
+if not os.path.exists(REVIEW_UPLOAD_DIR):
+    os.makedirs(REVIEW_UPLOAD_DIR)
+
+# -------------------------------------------------------------------
+# [NEW] 긴줄평 내 삽입용 이미지 업로드 API
+# -------------------------------------------------------------------
+@app.post("/api/records/{record_id}/long-review/images")
+async def upload_review_image(record_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    긴줄평 작성 중 이미지를 삽입할 때 호출되는 업로드 API입니다.
+    이미지를 고유한 이름으로 저장하고, 접근 가능한 URL을 반환합니다.
+    """
+    # 1. 기록 존재 여부 가볍게 확인
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+
+    # 2. 파일 확장자 검증 (이미지 파일만 허용)
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
+        raise HTTPException(status_code=400, detail="허용되지 않는 파일 형식입니다.")
+
+    # 3. 고유한 파일명 생성 (UUID 사용)
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(REVIEW_UPLOAD_DIR, unique_filename)
+
+    # 4. 파일 저장
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"파일 저장 중 오류 발생: {str(e)}")
+
+    # 5. 접근 가능한 URL 반환
+    # 예: http://localhost:8000/static/uploads/reviews/unique_id.jpg
+    image_url = f"http://localhost:8000/{REVIEW_UPLOAD_DIR}/{unique_filename}"
+    
+    return {"url": image_url}
+
+# ===================================================================
+# [NEW] 긴줄평 (Long Review) API (조회, 저장/수정, 삭제, 이미지 업로드)
+# ===================================================================
+
+# 1. 긴줄평 이미지를 저장할 로컬 폴더 생성
+REVIEW_UPLOAD_DIR = "static/uploads/reviews"
+if not os.path.exists(REVIEW_UPLOAD_DIR):
+    os.makedirs(REVIEW_UPLOAD_DIR)
+
+# 2. 데이터 스키마 (파일 상단의 Pydantic 모델 정의 근처에 두어도 됩니다)
+class LongReviewRequest(BaseModel):
+    long_review_title: str
+    long_review_content: str
+    is_long_review_draft: bool
+
+# 3. [GET] 긴줄평 조회
+@app.get("/api/records/{record_id}/long-review")
+async def get_long_review(record_id: int, db: Session = Depends(get_db)):
+    """특정 독서 기록(Record)에 작성된 긴줄평 조회"""
+    review = db.query(models.LongReview).filter(models.LongReview.record_id == record_id).first()
+    if not review:
+        return {} # 작성된 긴줄평이 없으면 빈 객체 반환
+    
+    return {
+        "long_review_title": review.title,
+        "long_review_content": review.content,
+        "is_long_review_draft": review.is_draft,
+        "created_at": review.created_at.isoformat() if review.created_at else None
+    }
+
+# 4. [PUT] 긴줄평 작성 및 수정 (Upsert)
+@app.put("/api/records/{record_id}/long-review")
+async def upsert_long_review(record_id: int, req: LongReviewRequest, db: Session = Depends(get_db)):
+    """긴줄평 저장 및 수정"""
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="독서 기록을 찾을 수 없습니다.")
+
+    review = db.query(models.LongReview).filter(models.LongReview.record_id == record_id).first()
+    
+    # Edition을 통해 Work ID 가져오기 (작품 단위 조회를 위함)
+    edition = db.query(models.Edition).filter(models.Edition.id == record.edition_id).first()
+    work_id = edition.work_id if edition else None
+
+    if review:
+        # 기존 긴줄평 업데이트
+        review.title = req.long_review_title
+        review.content = req.long_review_content
+        review.is_draft = req.is_long_review_draft
+    else:
+        # 새 긴줄평 생성
+        new_review = models.LongReview(
+            user_id=record.user_id,
+            record_id=record_id,
+            work_id=work_id,
+            title=req.long_review_title,
+            content=req.long_review_content,
+            is_draft=req.is_long_review_draft
+        )
+        db.add(new_review)
+    
+    try:
+        db.commit()
+        return {"message": "긴줄평이 성공적으로 저장되었습니다."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="저장 중 오류가 발생했습니다.")
+
+# 5. [DELETE] 긴줄평 삭제 (방금 404 에러가 났던 원인)
+@app.delete("/api/records/{record_id}/long-review")
+async def delete_long_review(record_id: int, db: Session = Depends(get_db)):
+    """긴줄평 삭제 API"""
+    review = db.query(models.LongReview).filter(models.LongReview.record_id == record_id).first()
+    if review:
+        db.delete(review)
+        db.commit()
+        return {"message": "긴줄평이 성공적으로 삭제되었습니다."}
+    raise HTTPException(status_code=404, detail="삭제할 긴줄평을 찾을 수 없습니다.")
+
+# 6. [POST] 긴줄평 에디터 내 이미지 업로드 API
+@app.post("/api/records/{record_id}/long-review/images")
+async def upload_review_image(record_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    긴줄평 작성 중 이미지를 삽입할 때 호출됩니다.
+    이미지를 고유한 이름으로 로컬에 저장하고 URL을 반환합니다.
+    """
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
+        raise HTTPException(status_code=400, detail="이미지 파일만 업로드할 수 있습니다.")
+
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(REVIEW_UPLOAD_DIR, unique_filename)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="파일 저장 중 오류가 발생했습니다.")
+
+    # 프론트엔드 에디터에 반환할 이미지 주소
+    image_url = f"http://localhost:8000/{REVIEW_UPLOAD_DIR}/{unique_filename}"
+    
+    return {"url": image_url}
