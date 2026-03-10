@@ -115,9 +115,9 @@ export default function Header() {
                         {session ? (
                             <div className="flex items-center gap-1 pl-2 ml-1">
                                 <button 
-                                    onClick={() => setIsProfileModalOpen(true)}
+                                    onClick={() => router.push('/mypage')} // ▼ 모달을 띄우는 대신 마이페이지로 이동시킵니다.
                                     className="w-8 h-8 rounded-full border border-gray-200 shadow-sm overflow-hidden hover:ring-2 hover:ring-[#0066cc]/50 transition-all cursor-pointer mr-1"
-                                    title="프로필 설정"
+                                    title="나의 독서 통계 및 프로필"
                                 >
                                     {session.user?.image ? (
                                         <img src={session.user.image} className="w-full h-full object-cover" alt="profile" />

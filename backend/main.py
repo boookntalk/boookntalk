@@ -126,6 +126,11 @@ class MemoUpdate(BaseModel):
     thought: Optional[str] = None
     is_public: Optional[bool] = None
 
+class ShortReviewRequest(BaseModel):
+    edition_id: int
+    user_email: str
+    short_review: str
+
 class LongReviewRequest(BaseModel):
     long_review_title: str
     long_review_content: str
@@ -1483,3 +1488,135 @@ async def upload_review_image(record_id: int, file: UploadFile = File(...), db: 
     image_url = f"http://localhost:8000/{REVIEW_UPLOAD_DIR}/{unique_filename}"
     
     return {"url": image_url}
+
+@app.post("/api/short-reviews")
+async def create_short_review(review_data: ShortReviewRequest, db: Session = Depends(get_db)):
+    """한줄평 새롭게 작성"""
+    user = db.query(models.User).filter(models.User.email == review_data.user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    record = db.query(models.Record).filter(
+        models.Record.user_id == user.id,
+        models.Record.edition_id == review_data.edition_id
+    ).first()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="내 서재에 없는 책입니다.")
+
+    # Record 테이블의 short_review 컬럼 업데이트
+    record.short_review = review_data.short_review
+    
+    # [디테일] 상태가 아직 '읽고 싶음(WISH)'이라면 한줄평 작성 시 '완독(FINISHED)'으로 자동 변경
+    if record.status == "WISH":
+        record.status = "FINISHED"
+
+    db.commit()
+    db.refresh(record)
+    return {"status": "success", "message": "한줄평이 등록되었습니다.", "record_id": record.id}
+
+@app.put("/api/short-reviews/{record_id}")
+async def update_short_review(record_id: int, review_data: ShortReviewRequest, db: Session = Depends(get_db)):
+    """기존 한줄평 수정"""
+    user = db.query(models.User).filter(models.User.email == review_data.user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+
+    if not record or record.user_id != user.id:
+        raise HTTPException(status_code=404, detail="수정할 한줄평을 찾을 수 없거나 권한이 없습니다.")
+
+    record.short_review = review_data.short_review
+    db.commit()
+    return {"status": "success", "message": "한줄평이 수정되었습니다."}
+
+@app.delete("/api/short-reviews/{record_id}")
+async def delete_short_review(record_id: int, db: Session = Depends(get_db)):
+    """한줄평 삭제 (Record 자체를 지우는게 아니라 내용만 NULL 처리)"""
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="삭제할 기록을 찾을 수 없습니다.")
+
+    record.short_review = None
+    db.commit()
+    return {"status": "success", "message": "한줄평이 삭제되었습니다."}
+
+# ===================================================================
+# [NEW] 마이페이지 (통계 대시보드) API
+# ===================================================================
+
+@app.get("/api/mypage/stats/{user_email}")
+async def get_mypage_stats(user_email: str, db: Session = Depends(get_db)):
+    """
+    유저의 프로필, 요약 통계, 월별 독서량 추이, 선호 장르, 태그 등을 한 번에 반환합니다.
+    """
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    # 1. 프로필 정보
+    profile = {
+        "nickname": user.nickname or user.email.split('@')[0],
+        "bio": user.bio or "아직 작성된 한 줄 소개가 없습니다.",
+        "profile_image": user.profile_image or ""
+    }
+
+    # 2. 독서 기록 전체 가져오기 (Work, Edition 조인)
+    records = db.query(models.Record).options(
+        joinedload(models.Record.edition).joinedload(models.Edition.work)
+    ).filter(models.Record.user_id == user.id).all()
+
+    # 요약 통계 계산
+    finished_books = [r for r in records if r.status == 'FINISHED']
+    reading_books = [r for r in records if r.status == 'READING']
+    
+    rated_books = [r for r in records if r.rating is not None and r.rating > 0]
+    avg_rating = sum(r.rating for r in rated_books) / len(rated_books) if rated_books else 0.0
+    
+    total_pages = sum(r.current_page for r in records if r.current_page)
+
+    # 3. 올해 월별 독서량 추이 (완독 기준)
+    current_year = datetime.now().year
+    monthly_trend = {month: 0 for month in range(1, 13)}
+    
+    for r in finished_books:
+        if r.finish_date and r.finish_date.year == current_year:
+            monthly_trend[r.finish_date.month] += 1
+            
+    trend_data = [{"month": f"{m}월", "count": monthly_trend[m]} for m in range(1, 13)]
+
+    # 4. 장르(카테고리) 취향 분석
+    genre_counts = {}
+    for r in records:
+        if r.edition and r.edition.work and r.edition.work.category:
+            cat = r.edition.work.category.split('>')[0].strip() # 대분류만 추출 (예: 국내도서 > 소설 -> 국내도서)
+            genre_counts[cat] = genre_counts.get(cat, 0) + 1
+            
+    top_genres = [{"genre": k, "count": v} for k, v in sorted(genre_counts.items(), key=lambda item: item[1], reverse=True)[:5]]
+
+    # 5. 최다 사용 태그 (Word Cloud용)
+    user_record_ids = [r.id for r in records]
+    tag_counts = {}
+    if user_record_ids:
+        record_tags = db.query(models.Tag.name).join(
+            models.RecordTag, models.RecordTag.tag_id == models.Tag.id
+        ).filter(models.RecordTag.record_id.in_(user_record_ids)).all()
+        
+        for (tag_name,) in record_tags:
+            tag_counts[tag_name] = tag_counts.get(tag_name, 0) + 1
+            
+    top_tags = [{"text": k, "count": v} for k, v in sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)[:10]]
+
+    return {
+        "profile": profile,
+        "summary": {
+            "total_finished": len(finished_books),
+            "total_reading": len(reading_books),
+            "avg_rating": round(avg_rating, 1),
+            "total_pages": total_pages
+        },
+        "trend_data": trend_data,
+        "top_genres": top_genres,
+        "top_tags": top_tags
+    }

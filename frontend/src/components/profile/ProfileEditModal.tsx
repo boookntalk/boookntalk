@@ -24,7 +24,7 @@ export default function ProfileEditModal({ isOpen, onClose, session }: ProfileEd
             const fetchProfile = async () => {
                 setIsLoading(true);
                 try {
-                    const res = await fetch(`http://127.0.0.1:8000/api/users/${session.user.email}/profile`);
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/users/${session.user.email}/profile`)
                     if (!res.ok) throw new Error('프로필 정보를 불러오지 못했습니다.');
                     const data = await res.json();
                     setNickname(data.nickname || '');
@@ -136,7 +136,7 @@ export default function ProfileEditModal({ isOpen, onClose, session }: ProfileEd
 
                             {/* 한 줄 소개 */}
                             <div className="mb-2">
-                                <label className="block text-[13px] font-bold text-[#1d1d1f] mb-2 flex items-center gap-1.5">
+                                <label className="text-[13px] font-bold text-[#1d1d1f] mb-2 flex items-center gap-1.5">
                                     <Quote size={12} className="text-gray-400" /> 한 줄 소개
                                 </label>
                                 <textarea 
