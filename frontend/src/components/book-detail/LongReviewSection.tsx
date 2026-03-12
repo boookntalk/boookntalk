@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { PenTool, Eye, Trash2, Loader2 } from 'lucide-react';
+import { PenTool, Eye, Trash2, Loader2, Globe, Lock, AlertTriangle } from 'lucide-react'; // ▼ [NEW] 필요한 아이콘 추가 임포트
 import { toast } from 'sonner';
+import { Checkbox } from "@/components/ui/checkbox"; // ▼ [NEW] 체크박스 컴포넌트 임포트
 
 // [핵심 1] Tiptap 대신 SunEditor CSS 로드
 import 'suneditor/dist/css/suneditor.min.css';
@@ -53,14 +54,18 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
     const [title, setTitle] = useState('');
     const [content, setContent] = useState(''); 
     
-    // [핵심 3] 취소를 눌렀을 때 되돌아갈 '원본 스냅샷' 데이터 상태 보관
+    // 원본 스냅샷 데이터 상태 보관
     const [originalTitle, setOriginalTitle] = useState('');
     const [originalContent, setOriginalContent] = useState('');
 
     const [isEditing, setIsEditing] = useState(false); 
-    const [isDraft, setIsDraft] = useState(true); 
     const [hasReview, setHasReview] = useState(false); 
     const [isLoading, setIsLoading] = useState(false);
+
+    // ▼▼▼ [NEW] 공개/비공개 및 스포일러 상태 관리 ▼▼▼
+    // DB의 is_draft(임시저장)와 반대 개념으로 isPublic(공개) 사용
+    const [isPublic, setIsPublic] = useState(false); 
+    const [isSpoiler, setIsSpoiler] = useState(false);
 
     const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,11 +82,13 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                         setTitle(data.long_review_title || '');
                         setContent(data.long_review_content || '');
                         
-                        // DB에서 불러온 진짜 원본 데이터를 백업
                         setOriginalTitle(data.long_review_title || '');
                         setOriginalContent(data.long_review_content || '');
                         
-                        setIsDraft(data.is_long_review_draft);
+                        // ▼▼▼ DB 데이터를 상태에 매핑 ▼▼▼
+                        setIsPublic(!data.is_long_review_draft); // draft가 아니면 공개
+                        setIsSpoiler(data.is_spoiler || false);
+
                         setHasReview(true);
                         setIsEditing(false);
                     } else {
@@ -101,7 +108,7 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
         }
     }, [isEditing]);
 
-    // --- [핵심 4] SunEditor 전용 이미지 드래그 앤 드롭 업로드 가로채기 ---
+    // --- [이미지 업로드 로직] ---
     const handleImageUploadBefore = (files: any[], info: object, uploadHandler: Function) => {
         const file = files[0];
         if (!file || !recordId) {
@@ -118,12 +125,7 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
         })
         .then(res => res.json())
         .then(data => {
-            // 성공 시 백엔드에서 받은 URL을 에디터 본문에 삽입
-            const response = {
-                result: [
-                    { url: data.url, name: file.name, size: file.size }
-                ]
-            };
+            const response = { result: [ { url: data.url, name: file.name, size: file.size } ] };
             uploadHandler(response);
         })
         .catch(err => {
@@ -131,13 +133,17 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
             uploadHandler();
         });
 
-        return undefined; // 비동기 처리를 위해 필수로 반환해야 함
+        return undefined;
     };
 
     // --- [저장 로직] ---
-    const handleSave = async (saveAsDraft: boolean) => {
+    const handleSave = async () => {
         if (!user || !recordId) return;
         setIsLoading(true);
+        
+        // isPublic이 true면 draft는 false(발행)
+        const isDraft = !isPublic; 
+
         try {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/records/${recordId}/long-review`, {
                 method: 'PUT', 
@@ -145,18 +151,18 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                 body: JSON.stringify({
                     long_review_title: title,
                     long_review_content: content,
-                    is_long_review_draft: saveAsDraft 
+                    is_long_review_draft: isDraft, 
+                    is_spoiler: isSpoiler // ▼▼▼ [NEW] 백엔드로 스포일러 상태 전송
                 })
             });
             if (res.ok) {
-                toast.success(saveAsDraft ? '임시저장 완료' : '긴줄평 발행 완료!');
-                // 저장이 완료되면 원본 스냅샷 데이터도 방금 저장한 내용으로 갱신
+                toast.success(isDraft ? '긴줄평이 비공개(임시저장) 되었습니다.' : '긴줄평이 광장에 발행되었습니다!');
+                
                 setOriginalTitle(title);
                 setOriginalContent(content);
                 
-                setIsDraft(saveAsDraft);
                 setHasReview(true);
-                if (!saveAsDraft) setIsEditing(false);
+                setIsEditing(false); // 저장 후 읽기 모드로 전환
             }
         } finally { setIsLoading(false); }
     };
@@ -176,7 +182,8 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                 setOriginalTitle('');
                 setOriginalContent('');
                 setHasReview(false);
-                setIsDraft(true);
+                setIsPublic(false);
+                setIsSpoiler(false);
                 setIsEditing(true);
             }
         } catch (error) {
@@ -186,7 +193,7 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
         }
     };
 
-    // --- [핵심 5] 취소 버튼 로직 (원본으로 롤백) ---
+    // --- [취소 버튼 로직] ---
     const handleCancel = () => {
         setTitle(originalTitle);
         setContent(originalContent);
@@ -197,38 +204,81 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
         <div className="w-full bg-white rounded-[24px] shadow-sm border border-gray-100 mt-[var(--spacing-1cm,32px)] overflow-hidden">
             
             {/* 1. 슬림 헤더 */}
-            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-50 bg-white">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-50 bg-white min-h-[56px]">
                 <div className="flex items-center gap-2">
                     <PenTool size={16} className="text-[#0066cc]" />
                     <span className="text-[14px] font-bold text-[#1d1d1f]">나의 긴줄평</span>
                 </div>
                 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-4">
                     {isEditing ? (
                         <>
-                            {hasReview && (
-                                <>
-                                    {/* 취소 버튼 */}
-                                    <button onClick={handleCancel} className="px-3 py-1.5 text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors">
-                                        취소
+                            {/* ▼▼▼ [NEW] 스포일러 & 공개 토글 영역 (에디터 모드일 때만 활성화) ▼▼▼ */}
+                            <div className="flex items-center gap-4 border-r border-gray-100 pr-4">
+                                {/* 스포일러 체크박스 (공개 상태일 때만 활성화) */}
+                                <div className={`flex items-center gap-1.5 transition-all duration-300 ${!isPublic ? 'opacity-40 grayscale pointer-events-none' : 'opacity-100'}`}>
+                                    <Checkbox 
+                                        id="long-spoiler-check" 
+                                        checked={isSpoiler} 
+                                        onCheckedChange={(checked) => setIsSpoiler(checked as boolean)}
+                                        className="w-4 h-4 rounded-sm border-rose-400 data-[state=checked]:bg-rose-500 data-[state=checked]:border-rose-500 data-[state=checked]:text-white"
+                                    />
+                                    <label 
+                                        htmlFor="long-spoiler-check" 
+                                        className="text-[12px] font-bold text-rose-500 cursor-pointer flex items-center gap-1 select-none"
+                                    >
+                                        <AlertTriangle size={12} /> 스포일러
+                                    </label>
+                                </div>
+
+                                {/* 공개/비공개 토글 */}
+                                <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setIsPublic(!isPublic)}>
+                                    <span className={`flex items-center gap-1 text-[12px] font-bold transition-colors ${isPublic ? 'text-[#0066cc]' : 'text-gray-400'}`}>
+                                        {isPublic ? <Globe size={13} /> : <Lock size={13} />}
+                                        {isPublic ? '공개' : '비공개'}
+                                    </span>
+                                    <button type="button" className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isPublic ? 'bg-[#0066cc]' : 'bg-gray-200'}`}>
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${isPublic ? 'translate-x-6' : 'translate-x-1'}`} />
                                     </button>
-                                    <button onClick={handleDelete} title="삭제" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                                        <Trash2 size={14} />
-                                    </button>
-                                </>
-                            )}
-                            <button onClick={() => handleSave(false)} className="px-4 py-1.5 rounded-lg bg-[#1d1d1f] text-white text-[12px] font-bold hover:bg-black shadow-md transition-transform active:scale-95">발행하기</button>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                                {hasReview && (
+                                    <>
+                                        {/* 취소 버튼 */}
+                                        <button onClick={handleCancel} className="px-3 py-1.5 text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors">
+                                            취소
+                                        </button>
+                                        <button onClick={handleDelete} title="삭제" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </>
+                                )}
+                                {/* [수정됨] 저장 로직을 일원화하여 저장 버튼 클릭 시 현재 토글 상태대로 저장됨 */}
+                                <button onClick={handleSave} className="px-4 py-1.5 rounded-lg bg-[#1d1d1f] text-white text-[12px] font-bold hover:bg-black shadow-md transition-transform active:scale-95">
+                                    저장하기
+                                </button>
+                            </div>
                         </>
                     ) : (
                         hasReview && (
-                            <>
+                            <div className="flex items-center gap-3">
+                                {/* ▼▼▼ 읽기 모드일 때 현재 상태 표시 뱃지 ▼▼▼ */}
+                                <div className="flex items-center gap-2 mr-2">
+                                    {isSpoiler && isPublic && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded border border-rose-100 flex items-center gap-1"><AlertTriangle size={10}/> 스포일러</span>}
+                                    <span className={`text-[10px] font-bold px-2 py-1 rounded border flex items-center gap-1 ${isPublic ? 'text-[#0066cc] bg-blue-50 border-blue-100' : 'text-gray-500 bg-gray-50 border-gray-200'}`}>
+                                        {isPublic ? <><Globe size={10}/> 공개됨</> : <><Lock size={10}/> 비공개</>}
+                                    </span>
+                                </div>
+
                                 <button onClick={() => setIsEditing(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-[12px] font-bold text-gray-500 hover:bg-gray-50">
                                     <Eye size={12} /> 수정하기
                                 </button>
                                 <button onClick={handleDelete} title="삭제" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                                     <Trash2 size={14} />
                                 </button>
-                            </>
+                            </div>
                         )
                     )}
                 </div>
@@ -247,13 +297,11 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
-                                    // Enter 치면 에디터 본문으로 포커스 이동
                                     document.querySelector<HTMLElement>('.sun-editor-editable')?.focus();
                                 }
                             }}
                             className="w-full text-[24px] font-black text-[#1d1d1f] placeholder-gray-200 outline-none border-none bg-transparent mb-4"
                         />
-                        {/* SunEditor 컴포넌트 */}
                         <SunEditor 
                             setContents={content}
                             onChange={setContent}
@@ -263,7 +311,7 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                                 buttonList: [
                                     ['bold', 'underline', 'italic', 'strike'],
                                     ['fontColor', 'hiliteColor'],
-                                    ['formatBlock'], // 👈 이 부분을 수정했습니다 ('h1', 'h2', 'h3' -> 'formatBlock')
+                                    ['formatBlock'], 
                                     ['align', 'list'],
                                     ['image', 'link'],
                                     ['undo', 'redo']

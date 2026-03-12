@@ -122,7 +122,9 @@ class Record(Base):
     reading_format = Column(String(50), default="PAPER") 
 
     # [수정] 한줄평 공개/비공개 토글 전용 플래그
-    is_short_review_public = Column(Boolean, default=True) 
+    is_short_review_public = Column(Boolean, default=True)
+
+    is_spoiler = Column(Boolean, default=False, nullable=True)
 
     user = relationship("User", back_populates="records")
     edition = relationship("Edition")
@@ -188,9 +190,48 @@ class LongReview(Base):
     content = Column(Text, nullable=False)
     is_draft = Column(Boolean, default=True) # 임시저장 여부
 
+    is_spoiler = Column(Boolean, default=False, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # 관계 설정
     user = relationship("User")
     record = relationship("Record", backref="long_review")
+
+# ===================================================================
+# 8. [NEW] 소셜 광장 공감(좋아요) 연결 테이블
+# ===================================================================
+
+# 8-1. 한줄평(Record) 공감 테이블
+class RecordLike(Base):
+    __tablename__ = "record_likes"
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    record_id = Column(Integer, ForeignKey("user_library.id", ondelete="CASCADE"), primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# 8-2. 사색/메모(Memo) 공감 테이블
+class MemoLike(Base):
+    __tablename__ = "memo_likes"
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    memo_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# 8-3. 긴줄평(LongReview) 공감 테이블
+class LongReviewLike(Base):
+    __tablename__ = "long_review_likes"
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    long_review_id = Column(Integer, ForeignKey("long_reviews.id", ondelete="CASCADE"), primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# ===================================================================
+# 9. [NEW] 소셜 광장 팔로우 연결 테이블
+# ===================================================================
+class Follow(Base):
+    __tablename__ = "follows"
+    
+    # follower_id가 following_id를 팔로우함 (단방향)
+    follower_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    following_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

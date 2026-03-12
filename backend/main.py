@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from utils import parse_author_string, download_and_update_cover
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, desc
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from routers import home, memos, editions, library
@@ -714,13 +714,25 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
 
     records = db.query(models.Record).filter(models.Record.user_id == user.id).order_by(models.Record.added_at.desc()).all()
     
+    # 1. 태그 처리를 위해 record_id 목록 추출
+    record_ids = [r.id for r in records]
+    
+    # ▼▼▼ [NEW] 2. 긴줄평 유무 확인 (내 서재이므로 is_draft 조건 없이 모두 가져옴) ▼▼▼
+    long_reviews = []
+    if record_ids:
+        long_reviews = db.query(models.LongReview.record_id).filter(
+            models.LongReview.record_id.in_(record_ids)
+        ).all()
+    # 빠른 조회를 위해 Set으로 변환
+    long_review_record_ids = {lr[0] for lr in long_reviews}
+
     results = []
     for record in records:
         edition = record.edition
         work = edition.work
         rating_val = record.rating if record.rating is not None else 0.0
         
-        # [NEW] 태그 목록 조회 (RecordTag 테이블 조인)
+        # 태그 목록 조회 (RecordTag 테이블 조인)
         record_tags = db.query(models.Tag).join(
             models.RecordTag, models.Tag.id == models.RecordTag.tag_id
         ).filter(models.RecordTag.record_id == record.id).all()
@@ -737,17 +749,17 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
             "short_review": record.short_review or "",
             "start_date": record.start_date.isoformat() if record.start_date else None,
             "finish_date": record.finish_date.isoformat() if record.finish_date else None,
-            
-            # ▼▼▼ [핵심] 새로 추가된 데이터 반환 ▼▼▼
             "current_page": record.current_page,
             "reading_format": record.reading_format,
             "tags": tag_list,
             
             "isbn": edition.isbn,
             "isbn10": edition.isbn10,
-            # ▼▼▼ [NEW] 총 페이지 수 응답 추가 ▼▼▼
             "page_count": edition.page_count,
-            "is_short_review_public": record.is_short_review_public
+            "is_short_review_public": record.is_short_review_public,
+            
+            # ▼▼▼ [NEW] 프론트엔드로 긴줄평 유무 데이터 전달 ▼▼▼
+            "has_long_review": record.id in long_review_record_ids
         })
     return results
 
@@ -798,21 +810,25 @@ async def update_library_entry(library_id: int, update_data: LibraryUpdate, db: 
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 1. 함수 정의 부분에 status 파라미터가 있는지 확인!
 @app.get("/api/users/{user_email}/records")
 async def read_user_records(
     user_email: str, 
     status: str = "ALL", 
+    current_user_email: Optional[str] = None, # ▼▼▼ [NEW] 현재 접속 중인 유저 확인용
     db: Session = Depends(get_db)
 ):
-    print(f"\n[API 호출] 이메일: {user_email}, 요청된 상태: {status}")
+    print(f"\n[API 호출] 대상 서재: {user_email}, 방문자: {current_user_email}, 상태: {status}")
  
-    # 1. 사용자 찾기
+    # 1. 서재 주인장 정보 조회
     user = db.query(models.User).filter(models.User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 2. 쟁반(joinedload)에 책(Edition)과 작품(Work) 정보를 한 번에 담아서 가져오라고 지시!
+    # ▼▼▼ [NEW] 본인 서재인지 확인 ▼▼▼
+    is_mine = False
+    if current_user_email and current_user_email == user_email:
+        is_mine = True
+
     query = db.query(models.Record).options(
         joinedload(models.Record.edition).joinedload(models.Edition.work)
     ).filter(models.Record.user_id == user.id)
@@ -824,10 +840,8 @@ async def read_user_records(
     else:
         query = query.filter(models.Record.status == status)
 
-    # DB에 딱 한 번만 가서 모든 데이터를 싹 가져옵니다!
     records = query.order_by(models.Record.added_at.desc()).all()
     
-    # [태그 최적화] 태그도 책 하나하나마다 묻지 않고, 이 사용자의 모든 태그를 한 번에 가져와서 나눕니다.
     record_ids = [r.id for r in records]
     all_tags = []
     if record_ids:
@@ -835,14 +849,29 @@ async def read_user_records(
             .join(models.Tag, models.RecordTag.tag_id == models.Tag.id)\
             .filter(models.RecordTag.record_id.in_(record_ids)).all()
             
-    # 책 번호(record_id)를 키값으로 태그를 예쁘게 정리해 둡니다.
     tags_by_record = {}
     for record_id, tag_name in all_tags:
         if record_id not in tags_by_record:
             tags_by_record[record_id] = []
         tags_by_record[record_id].append(tag_name)
 
-    # 3. 프론트엔드로 보낼 데이터 조립 (이제 DB를 찌르지 않습니다)
+    # ▼▼▼ [핵심 업데이트] 긴줄평 노출 권한 로직 ▼▼▼
+    long_reviews = []
+    if record_ids:
+        if is_mine:
+            # 내가 내 서재를 볼 때: 임시저장(비공개) 포함 모든 긴줄평 노출
+            long_reviews = db.query(models.LongReview.record_id).filter(
+                models.LongReview.record_id.in_(record_ids)
+            ).all()
+        else:
+            # 타인이 내 서재를 볼 때: 발행된(is_draft == False) 긴줄평만 노출
+            long_reviews = db.query(models.LongReview.record_id).filter(
+                models.LongReview.record_id.in_(record_ids),
+                models.LongReview.is_draft == False
+            ).all()
+            
+    long_review_record_ids = {lr[0] for lr in long_reviews}
+
     response_data = []
     for record in records:
         if not record.edition:
@@ -850,9 +879,9 @@ async def read_user_records(
             
         work_title = record.edition.work.title if record.edition.work else "제목 없음"
         work_author = record.edition.work.author if record.edition.work else "작가 미상"
-        
-        # 미리 찾아둔 태그 바구니에서 쏙 빼옵니다.
         tag_list = tags_by_record.get(record.id, [])
+        
+        has_long_review = record.id in long_review_record_ids
 
         book_info = {
             "library_id": record.id,
@@ -870,9 +899,12 @@ async def read_user_records(
             "finish_date": record.finish_date.isoformat() if record.finish_date else None,
             "current_page": record.current_page,
             "reading_format": record.reading_format,
-            "tags": tag_list,  # 👈 최적화된 태그 적용
+            "tags": tag_list,
             "page_count": record.edition.page_count,
-            "is_short_review_public": record.is_short_review_public
+            "is_short_review_public": record.is_short_review_public,
+            # (만약 Record 모델에 is_spoiler가 있다면 추가. 여기선 긴줄평 정보만 넘깁니다)
+            "has_long_review": has_long_review,
+            "is_mine": is_mine # 프론트에서 활용할 수 있게 던져줌
         }
         response_data.append(book_info)
 
@@ -1219,31 +1251,31 @@ async def get_user_short_reviews(user_email: str, db: Session = Depends(get_db))
         })
     return results
 
-@app.post("/api/feeds/{feed_id}/like")
-async def toggle_feed_like(feed_id: str, data: dict, db: Session = Depends(get_db)):
-    user_email = data.get("user_email")
-    user = db.query(models.User).filter(models.User.email == user_email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+# @app.post("/api/feeds/{feed_id}/like")
+# async def toggle_feed_like(feed_id: str, data: dict, db: Session = Depends(get_db)):
+#     user_email = data.get("user_email")
+#     user = db.query(models.User).filter(models.User.email == user_email).first()
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
 
-    # feed_id 분석 (예: memo_123, review_456)
-    try:
-        prefix, target_id = feed_id.split("_")
-        target_id = int(target_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid feed ID format")
+#     # feed_id 분석 (예: memo_123, review_456)
+#     try:
+#         prefix, target_id = feed_id.split("_")
+#         target_id = int(target_id)
+#     except ValueError:
+#         raise HTTPException(status_code=400, detail="Invalid feed ID format")
 
-    # [기획] 상용 서비스에서는 소셜 활동 전용 테이블(LikeLog 등)을 사용하는 것이 데이터 분석에 유리함
-    # 여기서는 유저의 행동이 정상적으로 접수되었음을 알리는 메시지를 반환합니다.
+#     # [기획] 상용 서비스에서는 소셜 활동 전용 테이블(LikeLog 등)을 사용하는 것이 데이터 분석에 유리함
+#     # 여기서는 유저의 행동이 정상적으로 접수되었음을 알리는 메시지를 반환합니다.
     
-    return {
-        "status": "success", 
-        "feed_id": feed_id,
-        "is_liked": True, # 실제 로직은 DB Toggle 결과에 따라 반환
-        "message": f"User {user.nickname} liked {prefix} {target_id}"
-    }
+#     return {
+#         "status": "success", 
+#         "feed_id": feed_id,
+#         "is_liked": True, # 실제 로직은 DB Toggle 결과에 따라 반환
+#         "message": f"User {user.nickname} liked {prefix} {target_id}"
+#     }
 
-# main.py 파일 맨 아래쪽에 추가해 주세요.
+# # main.py 파일 맨 아래쪽에 추가해 주세요.
 
 @app.get("/api/admin/sync-covers")
 async def sync_existing_covers(
@@ -1619,4 +1651,342 @@ async def get_mypage_stats(user_email: str, db: Session = Depends(get_db)):
         "trend_data": trend_data,
         "top_genres": top_genres,
         "top_tags": top_tags
+    }
+
+# ===================================================================
+# [NEW] 소셜 광장 (Square / Feed) API
+# ===================================================================
+from sqlalchemy import or_
+
+@app.get("/api/square/feeds")
+async def get_square_feeds(user_email: Optional[str] = None, feed_type: str = "all", limit: int = 30, db: Session = Depends(get_db)):
+    """광장 피드 목록 (팔로우 필터링, 스포일러 상태, 본인 글 여부 포함)"""
+    current_user_id = None
+    following_ids = []
+    
+    if user_email:
+        user = db.query(models.User).filter(models.User.email == user_email).first()
+        if user:
+            current_user_id = user.id
+            follows = db.query(models.Follow.following_id).filter(models.Follow.follower_id == current_user_id).all()
+            following_ids = [f[0] for f in follows]
+
+    query = db.query(models.Record).options(
+        joinedload(models.Record.user),
+        joinedload(models.Record.edition).joinedload(models.Edition.work)
+    )
+
+    query = query.filter(
+        or_(
+            models.Record.short_review != None,
+            models.Record.short_review != "",
+        )
+    ).filter(models.Record.is_short_review_public == True)
+
+    if feed_type == "following":
+        if not current_user_id:
+            return [] 
+        query = query.filter(models.Record.user_id.in_(following_ids))
+
+    records = query.order_by(models.Record.added_at.desc()).limit(limit).all()
+
+    feeds = []
+    for r in records:
+        if not r.edition or not r.user:
+            continue
+            
+        likes_count = db.query(models.RecordLike).filter(models.RecordLike.record_id == r.id).count()
+        
+        is_liked = False
+        is_following = False
+        is_mine = False # ▼▼▼ [NEW] 내 글인지 판별하는 변수
+        
+        if current_user_id:
+            like_exists = db.query(models.RecordLike).filter(
+                models.RecordLike.record_id == r.id, 
+                models.RecordLike.user_id == current_user_id
+            ).first()
+            if like_exists: is_liked = True
+                
+            if r.user_id in following_ids:
+                is_following = True
+                
+            # ▼▼▼ [NEW] 현재 로그인한 유저와 글 작성자가 같으면 True
+            if current_user_id == r.user_id:
+                is_mine = True
+
+        feeds.append({
+            "id": r.id,
+            "edition_id": r.edition.id, 
+            "isbn": r.edition.isbn,
+            "user_id": r.user_id, # 👈 프론트엔드로 전달될 핵심 ID
+            "user_name": r.user.nickname or r.user.email.split('@')[0],
+            "user_image": r.user.profile_image or "",
+            "book_title": r.edition.work.title if r.edition.work else "제목 없음",
+            "book_author": r.edition.work.author if r.edition.work else "작가 미상",
+            "cover": r.edition.cover_image,
+            "text": r.short_review, 
+            "rating": r.rating,
+            "added_at": r.added_at.strftime("%Y.%m.%d") if r.added_at else "",
+            "likes_count": likes_count,
+            "is_liked": is_liked,
+            "type": "short_review",
+            "is_following": is_following,
+            "is_spoiler": getattr(r, 'is_spoiler', False),
+            "is_mine": is_mine # ▼▼▼ [NEW] 프론트엔드로 본인 글 여부 전달
+        })
+
+    return feeds
+
+# ===================================================================
+# [NEW] 소셜 광장 (Square / Feed) API - Phase 1 (공감, 위시리스트) 적용
+# ===================================================================
+
+@app.get("/api/square/feeds")
+async def get_square_feeds(user_email: Optional[str] = None, feed_type: str = "all", limit: int = 30, db: Session = Depends(get_db)):
+    """
+    공개 처리된 모든 유저의 기록을 가져오고, '좋아요 갯수'와 '내가 좋아요를 눌렀는지'를 판별합니다.
+    """
+    # 현재 접속 중인 유저 확인 (로그인한 경우)
+    current_user_id = None
+    if user_email:
+        user = db.query(models.User).filter(models.User.email == user_email).first()
+        if user:
+            current_user_id = user.id
+
+    query = db.query(models.Record).options(
+        joinedload(models.Record.user),
+        joinedload(models.Record.edition).joinedload(models.Edition.work)
+    )
+
+    query = query.filter(
+        or_(
+            models.Record.short_review != None,
+            models.Record.short_review != "",
+        )
+    ).filter(models.Record.is_short_review_public == True)
+
+    records = query.order_by(models.Record.added_at.desc()).limit(limit).all()
+
+    feeds = []
+    for r in records:
+        if not r.edition or not r.user:
+            continue
+            
+        # [핵심] 1. 이 글의 총 좋아요 수 계산
+        likes_count = db.query(models.RecordLike).filter(models.RecordLike.record_id == r.id).count()
+        
+        # [핵심] 2. 현재 로그인한 내가 좋아요를 눌렀는지 판별
+        is_liked = False
+        if current_user_id:
+            like_exists = db.query(models.RecordLike).filter(
+                models.RecordLike.record_id == r.id, 
+                models.RecordLike.user_id == current_user_id
+            ).first()
+            if like_exists:
+                is_liked = True
+
+        feeds.append({
+            "id": r.id,
+            "edition_id": r.edition.id, # ▼ 내 서재 담기(Wishlist)를 위해 추가
+            "isbn": r.edition.isbn,     # ▼ 내 서재 담기(Wishlist)를 위해 추가
+            "user_name": r.user.nickname or r.user.email.split('@')[0],
+            "user_image": r.user.profile_image or "",
+            "book_title": r.edition.work.title if r.edition.work else "제목 없음",
+            "book_author": r.edition.work.author if r.edition.work else "작가 미상",
+            "cover": r.edition.cover_image,
+            "text": r.short_review, 
+            "rating": r.rating,
+            "added_at": r.added_at.strftime("%Y.%m.%d") if r.added_at else "",
+            
+            # ▼ 좋아요 데이터 연동
+            "likes_count": likes_count,
+            "is_liked": is_liked,
+            "type": "short_review"
+        })
+
+    return feeds
+
+# ===================================================================
+# [NEW] 소셜 광장 - 작품(Work) 탭 인기 도서 큐레이션 API
+# ===================================================================
+@app.get("/api/square/works")
+async def get_trending_works(limit: int = 20, db: Session = Depends(get_db)):
+    """
+    BoooknTalk 유저들의 서재(Record)에 가장 많이 담긴 도서를 인기순으로 조회합니다.
+    """
+    # 1. Record 테이블에서 edition_id별 담긴 횟수(added_count)와 평균 별점(avg_rating) 계산
+    stats = db.query(
+        models.Record.edition_id,
+        func.count(models.Record.id).label('added_count'),
+        func.avg(models.Record.rating).label('avg_rating')
+    ).group_by(models.Record.edition_id).subquery()
+
+    # 2. 통계 데이터와 Edition(도서), Work(작품) 테이블 조인 후 담긴 횟수 순으로 정렬
+    query = db.query(models.Edition, stats.c.added_count, stats.c.avg_rating)\
+        .join(stats, models.Edition.id == stats.c.edition_id)\
+        .options(joinedload(models.Edition.work))\
+        .order_by(desc(stats.c.added_count))\
+        .limit(limit)
+
+    results = query.all()
+    
+    # 3. 프론트엔드가 렌더링하기 편한 형태로 포장
+    response_data = []
+    for edition, added_count, avg_rating in results:
+        work = edition.work
+        response_data.append({
+            "edition_id": edition.id,
+            "isbn": edition.isbn,
+            "title": work.title if work else "제목 없음",
+            "author": work.author if work else "작가 미상",
+            "cover": edition.cover_image,
+            "added_count": added_count, # 서재에 담긴 총 횟수
+            "average_rating": round(avg_rating, 1) if avg_rating else 0.0 # 평균 별점
+        })
+
+    return response_data
+
+class LikeToggleRequest(BaseModel):
+    user_email: str
+    feed_type: str = "short_review"
+
+@app.post("/api/square/feeds/{feed_id}/like")
+async def toggle_square_like(feed_id: int, req: LikeToggleRequest, db: Session = Depends(get_db)):
+    """광장 피드 공감(하트) 토글 API"""
+    user = db.query(models.User).filter(models.User.email == req.user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    if req.feed_type == "short_review":
+        existing_like = db.query(models.RecordLike).filter_by(user_id=user.id, record_id=feed_id).first()
+        if existing_like:
+            db.delete(existing_like)
+            is_liked = False
+        else:
+            db.add(models.RecordLike(user_id=user.id, record_id=feed_id))
+            is_liked = True
+            
+        db.commit()
+        return {"status": "success", "is_liked": is_liked}
+    
+    raise HTTPException(status_code=400, detail="알 수 없는 피드 타입입니다.")
+
+class QuickWishRequest(BaseModel):
+    user_email: str
+    edition_id: int
+
+@app.post("/api/library/wishlist/quick")
+async def quick_add_wishlist(req: QuickWishRequest, db: Session = Depends(get_db)):
+    """광장에서 클릭 한 번으로 내 서재(WISH)에 담는 API"""
+    user = db.query(models.User).filter(models.User.email == req.user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    existing_record = db.query(models.Record).filter_by(user_id=user.id, edition_id=req.edition_id).first()
+    if existing_record:
+        return {"status": "exists", "message": "이미 회원님의 서재에 담긴 책입니다."}
+
+    new_record = models.Record(
+        user_id=user.id, 
+        edition_id=req.edition_id, 
+        status="WISH", 
+        rating=0.0
+    )
+    db.add(new_record)
+    db.commit()
+    return {"status": "success", "message": "성공적으로 내 서재에 담았습니다!"}
+
+# ▼▼▼ [NEW] 팔로우 토글 API 추가 ▼▼▼
+class FollowToggleRequest(BaseModel):
+    user_email: str
+
+@app.post("/api/users/{target_user_id}/follow")
+async def toggle_follow(target_user_id: int, req: FollowToggleRequest, db: Session = Depends(get_db)):
+    """특정 유저 팔로우 맺기/끊기"""
+    current_user = db.query(models.User).filter(models.User.email == req.user_email).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+    if current_user.id == target_user_id:
+        raise HTTPException(status_code=400, detail="자기 자신을 팔로우할 수 없습니다.")
+
+    target_user = db.query(models.User).filter(models.User.id == target_user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="팔로우할 대상 유저를 찾을 수 없습니다.")
+
+    existing_follow = db.query(models.Follow).filter_by(
+        follower_id=current_user.id, 
+        following_id=target_user_id
+    ).first()
+
+    if existing_follow:
+        db.delete(existing_follow)
+        is_following = False
+    else:
+        new_follow = models.Follow(follower_id=current_user.id, following_id=target_user_id)
+        db.add(new_follow)
+        is_following = True
+        
+    db.commit()
+    return {"status": "success", "is_following": is_following}
+
+from sqlalchemy import func, desc
+
+@app.get("/api/works/{work_id}")
+async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
+    """
+    [작품 허브] 특정 Work의 통합 정보 및 소셜 통계를 조회합니다.
+    """
+    # 1. 작품(Work) 기본 정보 조회
+    work = db.query(models.Work).filter(models.Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="작품을 찾을 수 없습니다.")
+
+    # 2. 이 작품에 속한 모든 Edition ID 추출
+    editions = db.query(models.Edition).filter(models.Edition.work_id == work_id).all()
+    edition_ids = [e.id for e in editions]
+
+    total_added = 0
+    avg_rating = 0.0
+    best_cover = None
+
+    if edition_ids:
+        # 3. 통합 통계 (총 담긴 횟수, 평균 별점)
+        # Record 테이블에서 edition_id가 해당 작품의 판본들인 것만 필터링
+        stats = db.query(
+            func.count(models.Record.id).label('total_added'),
+            func.avg(models.Record.rating).label('avg_rating')
+        ).filter(models.Record.edition_id.in_(edition_ids)).first()
+        
+        total_added = stats.total_added if stats and stats.total_added else 0
+        avg_rating = round(stats.avg_rating, 1) if stats and stats.avg_rating else 0.0
+
+        # 4. 대표 커버 이미지 찾기 (가장 많이 서재에 담긴 판본의 표지)
+        popular_edition_stat = db.query(
+            models.Record.edition_id,
+            func.count(models.Record.id).label('cnt')
+        ).filter(models.Record.edition_id.in_(edition_ids))\
+        .group_by(models.Record.edition_id)\
+        .order_by(desc('cnt')).first()
+
+        if popular_edition_stat:
+            popular_edition = db.query(models.Edition).filter(models.Edition.id == popular_edition_stat.edition_id).first()
+            best_cover = popular_edition.cover_image if popular_edition else None
+            
+        # 서재에 담긴 기록이 하나도 없다면, 그냥 첫 번째 판본의 표지를 사용
+        if not best_cover and editions:
+            best_cover = editions[0].cover_image
+
+    return {
+        "work_id": work.id,
+        "title": work.title,
+        "author": work.author,
+        "description": work.description,
+        "category": work.category,
+        "original_title": work.original_title,
+        "best_cover": best_cover,
+        "total_added": total_added,
+        "average_rating": avg_rating,
+        "edition_count": len(editions) # 이 작품에 엮인 판본(출판사/개정판)의 총 개수
     }
