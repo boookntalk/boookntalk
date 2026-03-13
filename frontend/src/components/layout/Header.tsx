@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+// ▼▼▼ [수정 1] 현재 경로를 추적하기 위해 usePathname 추가 ▼▼▼
+import { useRouter, usePathname } from 'next/navigation';
 import { Search, LogOut, Lock, X, ChevronRight, ArrowRight } from 'lucide-react';
 import { signIn, signOut, useSession } from "next-auth/react";
 import { toast } from 'sonner';
@@ -13,12 +14,14 @@ import ProfileEditModal from '@/components/profile/ProfileEditModal';
 export default function Header() {
     const { data: session } = useSession();
     const router = useRouter();
+    // ▼▼▼ [수정 2] 현재 URL 경로 가져오기 ▼▼▼
+    const pathname = usePathname() || '';
     
-    // [추가] 검색어 상태 관리
+    // 검색어 상태 관리
     const [keyword, setKeyword] = useState('');
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-    // [추가] 검색 핸들러
+    // 검색 핸들러
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault(); 
         if (!keyword.trim()) return;
@@ -26,6 +29,7 @@ export default function Header() {
         router.push(`/search?q=${encodeURIComponent(keyword)}`);
     };
 
+    // 내 서재 클릭 핸들러 (비로그인 방어 로직)
     const handleLibraryClick = () => {
         if (!session) {
             toast.custom((t) => (
@@ -58,7 +62,6 @@ export default function Header() {
     };
 
     return (
-        // ▼▼▼ [수정 핵심] Fragment(빈 태그)로 전체를 감싸서 모달을 header 바깥으로 꺼냄 ▼▼▼
         <>
             <header className="sticky top-0 z-[100] w-full bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <div className="max-w-[1440px] mx-auto px-6 h-14 flex items-center justify-between">
@@ -69,15 +72,32 @@ export default function Header() {
                             <div className="relative w-8 h-8 transition-transform group-hover:scale-105"> 
                                 <Image src="/logo.png" alt="BT Logo" fill className="object-contain" priority />
                             </div>
-                            <span className="text-[17px] font-semibold tracking-tight text-[#1d1d1f]">boookntalk</span>
+                            <span className="text-[17px] font-semibold tracking-tight text-[#1d1d1f]">BoooknTalk</span>
                         </Link>
 
-                        <button 
-                            onClick={handleLibraryClick}
-                            className="hidden md:block text-[15px] font-medium text-[#1d1d1f]/80 hover:text-[#0066cc] transition-colors"
-                        >
-                            내 서재
-                        </button>
+                        <nav className="hidden md:flex items-center gap-6">
+                            {/* ▼▼▼ [수정 3] 현재 URL에 따라 스타일 동적 변경 (Active State) ▼▼▼ */}
+                            <button 
+                                onClick={handleLibraryClick}
+                                className={`text-[15px] transition-colors ${
+                                    pathname.startsWith('/library') 
+                                    ? 'font-bold text-[#0066cc]' 
+                                    : 'font-medium text-[#1d1d1f]/80 hover:text-[#0066cc]'
+                                }`}
+                            >
+                                내 서재
+                            </button>
+                            <button 
+                                onClick={() => router.push('/square')}
+                                className={`text-[15px] transition-colors ${
+                                    pathname.startsWith('/square') 
+                                    ? 'font-bold text-[#0066cc]' 
+                                    : 'font-medium text-[#1d1d1f]/80 hover:text-[#0066cc]'
+                                }`}
+                            >
+                                광장
+                            </button>
+                        </nav>
                     </div>
 
                     {/* [2] 중앙: 검색바 */}
@@ -115,7 +135,7 @@ export default function Header() {
                         {session ? (
                             <div className="flex items-center gap-1 pl-2 ml-1">
                                 <button 
-                                    onClick={() => router.push('/mypage')} // ▼ 모달을 띄우는 대신 마이페이지로 이동시킵니다.
+                                    onClick={() => router.push('/mypage')}
                                     className="w-8 h-8 rounded-full border border-gray-200 shadow-sm overflow-hidden hover:ring-2 hover:ring-[#0066cc]/50 transition-all cursor-pointer mr-1"
                                     title="나의 독서 통계 및 프로필"
                                 >
@@ -142,7 +162,6 @@ export default function Header() {
                 </div>
             </header>
 
-            {/* ▼▼▼ [수정 핵심] 모달이 header의 backdrop-blur 영향을 받지 않도록 분리됨 ▼▼▼ */}
             <ProfileEditModal 
                 isOpen={isProfileModalOpen} 
                 onClose={() => setIsProfileModalOpen(false)} 

@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from routers import home, memos, editions, library
 from dotenv import load_dotenv
 from sqlalchemy.orm import joinedload
+from collections import defaultdict
 
 import models
 import httpx
@@ -706,45 +707,70 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
 @app.get("/api/my-library/{user_email}")
 async def get_my_library(user_email: str, db: Session = Depends(get_db)):
     """
-    내 서재의 모든 책 목록 조회 (Record 기준)
+    내 서재의 모든 책 목록 조회 - 🚀 N+1 쿼리 최적화 완료
     """
     user = db.query(models.User).filter(models.User.email == user_email).first()
     if not user:
         return []
 
-    records = db.query(models.Record).filter(models.Record.user_id == user.id).order_by(models.Record.added_at.desc()).all()
+    # 1. 🚀 [최적화 1단계] Record 조회 시 Edition과 Work를 한 번의 JOIN으로 미리 다 당겨옵니다.
+    records = db.query(models.Record)\
+        .options(
+            joinedload(models.Record.edition).joinedload(models.Edition.work)
+        )\
+        .filter(models.Record.user_id == user.id)\
+        .order_by(models.Record.added_at.desc())\
+        .all()
     
-    # 1. 태그 처리를 위해 record_id 목록 추출
+    if not records:
+        return []
+        
     record_ids = [r.id for r in records]
     
-    # ▼▼▼ [NEW] 2. 긴줄평 유무 확인 (내 서재이므로 is_draft 조건 없이 모두 가져옴) ▼▼▼
-    long_reviews = []
-    if record_ids:
-        long_reviews = db.query(models.LongReview.record_id).filter(
-            models.LongReview.record_id.in_(record_ids)
-        ).all()
-    # 빠른 조회를 위해 Set으로 변환
+    # 2. 긴줄평 유무 확인 (기존과 동일하게 IN 쿼리 1번)
+    long_reviews = db.query(models.LongReview.record_id).filter(
+        models.LongReview.record_id.in_(record_ids)
+    ).all()
     long_review_record_ids = {lr[0] for lr in long_reviews}
 
+    # 3. 🚀 [최적화 2단계] 루프 안에 있던 태그 조회 쿼리를 밖으로 뺐습니다!
+    # 사용자의 모든 책에 달린 태그를 단 '1번'의 쿼리로 싹 다 가져옵니다.
+    all_tags = db.query(models.RecordTag.record_id, models.Tag.name)\
+        .join(models.Tag, models.Tag.id == models.RecordTag.tag_id)\
+        .filter(models.RecordTag.record_id.in_(record_ids))\
+        .all()
+        
+    # record_id를 열쇠(Key)로 삼아 태그들을 파이썬 메모리(사전)에 예쁘게 분류해 놓습니다.
+    tags_by_record = defaultdict(list)
+    for record_id, tag_name in all_tags:
+        tags_by_record[record_id].append(tag_name)
+
+    # 4. 결과 조립 (이제 이 루프 내부에는 단 하나의 DB 쿼리도 발생하지 않습니다!)
     results = []
     for record in records:
         edition = record.edition
-        work = edition.work
+        work = edition.work if edition else None
+        
+        # 방어 코드 (혹시 DB에 연결 끊긴 고아 데이터가 있을 경우 에러 방지)
+        title = work.title if work else "제목 없음"
+        author = work.author if work else "작가 미상"
+        cover = edition.cover_image if edition else ""
+        isbn = edition.isbn if edition else ""
+        isbn10 = edition.isbn10 if edition else ""
+        page_count = edition.page_count if edition else 0
+        
         rating_val = record.rating if record.rating is not None else 0.0
         
-        # 태그 목록 조회 (RecordTag 테이블 조인)
-        record_tags = db.query(models.Tag).join(
-            models.RecordTag, models.Tag.id == models.RecordTag.tag_id
-        ).filter(models.RecordTag.record_id == record.id).all()
-        tag_list = [t.name for t in record_tags]
+        # 🚀 매번 DB를 찌르는 대신, 아까 만들어둔 메모리 사전에서 쏙쏙 빼옵니다.
+        tag_list = tags_by_record.get(record.id, [])
         
         results.append({
             "library_id": record.id,
             "status": record.status,
             "added_at": record.added_at,
-            "title": work.title,
-            "author": work.author,
-            "cover": edition.cover_image,
+            "title": title,
+            "author": author,
+            "cover": cover,
             "rating": rating_val,
             "short_review": record.short_review or "",
             "start_date": record.start_date.isoformat() if record.start_date else None,
@@ -753,14 +779,13 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
             "reading_format": record.reading_format,
             "tags": tag_list,
             
-            "isbn": edition.isbn,
-            "isbn10": edition.isbn10,
-            "page_count": edition.page_count,
+            "isbn": isbn,
+            "isbn10": isbn10,
+            "page_count": page_count,
             "is_short_review_public": record.is_short_review_public,
-            
-            # ▼▼▼ [NEW] 프론트엔드로 긴줄평 유무 데이터 전달 ▼▼▼
             "has_long_review": record.id in long_review_record_ids
         })
+        
     return results
 
 @app.patch("/api/my-library/{library_id}")
@@ -1197,13 +1222,15 @@ async def update_user_profile(
 # [추가] 특정 책(Work)의 공개된 한줄평 목록 가져오기 API
 @app.get("/api/works/{work_id}/short-reviews")
 async def get_work_short_reviews(work_id: int, db: Session = Depends(get_db)):
-    # Edition 테이블을 조인하여, 해당 Work에 속한 모든 Edition의 기록을 가져옵니다.
-    records = db.query(models.Record).join(models.Edition).filter(
-        models.Edition.work_id == work_id,
-        models.Record.short_review.isnot(None),       # 한줄평 내용이 null이 아니고
-        models.Record.short_review != "",             # 빈 문자열이 아니며
-        models.Record.is_short_review_public == True  # 공개 설정된 데이터만
-    ).order_by(models.Record.added_at.desc()).all()   # 최신순 정렬
+    records = db.query(models.Record)\
+        .join(models.Edition)\
+        .options(joinedload(models.Record.user))\
+        .filter( # N+1 방지: user 테이블을 미리 JOIN해서 가져옵니다!
+            models.Edition.work_id == work_id,
+            models.Record.short_review.isnot(None),
+            models.Record.short_review != "",
+            models.Record.is_short_review_public == True
+        ).order_by(models.Record.added_at.desc()).all()
 
     results = []
     for r in records:
@@ -1216,7 +1243,34 @@ async def get_work_short_reviews(work_id: int, db: Session = Depends(get_db)):
             "short_review": r.short_review,
             "created_at": r.added_at.isoformat() if r.added_at else ""
         })
-    
+    return results
+
+# ▼▼▼ 2. 신규 긴줄평 API 추가 ▼▼▼
+@app.get("/api/works/{work_id}/long-reviews")
+async def get_work_long_reviews(work_id: int, db: Session = Depends(get_db)):
+    """
+    해당 Work에 속한 공개된 긴줄평(서평) 목록을 조회합니다.
+    """
+    long_reviews = db.query(models.LongReview)\
+        .join(models.Record).join(models.Edition)\
+        .options(joinedload(models.LongReview.record).joinedload(models.Record.user))\
+        .filter(
+            models.Edition.work_id == work_id,
+            models.LongReview.is_draft == False # 임시저장이 아닌 발행된 글만
+        ).order_by(models.LongReview.created_at.desc()).all()
+        
+    results = []
+    for lr in long_reviews:
+        user = lr.record.user
+        results.append({
+            "id": lr.id,
+            "title": lr.title,
+            "content_preview": lr.content[:150] + "..." if len(lr.content) > 150 else lr.content,
+            "user_name": user.nickname or user.email.split('@')[0],
+            "user_image": user.profile_image or "",
+            "rating": lr.record.rating,
+            "created_at": lr.created_at.isoformat() if lr.created_at else ""
+        })
     return results
 
 @app.get("/api/users/{user_email}/short-reviews")
@@ -1836,6 +1890,7 @@ async def get_trending_works(limit: int = 20, db: Session = Depends(get_db)):
     for edition, added_count, avg_rating in results:
         work = edition.work
         response_data.append({
+            "work_id": work.id if work else None, # ▼▼▼ [NEW] 422 에러의 진짜 범인! work_id 추가 완료 ▼▼▼
             "edition_id": edition.id,
             "isbn": edition.isbn,
             "title": work.title if work else "제목 없음",
@@ -1990,3 +2045,25 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
         "average_rating": avg_rating,
         "edition_count": len(editions) # 이 작품에 엮인 판본(출판사/개정판)의 총 개수
     }
+
+@app.get("/api/works/{work_id}/editions")
+async def get_work_editions(work_id: int, db: Session = Depends(get_db)):
+    """
+    특정 작품(Work)에 속한 모든 판본(Edition) 목록을 조회합니다.
+    """
+    editions = db.query(models.Edition).filter(models.Edition.work_id == work_id).order_by(models.Edition.publish_date.desc()).all()
+    
+    if not editions:
+        return []
+
+    results = []
+    for ed in editions:
+        results.append({
+            "edition_id": ed.id,
+            "isbn": ed.isbn,
+            "publisher": ed.publisher,
+            "publish_date": ed.publish_date.isoformat() if ed.publish_date else None,
+            "cover_image": ed.cover_image,
+            "page_count": ed.page_count
+        })
+    return results

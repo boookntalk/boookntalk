@@ -180,7 +180,8 @@ export default function SquarePage() {
                 </div>
 
                 {/* 하단 콘텐츠 바디 영역 */}
-                <div className="flex-1 p-[var(--spacing-1cm,32px)] pt-6">
+                {/* ▼▼▼ 스크롤 여백을 위해 pb-32 클래스를 추가했습니다 ▼▼▼ */}
+                <div className="flex-1 p-[var(--spacing-1cm,32px)] pt-6 pb-32">
                     {isLoading ? (
                         <div className="flex justify-center items-center py-32">
                             <Loader2 className="animate-spin text-[#0066cc]" size={40} />
@@ -190,14 +191,13 @@ export default function SquarePage() {
                             {activeTab === 'works' && (
                                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
                                     {works.map((work, index) => (
-                                        // ▼▼▼ 이미지와 동일한 카드 스타일 이식 ▼▼▼
+                                        // ▼▼▼ [수정 핵심] 내 서재 코드의 CSS를 100% 동일하게 이식 & 라우팅 주소 변경 ▼▼▼
                                         <div 
                                             key={work.edition_id} 
-                                            onClick={() => router.push(`/book/${work.isbn}`)}
-                                            className="group cursor-pointer flex flex-col h-full bg-white rounded-lg p-4 shadow-sm border border-gray-100 transition-all duration-300 hover:shadow-md hover:-translate-y-1 relative"
+                                            onClick={() => router.push(`/work/${work.work_id}`)}
+                                            className="group cursor-pointer flex flex-col h-full bg-white rounded-sm p-4 shadow-sm border border-gray-100 transition-all duration-300 hover:shadow-md hover:-translate-y-1 relative"
                                         >
-                                            {/* 책 표지 (카드 패딩 안쪽을 꽉 채우는 비율) */}
-                                            <div className="relative aspect-[1/1.4] w-full mx-auto rounded overflow-hidden shadow-sm mb-4 bg-gray-50 flex items-center justify-center border border-gray-100">
+                                            <div className="relative aspect-[1/1.4] w-[80%] mx-auto rounded-sm overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.08)] mb-3 bg-gray-50 flex items-center justify-center border border-gray-100 transition-all duration-300 group-hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)]">
                                                 {work.cover ? (
                                                     <Image src={work.cover} alt={work.title} fill sizes="(max-width: 768px) 50vw, 20vw" className="object-cover group-hover:scale-105 transition-transform duration-500" priority={index < 10} />
                                                 ) : ( 
@@ -205,30 +205,32 @@ export default function SquarePage() {
                                                 )}
                                             </div>
 
-                                            {/* 책 텍스트 정보 */}
                                             <div className="flex flex-col flex-1">
-                                                <h3 className="font-bold text-[#1d1d1f] text-[15px] line-clamp-1 mb-1 group-hover:text-[#0066cc] transition-colors">{work.title}</h3>
-                                                <p className="text-[12px] text-gray-500 line-clamp-1 mb-4">{work.author}</p>
+                                                <h3 className="font-bold text-[#1d1d1f] text-[14px] line-clamp-1 mb-1 group-hover:text-[#0066cc] transition-colors">{work.title}</h3>
+                                                <p className="text-[11px] text-gray-400 line-clamp-1 mb-3">{work.author}</p>
                                                 
-                                                {/* 하단 뱃지 및 액션 아이콘 (이미지와 동일한 배치) */}
-                                                <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-50">
-                                                    {/* 좌측: 상태 뱃지 */}
-                                                    <Badge className="bg-rose-50 text-rose-500 hover:bg-rose-50 border-0 h-6 px-2 text-[11px] font-bold">
+                                                <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-50">
+                                                    <Badge className="bg-rose-50 text-rose-500 hover:bg-rose-50 border-0 h-5 px-1.5 text-[10px] font-bold">
                                                         인기 작품
                                                     </Badge>
 
-                                                    {/* 우측: 아이콘 모음 */}
                                                     <div className="flex items-center gap-2">
                                                         <div className="flex items-center gap-0.5 text-gray-400" title="BoooknTalk 서재에 담긴 횟수">
-                                                            <Users size={14} />
-                                                            <span className="text-[11px] font-bold pt-[1px]">{work.added_count}</span>
+                                                            <Users size={12} />
+                                                            <span className="text-[10px] font-bold pt-[1px]">{work.added_count}</span>
                                                         </div>
+                                                        {work.average_rating > 0 && (
+                                                            <div className="flex items-center gap-0.5 text-amber-400" title="평균 별점">
+                                                                <Star size={10} fill="currentColor" />
+                                                                <span className="text-[10px] font-bold text-gray-500 pt-[1px]">{work.average_rating}</span>
+                                                            </div>
+                                                        )}
                                                         <button 
                                                             onClick={(e) => handleAddWishlist(e, work.edition_id, work.title)}
-                                                            className="flex items-center justify-center w-6 h-6 rounded-full text-emerald-500 hover:bg-emerald-50 transition-colors"
+                                                            className="flex items-center justify-center w-5 h-5 rounded-full text-gray-400 hover:bg-[#0066cc] hover:text-white transition-colors ml-1"
                                                             title="내 서재에 담기"
                                                         >
-                                                            <BookmarkPlus size={16} />
+                                                            <BookmarkPlus size={14} />
                                                         </button>
                                                     </div>
                                                 </div>
