@@ -1,6 +1,6 @@
 #backend/main.py
 
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, File, UploadFile
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, File, UploadFile, APIRouter, Body, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -10,22 +10,13 @@ from typing import Optional
 from datetime import datetime
 from utils import parse_author_string, download_and_update_cover
 from sqlalchemy import or_, func, desc
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from routers import home, memos, editions, library
 from dotenv import load_dotenv
-from sqlalchemy.orm import joinedload
 from collections import defaultdict
 
-import models
-import httpx
-import asyncio
-import uuid
-import os
-import sys
-import time
-import random
-import shutil
+import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 
 # ==========================================
 # [핵심] 경로 문제 해결 코드 (이걸로 교체하세요!)
@@ -136,6 +127,10 @@ class LongReviewRequest(BaseModel):
     long_review_title: str
     long_review_content: str
     is_long_review_draft: bool
+
+# 프론트엔드에서 넘겨받을 JSON 바디 데이터 규격 (현재 로그인한 유저의 이메일)
+class FollowRequest(BaseModel):
+    user_email: str
 
 # -------------------------------------------------------------------
 # [3] 앱 수명주기 및 미들웨어 (Lifespan & Middleware)
@@ -1148,17 +1143,89 @@ async def delete_library_entry(library_id: int, db: Session = Depends(get_db)):
 # [API] 1. 유저 프로필 조회
 # -------------------------------------------------------------------
 @app.get("/api/users/{user_email}/profile")
-async def get_user_profile(user_email: str, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == user_email).first()
-    if not user:
+async def get_user_profile(
+    user_email: str, 
+    current_user_email: Optional[str] = None, # [추가] 현재 화면을 보고 있는 유저
+    db: Session = Depends(get_db)
+):
+    """
+    유저 프로필 조회 (+ 나와 상대방의 팔로우 관계 포함)
+    """
+    # 1. 조회할 대상(타겟) 유저 정보 가져오기
+    target_user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not target_user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
     
+    is_following = False
+    is_follower = False
+
+    # 2. 현재 로그인한 유저의 이메일이 넘어왔고, 자기 자신의 프로필이 아니라면 양방향 관계 확인
+    if current_user_email and current_user_email != user_email:
+        current_user = db.query(models.User).filter(models.User.email == current_user_email).first()
+        
+        if current_user:
+            # ① 내가 저 사람을 팔로우 중인가? (버튼 파란색/회색 처리용)
+            existing_following = db.query(models.Follow).filter_by(
+                follower_id=current_user.id,
+                following_id=target_user.id
+            ).first()
+            is_following = existing_following is not None
+
+            # ② 저 사람이 나를 팔로우 중인가? ('나를 팔로우함' 뱃지 노출용)
+            existing_follower = db.query(models.Follow).filter_by(
+                follower_id=target_user.id,
+                following_id=current_user.id
+            ).first()
+            is_follower = existing_follower is not None
+
+    # 3. 프론트엔드로 전달할 최종 데이터
     return {
-        "email": user.email,
-        "nickname": user.nickname or "",
-        "bio": user.bio or "",
-        "profile_image": user.profile_image or ""
+        "id": target_user.id,
+        "email": target_user.email,
+        "nickname": target_user.nickname or "",
+        "bio": target_user.bio or "",
+        "profile_image": target_user.profile_image or "",
+        
+        # [NEW] 소셜 데이터
+        "follower_count": target_user.follower_count or 0,
+        "following_count": target_user.following_count or 0,
+        "is_following": is_following,
+        "is_follower": is_follower
     }
+
+# =====================================================================
+# 2. 타인의 서재 도서 목록 조회 API
+# =====================================================================
+@app.get("/api/users/{target_user_id}/library/books")
+async def get_user_library_books(
+    target_user_id: int, 
+    db: Session = Depends(get_db)
+):
+    """
+    [타인의 서재] 대상 유저가 담아둔 도서 목록 반환
+    """
+    # UserLibrary, Edition, Work 3단 JOIN을 통해 서재 데이터 및 표지 긁어오기 (최신순)
+    results = db.query(models.UserLibrary, models.Edition, models.Work)\
+        .join(models.Edition, models.UserLibrary.edition_id == models.Edition.id)\
+        .join(models.Work, models.Edition.work_id == models.Work.id)\
+        .filter(models.UserLibrary.user_id == target_user_id)\
+        .order_by(models.UserLibrary.added_at.desc())\
+        .all()
+
+    books = []
+    for user_lib, edition, work in results:
+        books.append({
+            "library_id": user_lib.id,
+            "edition_id": edition.id,
+            "work_id": work.id,
+            "title": work.title,
+            "author": work.author,
+            "cover_image": edition.cover_image,
+            "status": user_lib.status,  # READING, COMPLETED, WISH 등
+            "added_at": user_lib.added_at
+        })
+
+    return books
 
 # -------------------------------------------------------------------
 # [API] 2. 유저 프로필(닉네임, 한줄소개) 업데이트
@@ -1249,23 +1316,29 @@ async def get_work_short_reviews(work_id: int, db: Session = Depends(get_db)):
 @app.get("/api/works/{work_id}/long-reviews")
 async def get_work_long_reviews(work_id: int, db: Session = Depends(get_db)):
     """
-    해당 Work에 속한 공개된 긴줄평(서평) 목록을 조회합니다.
+    해당 Work에 속한 공개된 긴줄평(서평) 목록을 조회합니다. (HTML 태그 제거 완료)
     """
     long_reviews = db.query(models.LongReview)\
         .join(models.Record).join(models.Edition)\
         .options(joinedload(models.LongReview.record).joinedload(models.Record.user))\
         .filter(
             models.Edition.work_id == work_id,
-            models.LongReview.is_draft == False # 임시저장이 아닌 발행된 글만
+            models.LongReview.is_draft == False 
         ).order_by(models.LongReview.created_at.desc()).all()
         
     results = []
     for lr in long_reviews:
         user = lr.record.user
+        
+        # ▼▼▼ [핵심 수정] 정규표현식(re)을 사용해 HTML 태그를 깔끔하게 다 날려버립니다! ▼▼▼
+        clean_text = re.sub(r'<[^>]+>', '', lr.content) if lr.content else ""
+        
         results.append({
             "id": lr.id,
+            "record_id": lr.record_id,
             "title": lr.title,
-            "content_preview": lr.content[:150] + "..." if len(lr.content) > 150 else lr.content,
+            # 태그가 제거된 순수 텍스트(clean_text)로 150자를 자릅니다.
+            "content_preview": clean_text[:150] + "..." if len(clean_text) > 150 else clean_text,
             "user_name": user.nickname or user.email.split('@')[0],
             "user_image": user.profile_image or "",
             "rating": lr.record.rating,
@@ -1957,36 +2030,63 @@ class FollowToggleRequest(BaseModel):
     user_email: str
 
 @app.post("/api/users/{target_user_id}/follow")
-async def toggle_follow(target_user_id: int, req: FollowToggleRequest, db: Session = Depends(get_db)):
-    """특정 유저 팔로우 맺기/끊기"""
+async def toggle_follow(
+    target_user_id: int, 
+    req: FollowToggleRequest, 
+    db: Session = Depends(get_db)
+):
+    """
+    [소셜 코어 API] 특정 유저 팔로우 맺기/끊기 (카운트 동기화 포함)
+    """
+    # 1. 내 정보 조회 (팔로우를 누른 사람)
     current_user = db.query(models.User).filter(models.User.email == req.user_email).first()
     if not current_user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
         
+    # 2. 자기 자신 팔로우 방지
     if current_user.id == target_user_id:
         raise HTTPException(status_code=400, detail="자기 자신을 팔로우할 수 없습니다.")
 
+    # 3. 타겟 유저 조회 (팔로우 당하는 사람)
     target_user = db.query(models.User).filter(models.User.id == target_user_id).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="팔로우할 대상 유저를 찾을 수 없습니다.")
 
+    # 4. 교차 테이블(Follow)에서 기존 팔로우 여부 명시적 확인
     existing_follow = db.query(models.Follow).filter_by(
         follower_id=current_user.id, 
         following_id=target_user_id
     ).first()
 
     if existing_follow:
+        # [언팔로우 처리]
         db.delete(existing_follow)
+        
+        # 카운트 감소 로직 (음수 방지 안전장치 포함)
+        current_user.following_count = max(0, (current_user.following_count or 0) - 1)
+        target_user.follower_count = max(0, (target_user.follower_count or 0) - 1)
+        
         is_following = False
     else:
+        # [팔로우 처리]
         new_follow = models.Follow(follower_id=current_user.id, following_id=target_user_id)
         db.add(new_follow)
+        
+        # 카운트 증가 로직
+        current_user.following_count = (current_user.following_count or 0) + 1
+        target_user.follower_count = (target_user.follower_count or 0) + 1
+        
         is_following = True
         
+    # DB에 최종 반영
     db.commit()
-    return {"status": "success", "is_following": is_following}
-
-from sqlalchemy import func, desc
+    
+    # 프론트엔드 <FollowButton />이 기대하는 리턴 규격
+    return {
+        "status": "success", 
+        "is_following": is_following,
+        "follower_count": target_user.follower_count
+    }
 
 @app.get("/api/works/{work_id}")
 async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
@@ -2067,3 +2167,88 @@ async def get_work_editions(work_id: int, db: Session = Depends(get_db)):
             "page_count": ed.page_count
         })
     return results
+
+@app.get("/api/library/{user_id}/reviews/{review_id}")
+async def get_long_review_detail(user_id: int, review_id: int, db: Session = Depends(get_db)):
+    """
+    특정 유저의 서재에 있는 특정 긴줄평(서평)의 전체 내용을 조회합니다.
+    """
+    review = db.query(models.LongReview)\
+        .join(models.Record)\
+        .options(
+            joinedload(models.LongReview.record).joinedload(models.Record.user),
+            joinedload(models.LongReview.record).joinedload(models.Record.edition).joinedload(models.Edition.work)
+        )\
+        .filter(
+            models.LongReview.id == review_id,
+            models.Record.user_id == user_id,
+            models.LongReview.is_draft == False # 발행된 글만
+        ).first()
+
+    if not review:
+        raise HTTPException(status_code=404, detail="서평을 찾을 수 없거나 삭제된 글입니다.")
+
+    record = review.record
+    user = record.user
+    edition = record.edition
+    work = edition.work if edition else None
+
+    return {
+        "id": review.id,
+        "title": review.title,
+        "content": review.content, # 150자 자르지 않은 순수 원본 (HTML 포함)
+        "created_at": review.created_at.isoformat() if review.created_at else "",
+        "rating": record.rating,
+        "author": {
+            "id": user.id,
+            "nickname": user.nickname or user.email.split('@')[0],
+            "profile_image": user.profile_image or ""
+        },
+        "book": {
+            "work_id": work.id if work else None,
+            "title": work.title if work else "제목 없음",
+            "author": work.author if work else "작가 미상",
+            "cover": edition.cover_image
+        }
+    }
+    
+@app.get("/api/reviews/{review_id}")
+async def get_long_review_detail_direct(review_id: int, db: Session = Depends(get_db)):
+    """특정 긴줄평(서평)의 전체 내용을 독립적으로 조회합니다."""
+    review = db.query(models.LongReview)\
+        .join(models.Record)\
+        .options(
+            joinedload(models.LongReview.record).joinedload(models.Record.user),
+            joinedload(models.LongReview.record).joinedload(models.Record.edition).joinedload(models.Edition.work)
+        )\
+        .filter(
+            models.LongReview.id == review_id, # user_id 조건 삭제 (review_id 만으로 충분함)
+            models.LongReview.is_draft == False
+        ).first()
+
+    if not review:
+        raise HTTPException(status_code=404, detail="서평을 찾을 수 없거나 삭제된 글입니다.")
+
+    record = review.record
+    user = record.user
+    edition = record.edition
+    work = edition.work if edition else None
+
+    return {
+        "id": review.id,
+        "title": review.title,
+        "content": review.content,
+        "created_at": review.created_at.isoformat() if review.created_at else "",
+        "rating": record.rating,
+        "author": {
+            "id": user.id,
+            "nickname": user.nickname or user.email.split('@')[0],
+            "profile_image": user.profile_image or ""
+        },
+        "book": {
+            "work_id": work.id if work else None,
+            "title": work.title if work else "제목 없음",
+            "author": work.author if work else "작가 미상",
+            "cover": edition.cover_image
+        }
+    }

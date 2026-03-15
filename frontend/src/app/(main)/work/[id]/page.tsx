@@ -225,15 +225,37 @@ export default function WorkHubPage() {
                         )
                     ) : (
                         longReviews.length > 0 ? (
-                            <div className="space-y-4">
+                            <div className="flex flex-col gap-3">
                                 {longReviews.map(review => (
-                                    <div key={review.id} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:border-[#0066cc]/50 transition-colors cursor-pointer group">
-                                        <h3 className="text-[18px] font-black text-[#1d1d1f] mb-2 group-hover:text-[#0066cc] transition-colors">{review.title}</h3>
-                                        <p className="text-[14px] text-gray-600 leading-relaxed mb-4 line-clamp-2">{review.content_preview}</p>
-                                        <div className="flex items-center gap-3 text-[12px] text-gray-400">
-                                            <span className="font-bold text-gray-600">{review.user_name}</span>
-                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                            <span>{review.created_at.substring(0, 10)}</span>
+                                    <div 
+                                        key={review.id} 
+                                        // ▼▼▼ [핵심] 클릭 시 해당 유저의 서재/서평 읽기 페이지로 이동 (URL 구조는 임시) ▼▼▼
+                                        onClick={() => router.push(`/library/${review.record_id}?tab=long_review`)}
+                                        className="group flex flex-col sm:flex-row sm:items-center justify-between p-5 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-[#0066cc] hover:shadow-md transition-all cursor-pointer"
+                                    >
+                                        <div className="flex-1 min-w-0 pr-4">
+                                            <h3 className="text-[16px] font-bold text-[#1d1d1f] mb-1.5 truncate group-hover:text-[#0066cc] transition-colors">
+                                                {review.title}
+                                            </h3>
+                                            <div className="flex items-center gap-2 text-[13px] text-gray-500">
+                                                <div className="flex items-center gap-1.5 font-medium">
+                                                    {review.user_image ? (
+                                                        <Image src={review.user_image} alt="profile" width={18} height={18} className="rounded-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-[18px] h-[18px] rounded-full bg-gray-200 flex items-center justify-center">
+                                                            <User size={10} className="text-gray-400" />
+                                                        </div>
+                                                    )}
+                                                    <span className="text-[#1d1d1f]">{review.user_name}</span>
+                                                </div>
+                                                <span className="w-[3px] h-[3px] rounded-full bg-gray-300"></span>
+                                                <span>{review.created_at.substring(0, 10)}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-1.5 mt-3 sm:mt-0 shrink-0 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 group-hover:bg-blue-50/50 transition-colors">
+                                            <Star size={14} fill="#fbbf24" className="text-amber-400" />
+                                            <span className="text-[14px] font-bold text-gray-700">{review.rating}</span>
                                         </div>
                                     </div>
                                 ))}

@@ -35,19 +35,40 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True) # OAuth 필수
-    nickname = Column(String(50), unique=True, index=True, nullable=True) # 닉네임 (중복 불가)
-    bio = Column(String(200), nullable=True) # 한 줄 소개
-    profile_image = Column(String, nullable=True) # 프로필 이미지 URL
+    email = Column(String(255), unique=True, nullable=False, index=True) 
+    nickname = Column(String(50), unique=True, index=True, nullable=True) 
+    bio = Column(String(200), nullable=True) 
+    profile_image = Column(String, nullable=True) 
     
-    is_premium = Column(Boolean, default=False) # 프로 버전 멤버십 여부
+    is_premium = Column(Boolean, default=False) 
     subscription_end_date = Column(DateTime(timezone=True), nullable=True)
+    
+    # ▼▼▼ [NEW: 프로필 로딩 초고속 최적화 (카운트 캐싱)] ▼▼▼
+    follower_count = Column(Integer, default=0)
+    following_count = Column(Integer, default=0)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # 관계 정의
+    # --- [관계 정의] ---
     records = relationship("Record", back_populates="user")
     memos = relationship("Memo", back_populates="user")
+
+    # 팔로우/팔로잉 양방향 관계 설정
+    followers = relationship(
+        "User", 
+        secondary="follows",
+        primaryjoin="User.id==Follow.following_id",
+        secondaryjoin="User.id==Follow.follower_id",
+        backref="following_users"
+    )
+    
+    following = relationship(
+        "User", 
+        secondary="follows",
+        primaryjoin="User.id==Follow.follower_id",
+        secondaryjoin="User.id==Follow.following_id",
+        overlaps="following_users"
+    )
 
 # [3] Work 테이블 수정 (관계 추가)
 class Work(Base):
@@ -230,8 +251,11 @@ class LongReviewLike(Base):
 class Follow(Base):
     __tablename__ = "follows"
     
-    # follower_id가 following_id를 팔로우함 (단방향)
+    # follower_id(나)가 following_id(타인)를 팔로우함
     follower_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     following_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    
+    # ▼▼▼ [NEW: 찐팬 알림 스위치] ▼▼▼
+    is_alarm_on = Column(Boolean, default=False) 
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())

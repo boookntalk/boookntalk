@@ -1,28 +1,31 @@
-// src/components/book-detail/BookDetailClient.tsx
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
+// ▼▼▼ [수정 1] URL의 꼬리표(?tab=...)를 읽기 위해 useSearchParams 추가 ▼▼▼
+import { useRouter, useSearchParams } from 'next/navigation'; 
 import Container from '@/components/layout/Container';
 import BookTopInfo from './BookTopInfo';
 import RecordFragments from './MemoryLayer'; 
 import ShortReviewSection from './ShortReviewSection'; 
-// ▼▼▼ [수정 1] 긴줄평 컴포넌트의 위치를 현재 폴더(./)로 올바르게 변경했습니다 ▼▼▼
 import LongReviewSection from './LongReviewSection';
 import MemoWriteModal from './MemoWriteModal'; 
 import ShortReviewWriteModal from './ShortReviewWriteModal'; 
-import { ArrowLeft, Quote, PenTool, MessageSquare } from 'lucide-react'; // BookOpen 아이콘은 이제 안 쓰므로 제거해도 무방합니다
+import { ArrowLeft, Quote, PenTool, MessageSquare } from 'lucide-react'; 
 import { toast } from 'sonner';
 
 export default function BookDetailClient({ initialData, user }: { initialData: any, user: any }) {
     const router = useRouter();
+    const searchParams = useSearchParams(); // 안테나 장착!
+    
     const { record, work, current_edition, my_editions } = initialData;
 
-    const [activeTab, setActiveTab] = useState<'fragments' | 'short-reviews' | 'long-review'>('fragments');
+    // ▼▼▼ [수정 2] 접속하자마자 URL을 확인하고 초기 탭을 결정합니다 ▼▼▼
+    const initialTab = searchParams.get('tab') === 'long_review' ? 'long-review' : 'fragments';
+    const [activeTab, setActiveTab] = useState<'fragments' | 'short-reviews' | 'long-review'>(initialTab);
+    
     const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
     const [isShortReviewModalOpen, setIsShortReviewModalOpen] = useState(false);
     
-    // 한줄평 '수정 모드'를 위한 상태값 관리
     const [shortReviewMode, setShortReviewMode] = useState<'create' | 'edit'>('create');
     const [editReviewId, setEditReviewId] = useState<number | null>(null);
     const [editInitialContent, setEditInitialContent] = useState('');
@@ -37,6 +40,41 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         { id: 'short-reviews', label: `한줄평 ${reviewCount > 0 ? `(${reviewCount})` : ''}` },
         { id: 'long-review', label: '긴줄평' }
     ] as const;
+
+    // URL이 변경될 때 탭을 동기화하는 로직 (강력한 다중 스크롤 보정)
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        
+        if (tab === 'long_review') {
+            setActiveTab('long-review');
+            
+            // ▼▼▼ Next.js의 방해를 이겨내는 '집요한 스크롤' 타이머 ▼▼▼
+            let attempts = 0;
+            const scrollInterval = setInterval(() => {
+                const element = document.getElementById('review-tabs-area');
+                if (element) {
+                    // 상단 고정 헤더(56px) 오프셋 계산
+                    const y = element.getBoundingClientRect().top + window.scrollY - 56;
+                    window.scrollTo({ top: y, behavior: 'instant' });
+                }
+                
+                attempts++;
+                // 0.1초마다 총 10번(1초간) 확인하며 스크롤을 강제로 꽂아넣은 뒤 타이머 종료
+                if (attempts >= 10) { 
+                    clearInterval(scrollInterval);
+                }
+            }, 100);
+
+            // 컴포넌트가 언마운트되거나 탭이 바뀌면 타이머 청소
+            return () => clearInterval(scrollInterval);
+            
+        } else {
+            if (tab === 'short_reviews') setActiveTab('short-reviews');
+            else setActiveTab('fragments');
+            
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        }
+    }, [searchParams]);
 
     const handleSaveMemo = async (data: any) => {
         if (!user) { toast.error("로그인 필요"); return; }
@@ -60,7 +98,6 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         finally { setIsSubmitting(false); }
     };
 
-    // 목록에서 '수정' 버튼을 눌렀을 때
     const handleEditShortReviewClick = (review: any) => {
         setShortReviewMode('edit');
         setEditReviewId(review.id);
@@ -68,7 +105,6 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         setIsShortReviewModalOpen(true);
     };
 
-    // 목록에서 '삭제' 버튼을 눌렀을 때
     const handleDeleteShortReviewClick = async (reviewId: number) => {
         if (!confirm("정말 이 한줄평을 삭제하시겠습니까?")) return;
         try {
@@ -80,7 +116,6 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         } catch (e) { toast.error('서버 오류'); }
     };
 
-    // 작성 모드(create)와 수정 모드(edit)를 구분하여 저장합니다
     const handleSaveShortReview = async (data: { content: string }) => {
         if (!user) { toast.error("로그인 필요"); return; }
         setIsSubmitting(true);
@@ -117,13 +152,12 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
             setEditReviewId(null);
             setIsShortReviewModalOpen(true);
         }
-        // [수정 2] 긴줄평 탭일 때는 FAB 자체가 안 보이므로 관련 클릭 로직도 깔끔하게 제거했습니다.
     };
 
     return (
         <div className="min-h-screen bg-[#F5F5F7] pb-32 relative"> 
             <div className="bg-white sticky top-0 z-[40]">
-                <Container className="pt-6 pb-2 max-w-[1440px]">
+                <Container className="pt-5 pb-2 max-w-[1440px]">
                     <button onClick={() => router.back()} className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-[#1d1d1f] shadow-sm transition-all group">
                         <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
                     </button>
@@ -132,7 +166,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
 
             <BookTopInfo record={record} edition={current_edition} work={work} myEditions={my_editions} onRecordChange={(id) => router.push(`/library/${id}`)} />
 
-            <div className="sticky top-[56px] z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+            <div id="review-tabs-area" className="sticky top-[56px] z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <Container className="max-w-[1200px]">
                     <div className="flex items-center gap-8 overflow-x-auto scrollbar-hide pt-4">
                         {tabs.map(tab => (
@@ -148,16 +182,9 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
             </div>
 
             <Container className="max-w-[1200px] min-h-[600px] pb-10 mt-8">
-                
-                {/* [1] 독서 노트 탭 */}
                 <div className={activeTab === 'fragments' ? 'block animate-in fade-in duration-300' : 'hidden'}>
                     {record ? (
-                        <RecordFragments 
-                            recordId={record.id} 
-                            user={user} 
-                            refreshTrigger={refreshTrigger}
-                            onDataLoaded={setMemoCount}
-                        />
+                        <RecordFragments recordId={record.id} user={user} refreshTrigger={refreshTrigger} onDataLoaded={setMemoCount} />
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg border border-gray-200 border-dashed">
                              <Quote size={40} className="text-gray-300 mb-4" />
@@ -167,32 +194,17 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                     )}
                 </div>
 
-                {/* [2] 한줄평 탭 */}
                 <div className={activeTab === 'short-reviews' ? 'block animate-in fade-in duration-300' : 'hidden'}>
-                    <ShortReviewSection 
-                        key={refreshTrigger}
-                        editionId={current_edition.id} 
-                        onDataLoaded={setReviewCount}
-                        currentUser={user}
-                        onEditClick={handleEditShortReviewClick}
-                        onDeleteClick={handleDeleteShortReviewClick}
-                    />
+                    <ShortReviewSection key={refreshTrigger} editionId={current_edition.id} onDataLoaded={setReviewCount} currentUser={user} onEditClick={handleEditShortReviewClick} onDeleteClick={handleDeleteShortReviewClick} />
                 </div>
                 
-                {/* [3] 긴줄평 탭 */}
                 <div className={activeTab === 'long-review' ? 'block animate-in fade-in duration-300' : 'hidden'}>
-                    {/* ▼▼▼ [수정 3] LongReviewSection에 필요한 DB의 record id와 user 정보를 넘겨줍니다 ▼▼▼ */}
                     <LongReviewSection recordId={record?.id} user={user} />
                 </div>
-
             </Container>
 
-            {/* ▼▼▼ [수정 4] activeTab이 'long-review'가 아닐 때만 FAB 버튼을 화면에 렌더링합니다 ▼▼▼ */}
             {activeTab !== 'long-review' && (
-                <button 
-                    onClick={handleFabClick} 
-                    className="fixed bottom-8 right-6 md:right-12 w-14 h-14 bg-[#FFEA00] hover:bg-[#F2D100] text-[#1d1d1f] rounded-full shadow-[0_8px_16px_rgba(255,234,0,0.25)] flex items-center justify-center transition-all duration-300 hover:scale-105 hover:-translate-y-1 z-40 animate-in zoom-in"
-                >
+                <button onClick={handleFabClick} className="fixed bottom-8 right-6 md:right-12 w-14 h-14 bg-[#FFEA00] hover:bg-[#F2D100] text-[#1d1d1f] rounded-full shadow-[0_8px_16px_rgba(255,234,0,0.25)] flex items-center justify-center transition-all duration-300 hover:scale-105 hover:-translate-y-1 z-40 animate-in zoom-in">
                     {activeTab === 'fragments' && <PenTool size={24} className="animate-in zoom-in duration-200" />}
                     {activeTab === 'short-reviews' && <MessageSquare size={24} className="animate-in zoom-in duration-200" />}
                 </button>
@@ -200,15 +212,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
             
             <MemoWriteModal isOpen={isMemoModalOpen} onClose={() => setIsMemoModalOpen(false)} bookTitle={work?.title || ""} onSubmit={handleSaveMemo} isSubmitting={isSubmitting} />
 
-            <ShortReviewWriteModal 
-                isOpen={isShortReviewModalOpen} 
-                onClose={() => setIsShortReviewModalOpen(false)} 
-                bookTitle={work?.title || ""} 
-                onSubmit={handleSaveShortReview} 
-                isSubmitting={isSubmitting} 
-                mode={shortReviewMode}
-                initialContent={editInitialContent}
-            />
+            <ShortReviewWriteModal isOpen={isShortReviewModalOpen} onClose={() => setIsShortReviewModalOpen(false)} bookTitle={work?.title || ""} onSubmit={handleSaveShortReview} isSubmitting={isSubmitting} mode={shortReviewMode} initialContent={editInitialContent} />
 
         </div>
     );

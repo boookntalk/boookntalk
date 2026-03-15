@@ -116,56 +116,50 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
     return (
         <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
             
-            {/* 상단 고정 영역 (경로 + 검색창 + 탭 메뉴) */}
-            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-8 border-b border-gray-200 sticky top-0">
-                <Container>
-                    {/* 상단: 경로 및 검색 */}
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
-                            <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors">
-                                <Home size={15} /> <span>홈</span>
-                            </Link>
-                            <ChevronRight size={14} className="opacity-50" />
-                            <span className="text-[#1d1d1f]">내 서재</span>
-                        </div>
-
-                        <div className="relative">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                            <input 
-                                type="text" 
-                                placeholder="책, 저자 검색..." 
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-full text-[14px] w-56 focus:w-72 transition-all duration-300 outline-none focus:border-[#0066cc] focus:ring-1 focus:ring-[#0066cc] shadow-sm"
-                            />
-                        </div>
+            {/* ▼▼▼ [수정 핵심 1] Container 제거 및 1cm 규격, pt-6으로 상하단 압축 ▼▼▼ */}
+            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0 transition-all">
+                
+                {/* 상단: 경로 및 검색 (mb-6 -> mb-4 로 간격 축소) */}
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
+                        <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors">
+                            <Home size={15} /> <span>홈</span>
+                        </Link>
+                        <ChevronRight size={14} className="opacity-50" />
+                        <span className="text-[#1d1d1f]">내 서재</span>
                     </div>
 
-                    {/* 하단: 서재 탭 메뉴 */}
-                    <div className="flex items-center gap-8 overflow-x-auto scrollbar-hide -mb-[1px]">
-                        {menuItems.map((item) => (
-                            <button
-                                key={item.code}
-                                onClick={() => setActiveTab(item.code)}
-                                className={`pb-3 text-[15px] font-bold transition-all whitespace-nowrap border-b-2 ${
-                                    activeTab === item.code 
-                                    ? 'text-[#0066cc] border-[#0066cc]' 
-                                    : 'text-gray-400 border-transparent hover:text-[#1d1d1f]'
-                                }`}
-                            >
-                                {item.label}
-                                <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded-full ${activeTab === item.code ? 'bg-blue-50 text-[#0066cc]' : 'bg-gray-100 text-gray-400'}`}>
-                                    {item.code === 'ALL' ? books.length : books.filter(b => b.status === item.code).length}
-                                </span>
-                            </button>
-                        ))}
+                    <div className="relative">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input 
+                            type="text" placeholder="책, 저자 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-full text-[14px] w-56 focus:w-72 transition-all duration-300 outline-none focus:border-[#0066cc] focus:ring-1 focus:ring-[#0066cc] shadow-sm"
+                        />
                     </div>
-                </Container>
+                </div>
+
+                {/* 하단: 서재 탭 메뉴 (pb-3 -> pb-2 로 탭 높이 축소) */}
+                <div className="flex items-center gap-6 overflow-x-auto scrollbar-hide -mb-[1px]">
+                    {menuItems.map((item) => (
+                        <button
+                            key={item.code} onClick={() => setActiveTab(item.code)}
+                            className={`pb-2 text-[15px] font-bold transition-all whitespace-nowrap border-b-2 ${
+                                activeTab === item.code ? 'text-[#0066cc] border-[#0066cc]' : 'text-gray-400 border-transparent hover:text-[#1d1d1f]'
+                            }`}
+                        >
+                            {item.label}
+                            <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded-full ${activeTab === item.code ? 'bg-blue-50 text-[#0066cc]' : 'bg-gray-100 text-gray-400'}`}>
+                                {item.code === 'ALL' ? books.length : books.filter(b => b.status === item.code).length}
+                            </span>
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* 본문: 카드 리스트 영역 */}
             <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <Container className="pt-8 pb-32">
+                {/* ▼▼▼ [수정 핵심 2] Container 제거 및 1cm 규격, pt-6으로 상단 여백 압축 ▼▼▼ */}
+                <div className="p-[var(--spacing-1cm,32px)] pt-6 pb-32">
                     <main className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
                         {filteredBooks.map((book, index) => (
                             <div 
@@ -192,7 +186,6 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                     </DropdownMenu>
                                 </div>
 
-                                {/* 2. 책 표지: 기존 rounded-xl을 rounded-sm (또는 rounded-none)으로 변경 */}
                                 <div className="relative aspect-[1/1.4] w-[80%] mx-auto rounded-sm overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.08)] mb-3 bg-gray-50 flex items-center justify-center border border-gray-100 transition-all duration-300 group-hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)]">
                                     {book.cover ? (
                                         <Image src={book.cover} alt={book.title} fill sizes="(max-width: 768px) 50vw, 20vw" className="object-cover group-hover:scale-105 transition-transform duration-500" priority={index < 10} />
@@ -201,32 +194,24 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                     )}
                                 </div>
 
-                                {/* 책 정보 */}
                                 <div className="flex flex-col flex-1">
                                     <h3 className="font-bold text-[#1d1d1f] text-[14px] line-clamp-1 mb-1 group-hover:text-[#0066cc] transition-colors">{book.title}</h3>
                                     <p className="text-[11px] text-gray-400 line-clamp-1 mb-3">{formatCardAuthor(book.author)}</p>
                                     
                                     <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-50">
-                                        {/* 좌측: 독서 상태 뱃지 */}
                                         <BadgeByStatus status={book.status} /> 
                                         
-                                        {/* 우측: 아이콘 모음 (간격 살짝 넓힘 gap-2) */}
                                         <div className="flex items-center gap-2">
-                                            {/* 1. 한줄평 아이콘 */}
                                             {book.short_review && (
                                                 <span title="한줄평 작성됨" className="flex items-center">
                                                     <MessageSquare size={12} className="text-[#0066cc]/50" />
                                                 </span>
                                             )}
-
-                                            {/* 2. 긴줄평 아이콘 (한줄평과 별점 사이로 이동) */}
                                             {book.has_long_review && (
                                                 <span title="긴줄평 작성됨" className="flex items-center">
                                                     <PenTool size={12} className="text-emerald-500/80" />
                                                 </span>
                                             )}
-                                            
-                                            {/* 3. 별점 */}
                                             {book.rating > 0 && (
                                                 <div className="flex items-center gap-0.5 text-amber-400" title="별점">
                                                     <Star size={10} fill="currentColor" />
@@ -240,7 +225,6 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                         ))}
                     </main>
 
-                    {/* 결과 없음 처리 */}
                     {filteredBooks.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-32 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200 mt-4">
                             <BookOpen size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-[#0066cc]" />
@@ -249,19 +233,14 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                             </p>
                         </div>
                     )}
-                </Container>
+                </div>
             </div>
             
-            {/* 플로팅 액션 버튼 (새 책 추가) */}
-            <button 
-                onClick={() => setIsAddBookOpen(true)}
-                title="직접 도서 검색하여 추가하기"
-                className="fixed bottom-8 right-8 w-14 h-14 bg-[#1d1d1f] hover:bg-[#0066cc] text-white rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.2)] flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 z-40"
-            >
+            {/* 플로팅 액션 버튼 및 모달 영역은 그대로 유지됩니다. */}
+            <button onClick={() => setIsAddBookOpen(true)} className="fixed bottom-8 right-8 w-14 h-14 bg-[#1d1d1f] hover:bg-[#0066cc] text-white rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.2)] flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 z-40">
                 <Plus size={24} />
             </button>
 
-            {/* 모달 영역 */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden rounded-[28px] border-none shadow-2xl">
                     {selectedBook && (
@@ -282,14 +261,7 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
             </Dialog>
 
             {isAddBookOpen && (
-                <AddBookModal 
-                    isOpen={isAddBookOpen} 
-                    onClose={() => {
-                        setIsAddBookOpen(false);
-                        fetchLibrarySilently(); 
-                    }}
-                    userEmail={user?.email} 
-                />
+                <AddBookModal isOpen={isAddBookOpen} onClose={() => { setIsAddBookOpen(false); fetchLibrarySilently(); }} userEmail={user?.email} />
             )}
         </div>
     );

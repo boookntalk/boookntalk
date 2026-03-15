@@ -50,7 +50,7 @@ export function LibrarySidebar() {
             className="!fixed top-14 left-0 h-[calc(100vh-3.5rem)] border-r border-gray-100 bg-white z-40 shadow-sm" 
             collapsible="none"
         >
-            <SidebarContent className="px-4 pb-2 pt-8">
+            <SidebarContent className="px-4 pb-2 pt-5">
                 <SidebarGroup>
                     <SidebarMenu className="gap-1.5">
                         {navItems.map((item, index) => {

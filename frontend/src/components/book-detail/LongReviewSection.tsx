@@ -1,22 +1,28 @@
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { PenTool, Eye, Trash2, Loader2, Globe, Lock, AlertTriangle } from 'lucide-react'; // ▼ [NEW] 필요한 아이콘 추가 임포트
+import { PenTool, Eye, Trash2, Loader2, Globe, Lock, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { Checkbox } from "@/components/ui/checkbox"; // ▼ [NEW] 체크박스 컴포넌트 임포트
+import { Checkbox } from "@/components/ui/checkbox";
 
-// [핵심 1] Tiptap 대신 SunEditor CSS 로드
+// [핵심 1] SunEditor CSS 로드
 import 'suneditor/dist/css/suneditor.min.css';
 
 // [핵심 2] Next.js SSR 환경 에러 방지를 위한 동적 렌더링 세팅
 const SunEditor = dynamic(() => import('suneditor-react'), {
     ssr: false,
-    loading: () => <div className="h-[400px] flex items-center justify-center bg-gray-50 rounded-xl"><Loader2 className="animate-spin text-gray-400" /></div>,
+    loading: () => (
+        <div className="h-[400px] flex items-center justify-center bg-gray-50 rounded-xl">
+            <Loader2 className="animate-spin text-gray-400" />
+        </div>
+    ),
 });
 
 // ============================================================================
-// [1] 최상위 래퍼 컴포넌트: DB에서 '진짜 닉네임'을 가져오는 역할만 전담
+// [1] 최상위 래퍼 컴포넌트: DB에서 '진짜 닉네임'을 가져오는 역할 전담
 // ============================================================================
-export default function LongReviewSection({ recordId, user }: { recordId?: number; user?: any }) {
+export default function LongReviewSection({ recordId, user }: { recordId?: number | string; user?: any }) {
     const [realNickname, setRealNickname] = useState<string | null>(null);
 
     useEffect(() => {
@@ -44,7 +50,7 @@ export default function LongReviewSection({ recordId, user }: { recordId?: numbe
         return <div className="w-full h-[300px] bg-white rounded-[24px] shadow-sm border border-gray-100 mt-[var(--spacing-1cm,32px)] animate-pulse" />;
     }
 
-    return <LongReviewEditor recordId={recordId} user={user} realNickname={realNickname} />;
+    return <LongReviewEditor recordId={Number(recordId)} user={user} realNickname={realNickname} />;
 }
 
 // ============================================================================
@@ -62,8 +68,7 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
     const [hasReview, setHasReview] = useState(false); 
     const [isLoading, setIsLoading] = useState(false);
 
-    // ▼▼▼ [NEW] 공개/비공개 및 스포일러 상태 관리 ▼▼▼
-    // DB의 is_draft(임시저장)와 반대 개념으로 isPublic(공개) 사용
+    // 공개/비공개 및 스포일러 상태 관리
     const [isPublic, setIsPublic] = useState(false); 
     const [isSpoiler, setIsSpoiler] = useState(false);
 
@@ -72,6 +77,7 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
     // --- [데이터 Fetch] ---
     useEffect(() => {
         if (!recordId || isNaN(recordId)) return;
+        
         const fetchLongReview = async () => {
             setIsLoading(true);
             try {
@@ -85,7 +91,6 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                         setOriginalTitle(data.long_review_title || '');
                         setOriginalContent(data.long_review_content || '');
                         
-                        // ▼▼▼ DB 데이터를 상태에 매핑 ▼▼▼
                         setIsPublic(!data.is_long_review_draft); // draft가 아니면 공개
                         setIsSpoiler(data.is_spoiler || false);
 
@@ -141,7 +146,6 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
         if (!user || !recordId) return;
         setIsLoading(true);
         
-        // isPublic이 true면 draft는 false(발행)
         const isDraft = !isPublic; 
 
         try {
@@ -152,7 +156,7 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                     long_review_title: title,
                     long_review_content: content,
                     is_long_review_draft: isDraft, 
-                    is_spoiler: isSpoiler // ▼▼▼ [NEW] 백엔드로 스포일러 상태 전송
+                    is_spoiler: isSpoiler
                 })
             });
             if (res.ok) {
@@ -162,9 +166,15 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                 setOriginalContent(content);
                 
                 setHasReview(true);
-                setIsEditing(false); // 저장 후 읽기 모드로 전환
+                setIsEditing(false);
+            } else {
+                toast.error('저장에 실패했습니다.');
             }
-        } finally { setIsLoading(false); }
+        } catch (error) {
+            toast.error('서버와의 통신에 실패했습니다.');
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     // --- [삭제 로직] ---
@@ -185,9 +195,11 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                 setIsPublic(false);
                 setIsSpoiler(false);
                 setIsEditing(true);
+            } else {
+                toast.error('삭제에 실패했습니다.');
             }
         } catch (error) {
-            toast.error('삭제에 실패했습니다.');
+            toast.error('서버 오류가 발생했습니다.');
         } finally {
             setIsLoading(false);
         }
@@ -213,9 +225,8 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                 <div className="flex items-center gap-4">
                     {isEditing ? (
                         <>
-                            {/* ▼▼▼ [NEW] 스포일러 & 공개 토글 영역 (에디터 모드일 때만 활성화) ▼▼▼ */}
+                            {/* 스포일러 & 공개 토글 영역 */}
                             <div className="flex items-center gap-4 border-r border-gray-100 pr-4">
-                                {/* 스포일러 체크박스 (공개 상태일 때만 활성화) */}
                                 <div className={`flex items-center gap-1.5 transition-all duration-300 ${!isPublic ? 'opacity-40 grayscale pointer-events-none' : 'opacity-100'}`}>
                                     <Checkbox 
                                         id="long-spoiler-check" 
@@ -231,7 +242,6 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                                     </label>
                                 </div>
 
-                                {/* 공개/비공개 토글 */}
                                 <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setIsPublic(!isPublic)}>
                                     <span className={`flex items-center gap-1 text-[12px] font-bold transition-colors ${isPublic ? 'text-[#0066cc]' : 'text-gray-400'}`}>
                                         {isPublic ? <Globe size={13} /> : <Lock size={13} />}
@@ -246,7 +256,6 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                             <div className="flex items-center gap-1.5">
                                 {hasReview && (
                                     <>
-                                        {/* 취소 버튼 */}
                                         <button onClick={handleCancel} className="px-3 py-1.5 text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors">
                                             취소
                                         </button>
@@ -255,8 +264,8 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                                         </button>
                                     </>
                                 )}
-                                {/* [수정됨] 저장 로직을 일원화하여 저장 버튼 클릭 시 현재 토글 상태대로 저장됨 */}
-                                <button onClick={handleSave} className="px-4 py-1.5 rounded-lg bg-[#1d1d1f] text-white text-[12px] font-bold hover:bg-black shadow-md transition-transform active:scale-95">
+                                <button disabled={isLoading} onClick={handleSave} className="px-4 py-1.5 rounded-lg bg-[#1d1d1f] text-white text-[12px] font-bold hover:bg-black shadow-md transition-transform active:scale-95 disabled:opacity-50">
+                                    {isLoading ? <Loader2 size={14} className="animate-spin inline mr-1" /> : null}
                                     저장하기
                                 </button>
                             </div>
@@ -264,7 +273,6 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
                     ) : (
                         hasReview && (
                             <div className="flex items-center gap-3">
-                                {/* ▼▼▼ 읽기 모드일 때 현재 상태 표시 뱃지 ▼▼▼ */}
                                 <div className="flex items-center gap-2 mr-2">
                                     {isSpoiler && isPublic && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded border border-rose-100 flex items-center gap-1"><AlertTriangle size={10}/> 스포일러</span>}
                                     <span className={`text-[10px] font-bold px-2 py-1 rounded border flex items-center gap-1 ${isPublic ? 'text-[#0066cc] bg-blue-50 border-blue-100' : 'text-gray-500 bg-gray-50 border-gray-200'}`}>
@@ -285,7 +293,7 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
             </div>
 
             {/* 2. 본문 영역 */}
-            <div className="px-8 md:px-12 py-6">
+            <div className="px-8 md:px-12 py-6 min-h-[500px]">
                 {isEditing ? (
                     <div className="suneditor-container">
                         <input 

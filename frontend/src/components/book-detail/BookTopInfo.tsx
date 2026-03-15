@@ -53,9 +53,8 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
 
     return (
         <section className="bg-white border-b border-gray-100 relative">
-            <div className="max-w-[1200px] mx-auto px-8 pt-8 pb-10">
+            <div className="max-w-[1200px] mx-auto px-8 pt-4 pb-10">
                 <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,40px)] items-stretch">
-                    
                     {/* [1. 좌측 영역]: 도서 표지 */}
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
                         <div className="relative aspect-[1/1.45] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100 rounded-xl overflow-hidden group">
