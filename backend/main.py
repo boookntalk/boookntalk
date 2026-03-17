@@ -1329,15 +1329,18 @@ async def get_work_long_reviews(work_id: int, db: Session = Depends(get_db)):
     results = []
     for lr in long_reviews:
         user = lr.record.user
-        
-        # ▼▼▼ [핵심 수정] 정규표현식(re)을 사용해 HTML 태그를 깔끔하게 다 날려버립니다! ▼▼▼
         clean_text = re.sub(r'<[^>]+>', '', lr.content) if lr.content else ""
         
         results.append({
             "id": lr.id,
             "record_id": lr.record_id,
+            
+            # ▼▼▼ [핵심 추가] 이 두 줄이 있어야 프론트엔드에서 내 글 판별과 프로필 이동이 가능합니다! ▼▼▼
+            "user_id": user.id,
+            "user_email": user.email,
+            # ▲▲▲ 추가 완료 ▲▲▲
+            
             "title": lr.title,
-            # 태그가 제거된 순수 텍스트(clean_text)로 150자를 자릅니다.
             "content_preview": clean_text[:150] + "..." if len(clean_text) > 150 else clean_text,
             "user_name": user.nickname or user.email.split('@')[0],
             "user_image": user.profile_image or "",
@@ -1937,40 +1940,54 @@ async def get_square_feeds(user_email: Optional[str] = None, feed_type: str = "a
 # ===================================================================
 # [NEW] 소셜 광장 - 작품(Work) 탭 인기 도서 큐레이션 API
 # ===================================================================
-@app.get("/api/square/works")
-async def get_trending_works(limit: int = 20, db: Session = Depends(get_db)):
-    """
-    BoooknTalk 유저들의 서재(Record)에 가장 많이 담긴 도서를 인기순으로 조회합니다.
-    """
-    # 1. Record 테이블에서 edition_id별 담긴 횟수(added_count)와 평균 별점(avg_rating) 계산
-    stats = db.query(
-        models.Record.edition_id,
-        func.count(models.Record.id).label('added_count'),
-        func.avg(models.Record.rating).label('avg_rating')
-    ).group_by(models.Record.edition_id).subquery()
+from sqlalchemy import func, desc
+# (상단에 func, desc가 이미 import 되어 있다면 이 줄은 무시하셔도 됩니다)
 
-    # 2. 통계 데이터와 Edition(도서), Work(작품) 테이블 조인 후 담긴 횟수 순으로 정렬
-    query = db.query(models.Edition, stats.c.added_count, stats.c.avg_rating)\
-        .join(stats, models.Edition.id == stats.c.edition_id)\
-        .options(joinedload(models.Edition.work))\
-        .order_by(desc(stats.c.added_count))\
-        .limit(limit)
+@app.get("/api/square/works")
+async def get_trending_works(db: Session = Depends(get_db)):
+    """
+    BoooknTalk 유저들의 서재에 담긴 판본들을 작품 단위로 통합합니다.
+    (PostgreSQL 전용 array_agg를 사용해 표지 이미지 배열을 생성합니다.)
+    """
+    stats = db.query(
+        models.Edition.work_id,
+        func.count(models.Record.id).label('added_count'),
+        func.avg(models.Record.rating).label('avg_rating'),
+        # ▼▼▼ [핵심] PostgreSQL 전용! 이 작품에 속한 모든 판본의 표지를 배열로 수집 ▼▼▼
+        func.array_agg(models.Edition.cover_image).label('raw_covers'), 
+        func.max(models.Edition.id).label('rep_edition_id'),
+        func.max(models.Edition.isbn).label('rep_isbn')
+    ).join(models.Record, models.Edition.id == models.Record.edition_id)\
+     .group_by(models.Edition.work_id).subquery()
+
+    query = db.query(
+        models.Work, 
+        stats.c.added_count, 
+        stats.c.avg_rating, 
+        stats.c.raw_covers, 
+        stats.c.rep_edition_id, 
+        stats.c.rep_isbn
+    ).join(stats, models.Work.id == stats.c.work_id)\
+     .order_by(desc(stats.c.added_count))
 
     results = query.all()
     
-    # 3. 프론트엔드가 렌더링하기 편한 형태로 포장
     response_data = []
-    for edition, added_count, avg_rating in results:
-        work = edition.work
+    for work, added_count, avg_rating, raw_covers, rep_edition_id, rep_isbn in results:
+        # 파이썬에서 중복 표지 및 빈 값(None) 제거 후 최대 4장까지만 추출
+        unique_covers = list(set([c for c in raw_covers if c]))[:4]
+        best_cover = unique_covers[0] if unique_covers else None
+
         response_data.append({
-            "work_id": work.id if work else None, # ▼▼▼ [NEW] 422 에러의 진짜 범인! work_id 추가 완료 ▼▼▼
-            "edition_id": edition.id,
-            "isbn": edition.isbn,
-            "title": work.title if work else "제목 없음",
-            "author": work.author if work else "작가 미상",
-            "cover": edition.cover_image,
-            "added_count": added_count, # 서재에 담긴 총 횟수
-            "average_rating": round(avg_rating, 1) if avg_rating else 0.0 # 평균 별점
+            "work_id": work.id,
+            "edition_id": rep_edition_id,
+            "isbn": rep_isbn,
+            "title": work.title,
+            "author": work.author,
+            "cover": best_cover,         # 하위 호환성 유지
+            "covers": unique_covers,     # ▼▼▼ 프론트엔드 콜라주용 배열 데이터! ▼▼▼
+            "added_count": added_count,
+            "average_rating": round(avg_rating, 1) if avg_rating else 0.0
         })
 
     return response_data

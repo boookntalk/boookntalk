@@ -8,10 +8,12 @@ import BookTopInfo from './BookTopInfo';
 import RecordFragments from './MemoryLayer'; 
 import ShortReviewSection from './ShortReviewSection'; 
 import LongReviewSection from './LongReviewSection';
+import LongReviewListSection from './LongReviewListSection';
 import MemoWriteModal from './MemoWriteModal'; 
 import ShortReviewWriteModal from './ShortReviewWriteModal'; 
-import { ArrowLeft, Quote, PenTool, MessageSquare } from 'lucide-react'; 
+import { ArrowLeft, Quote, PenTool, MessageSquare, Globe, ArrowRight } from 'lucide-react'; 
 import { toast } from 'sonner';
+import Link from 'next/link'; // Link 컴포넌트도 필요합니다.
 
 export default function BookDetailClient({ initialData, user }: { initialData: any, user: any }) {
     const router = useRouter();
@@ -22,6 +24,8 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
     // ▼▼▼ [수정 2] 접속하자마자 URL을 확인하고 초기 탭을 결정합니다 ▼▼▼
     const initialTab = searchParams.get('tab') === 'long_review' ? 'long-review' : 'fragments';
     const [activeTab, setActiveTab] = useState<'fragments' | 'short-reviews' | 'long-review'>(initialTab);
+
+    const [totalLongReviewCount, setTotalLongReviewCount] = useState(0);
     
     const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
     const [isShortReviewModalOpen, setIsShortReviewModalOpen] = useState(false);
@@ -29,6 +33,8 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
     const [shortReviewMode, setShortReviewMode] = useState<'create' | 'edit'>('create');
     const [editReviewId, setEditReviewId] = useState<number | null>(null);
     const [editInitialContent, setEditInitialContent] = useState('');
+
+    const [longReviewMode, setLongReviewMode] = useState<'community' | 'mine'>('community');
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0); 
@@ -40,6 +46,16 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         { id: 'short-reviews', label: `한줄평 ${reviewCount > 0 ? `(${reviewCount})` : ''}` },
         { id: 'long-review', label: '긴줄평' }
     ] as const;
+
+    // ▼▼▼ [핵심 2] 컴포넌트가 마운트될 때 긴줄평 개수만 살짝 가져옵니다 ▼▼▼
+    useEffect(() => {
+        if (work?.id) {
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/works/${work.id}/long-reviews`)
+                .then(res => res.json())
+                .then(data => setTotalLongReviewCount(data.length || 0))
+                .catch(err => console.error("긴줄평 개수 로드 실패", err));
+        }
+    }, [work?.id]);
 
     // URL이 변경될 때 탭을 동기화하는 로직 (강력한 다중 스크롤 보정)
     useEffect(() => {
@@ -169,14 +185,35 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
             <div id="review-tabs-area" className="sticky top-[56px] z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <Container className="max-w-[1200px]">
                     <div className="flex items-center gap-8 overflow-x-auto scrollbar-hide pt-4">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id} onClick={() => setActiveTab(tab.id as any)}
-                                className={`pb-3 text-[15px] font-bold whitespace-nowrap transition-all border-b-[2px] flex items-center gap-1.5 ${activeTab === tab.id ? 'border-[#1d1d1f] text-[#1d1d1f]' : 'border-transparent text-gray-400 hover:text-[#1d1d1f]'}`}
+                        
+                        {/* 배열을 순회하는 map 함수 시작 */}
+                        {tabs.map((tab) => (
+                            <div 
+                                key={tab.id} 
+                                className={`flex items-center pb-3 border-b-[2px] transition-all ${activeTab === tab.id ? 'border-[#1d1d1f] text-[#1d1d1f]' : 'border-transparent text-gray-400 hover:text-[#1d1d1f]'}`}
                             >
-                                {tab.label}
-                            </button>
+                                {/* 1. 탭 전환 버튼 */}
+                                <button
+                                    onClick={() => setActiveTab(tab.id as any)}
+                                    className="text-[15px] font-bold whitespace-nowrap"
+                                >
+                                    {tab.label}
+                                </button>
+                                
+                                {/* 2. 긴줄평 탭일 때만 옆에 파란색 건수(링크) 표시 */}
+                                {tab.id === 'long-review' && totalLongReviewCount > 0 && (
+                                    <Link 
+                                        href={`/work/${work?.id}?tab=long_review`}
+                                        className="ml-1.5 text-[12px] font-bold text-[#0066cc] hover:text-blue-700 hover:underline flex items-center bg-blue-50 px-1.5 py-0.5 rounded"
+                                        title="광장의 도서 상세 긴줄평으로 이동"
+                                    >
+                                        {totalLongReviewCount}건
+                                    </Link>
+                                )}
+                            </div>
                         ))}
+                        {/* map 함수 끝 */}
+
                     </div>
                 </Container>
             </div>
@@ -198,6 +235,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                     <ShortReviewSection key={refreshTrigger} editionId={current_edition.id} onDataLoaded={setReviewCount} currentUser={user} onEditClick={handleEditShortReviewClick} onDeleteClick={handleDeleteShortReviewClick} />
                 </div>
                 
+                {/* 3. 긴줄평 탭 (광장 배너는 지우고 오직 나의 에디터만 깔끔하게 노출) */}
                 <div className={activeTab === 'long-review' ? 'block animate-in fade-in duration-300' : 'hidden'}>
                     <LongReviewSection recordId={record?.id} user={user} />
                 </div>

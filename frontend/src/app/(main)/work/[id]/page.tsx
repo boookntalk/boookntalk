@@ -1,27 +1,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useSession, signIn } from "next-auth/react";
 import Container from '@/components/layout/Container';
 import Footer from '@/components/layout/Footer';
 import { Loader2, Star, Users, ChevronLeft, BookCopy, Plus, MessageSquare, PenTool } from 'lucide-react';
 import { toast } from 'sonner';
-import { User } from 'lucide-react'; // 상단 아이콘 import에 User 추가
+import { User } from 'lucide-react'; 
 
 // 방금 만든 판본 선택 모달을 불러옵니다
 import EditionSelectModal from '@/components/work/EditionSelectModal';
+// 완벽한 긴줄평 목록 컴포넌트 불러오기
+import LongReviewListSection from '@/components/book-detail/LongReviewListSection';
 
 export default function WorkHubPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams(); 
     const workId = params.id as string;
     const { data: session, status } = useSession();
 
     const [work, setWork] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('short_reviews');
     
     // 모달 열림/닫힘 상태 관리
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -29,6 +31,10 @@ export default function WorkHubPage() {
     const [shortReviews, setShortReviews] = useState<any[]>([]);
     const [longReviews, setLongReviews] = useState<any[]>([]);
     const [isReviewsLoading, setIsReviewsLoading] = useState(false);
+    
+    // URL 쿼리를 읽어 초기 탭 상태 설정
+    const initialTab = searchParams.get('tab') === 'long_review' ? 'long_reviews' : 'short_reviews';
+    const [activeTab, setActiveTab] = useState(initialTab);
 
     useEffect(() => {
         if (!workId) return;
@@ -40,7 +46,7 @@ export default function WorkHubPage() {
                     const res = await fetch(`http://localhost:8000/api/works/${workId}/short-reviews`);
                     if (res.ok) setShortReviews(await res.json());
                 } else if (activeTab === 'long_reviews') {
-                    const res = await fetch(`http://localhost:8000/api/works/${workId}/long-reviews`);
+                    const res = await fetch(`http://localhost:8000/api/work/${workId}/long-reviews`);
                     if (res.ok) setLongReviews(await res.json());
                 }
             } catch (error) {
@@ -90,15 +96,6 @@ export default function WorkHubPage() {
     return (
         <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col">
             <Container className="pt-[var(--spacing-1cm,32px)] pb-20">
-                
-                {/* 1. 뒤로 가기 */}
-                <button 
-                    onClick={() => router.back()}
-                    className="flex items-center gap-1.5 text-[13px] font-bold text-gray-400 hover:text-[#1d1d1f] transition-colors mb-6"
-                >
-                    <ChevronLeft size={16} /> 광장으로 돌아가기
-                </button>
-
                 {/* 2. 작품 마스터 영역 (상단) */}
                 <div className="bg-white rounded-sm p-[var(--spacing-1cm,32px)] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-10 mb-8 relative overflow-hidden">
                     
@@ -119,7 +116,7 @@ export default function WorkHubPage() {
                         </h1>
                         <p className="text-[16px] text-gray-500 font-medium mb-6">{work.author}</p>
                         
-                        {/* 통합 통계 뱃지 (이전에 수정한 inline-flex 적용 완료) */}
+                        {/* 통합 통계 뱃지 */}
                         <div className="inline-flex items-center gap-6 mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100">
                             <div className="flex flex-col">
                                 <span className="text-[11px] text-gray-400 font-bold mb-1">통합 평점</span>
@@ -150,7 +147,7 @@ export default function WorkHubPage() {
                             {work.description || "이 작품에 대한 상세 소개가 아직 없습니다."}
                         </div>
 
-                        {/* 액션 버튼: 클릭 시 판본 선택 모달 열림 */}
+                        {/* 액션 버튼 */}
                         <div className="mt-auto pt-8">
                             <button 
                                 onClick={() => {
@@ -184,7 +181,7 @@ export default function WorkHubPage() {
                         </button>
                     </div>
 
-                    {/* ▼▼▼ 실제 데이터가 렌더링되는 리스트 영역 ▼▼▼ */}
+                    {/* 실제 데이터가 렌더링되는 리스트 영역 */}
                     {isReviewsLoading ? (
                         <div className="py-20 flex justify-center items-center bg-white rounded-lg border border-gray-100 border-dashed">
                             <Loader2 className="animate-spin text-[#0066cc]" size={32} />
@@ -224,53 +221,13 @@ export default function WorkHubPage() {
                             </div>
                         )
                     ) : (
-                        longReviews.length > 0 ? (
-                            <div className="flex flex-col gap-3">
-                                {longReviews.map(review => (
-                                    <div 
-                                        key={review.id} 
-                                        // ▼▼▼ [핵심] 클릭 시 해당 유저의 서재/서평 읽기 페이지로 이동 (URL 구조는 임시) ▼▼▼
-                                        onClick={() => router.push(`/library/${review.record_id}?tab=long_review`)}
-                                        className="group flex flex-col sm:flex-row sm:items-center justify-between p-5 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-[#0066cc] hover:shadow-md transition-all cursor-pointer"
-                                    >
-                                        <div className="flex-1 min-w-0 pr-4">
-                                            <h3 className="text-[16px] font-bold text-[#1d1d1f] mb-1.5 truncate group-hover:text-[#0066cc] transition-colors">
-                                                {review.title}
-                                            </h3>
-                                            <div className="flex items-center gap-2 text-[13px] text-gray-500">
-                                                <div className="flex items-center gap-1.5 font-medium">
-                                                    {review.user_image ? (
-                                                        <Image src={review.user_image} alt="profile" width={18} height={18} className="rounded-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-[18px] h-[18px] rounded-full bg-gray-200 flex items-center justify-center">
-                                                            <User size={10} className="text-gray-400" />
-                                                        </div>
-                                                    )}
-                                                    <span className="text-[#1d1d1f]">{review.user_name}</span>
-                                                </div>
-                                                <span className="w-[3px] h-[3px] rounded-full bg-gray-300"></span>
-                                                <span>{review.created_at.substring(0, 10)}</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-1.5 mt-3 sm:mt-0 shrink-0 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 group-hover:bg-blue-50/50 transition-colors">
-                                            <Star size={14} fill="#fbbf24" className="text-amber-400" />
-                                            <span className="text-[14px] font-bold text-gray-700">{review.rating}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="py-20 flex flex-col items-center justify-center bg-white rounded-lg border border-gray-100 border-dashed">
-                                <PenTool size={40} strokeWidth={1.5} className="mb-4 text-gray-300" />
-                                <span className="text-gray-400 font-medium text-[14px]">아직 작성된 긴줄평이 없습니다. 깊이 있는 사색을 공유해 보세요!</span>
-                            </div>
-                        )
+                        /* ▼▼▼ [핵심] 기존 코드를 날리고 우리가 만든 컴포넌트로 통째로 교체 ▼▼▼ */
+                        <LongReviewListSection workId={Number(workId)} currentUser={session?.user} />
                     )}
                 </div>
             </Container>
 
-            {/* ▼▼▼ 모달 컴포넌트 마운트 ▼▼▼ */}
+            {/* 모달 컴포넌트 마운트 */}
             <EditionSelectModal 
                 isOpen={isModalOpen} 
                 onClose={() => setIsModalOpen(false)} 
