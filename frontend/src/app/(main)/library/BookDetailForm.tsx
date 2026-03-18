@@ -140,7 +140,8 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
     };
 
     return (
-        <div className="grid gap-6">
+        // ▼▼▼ [수정됨] 최상위 div에 기획자님의 명품 1cm 패딩과 스크롤 영역을 완벽하게 세팅했습니다! ▼▼▼
+        <div className="grid gap-6 p-[var(--spacing-1cm,32px)] max-h-[85vh] overflow-y-auto custom-scrollbar">
             <StarGradientDef />
             
             {/* 1. 상단 책 정보 */}
@@ -156,7 +157,7 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
                     <h3 className="text-xl font-bold text-[#1d1d1f] leading-snug line-clamp-2">{initialData?.title}</h3>
                     <p className="text-sm text-[#86868b] font-medium line-clamp-1">{initialData?.author}</p>
                     
-                    {/* [NEW] 독서 매체 선택 칩 */}
+                    {/* 독서 매체 선택 칩 */}
                     <div className="flex items-center gap-2 mt-2">
                         {[
                             { id: 'PAPER', icon: Book, label: '종이책' },
@@ -210,7 +211,6 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
             </div>
 
             {/* 3. 진행률 & 날짜 (Progressive Disclosure) */}
-            {/* 3. 진행률 & 날짜 (Progressive Disclosure) */}
             {status !== 'wish' && (
                 <div className="bg-gray-50 p-4 rounded-xl grid grid-cols-2 gap-4 items-start animate-in fade-in slide-in-from-top-2 duration-300">
                     
@@ -262,7 +262,7 @@ export default function BookDetailForm({ initialData, onClose, onSaved }: BookDe
                     <div className="flex items-center justify-between">
                         <Label className="text-sm font-semibold">한줄평</Label>
                         
-                        {/* [NEW] 직관적인 스위치형 공개/비공개 토글 */}
+                        {/* 직관적인 스위치형 공개/비공개 토글 */}
                         <div 
                             className="flex items-center gap-2 cursor-pointer group"
                             onClick={() => setIsShortReviewPublic(!isShortReviewPublic)}

@@ -15,10 +15,7 @@ import {
 import BookDetailForm from './BookDetailForm';
 import { Button } from "@/components/ui/button";
 import AddBookModal from '@/components/AddBookModal';
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -157,7 +154,7 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                                 <MoreVertical size={14} className="text-gray-500" />
                                             </Button>
                                         </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-36">
+                                        <DropdownMenuContent align="end" className="w-44">
                                             <DropdownMenuItem onClick={(e) => openEditModal(e, book)}>
                                                 <Edit size={14} className="mr-2" /> 상태 변경
                                             </DropdownMenuItem>
@@ -212,9 +209,14 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
 
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden rounded-[28px] border-none shadow-2xl">
+                    
+                    {/* 접근성 에러를 잠재우는 투명 명찰 (sr-only) */}
+                    <DialogTitle className="sr-only">독서 상태 변경</DialogTitle>
+                    
                     {selectedBook && (
                         <BookDetailForm 
-                            initialData={selectedBook} onClose={() => setIsEditModalOpen(false)} 
+                            initialData={selectedBook} 
+                            onClose={() => setIsEditModalOpen(false)} 
                             onSaved={(updatedData) => {
                                 setBooks(prev => prev.map(book => 
                                     book.library_id === (selectedBook.library_id || selectedBook.id) ? { ...book, ...updatedData } : book
