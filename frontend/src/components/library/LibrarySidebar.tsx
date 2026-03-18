@@ -9,7 +9,12 @@ import {
     MessageSquare, 
     ScrollText, 
     BarChart2, 
-    Globe
+    Globe,
+    BookOpen,
+    Tags,
+    Bookmark,
+    PenTool,
+    PieChart
 } from 'lucide-react';
 import {
     Sidebar,
@@ -23,17 +28,31 @@ import {
     SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 
+// ▼▼▼ [핵심] 기획자님의 완벽한 3단 구조 UX가 반영된 메뉴 배열 ▼▼▼
 const navItems = [
-    { title: "내 서재", href: "/library", icon: Library },
+    {
+        title: "내 서재", icon: Library,
+        subItems: [
+            { title: '도서', href: '/library', icon: BookOpen },
+            { title: '나의 태그', href: '/library/tags', icon: Tags },
+            { title: '읽고 싶은 도서', href: '/library/wish', icon: Bookmark }
+        ]
+    },
     {
         title: "나의 기록", icon: Edit3,
         subItems: [
-            { title: '나의 한줄평', href: '/my-records/short-reviews', icon: MessageSquare },
-            { title: '나의 메모', href: '/my-records/memos', icon: ScrollText },
+            { title: '독서노트', href: '/my-records/memos', icon: ScrollText },
+            { title: '한줄평', href: '/my-records/short-reviews', icon: MessageSquare },
+            { title: '긴줄평', href: '/my-records/long-reviews', icon: PenTool },
         ]
     },
-    { title: "독서 통계", href: "/statistics", icon: BarChart2 },
-    { title: "사색 라운지", href: "/community", icon: Globe }
+    {
+        title: "인사이트", icon: BarChart2,
+        subItems: [
+            { title: '독서 통계', href: '/statistics', icon: PieChart },
+        ]
+    },
+    { title: "사색 라운지", href: "/community", icon: Globe } // 글로벌 메뉴 유지
 ];
 
 export function LibrarySidebar() {
@@ -69,7 +88,6 @@ export function LibrarySidebar() {
                                                  const isSubActive = isActiveRoute(subItem.href);
                                                  return (
                                                     <SidebarMenuSubItem key={subIndex}>
-                                                        {/* [수정 1] passHref, legacyBehavior 제거 및 asChild 내부에 Link 배치 */}
                                                         <SidebarMenuSubButton
                                                             asChild
                                                             isActive={isSubActive}
@@ -91,13 +109,11 @@ export function LibrarySidebar() {
                             const isSingleActive = isActiveRoute(item.href || '');
                             return (
                                 <SidebarMenuItem key={index}>
-                                    {/* [수정 2] SidebarMenuButton을 최상위 부모로 두고 asChild 속성 활용 */}
                                     <SidebarMenuButton 
                                         asChild
                                         isActive={isSingleActive}
                                         className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold text-[#1d1d1f] bg-transparent hover:bg-gray-50 transition-colors rounded-xl data-[active=true]:text-[#0066cc] data-[active=true]:bg-blue-50"
                                     >
-                                        {/* Link가 a 태그 역할을 수행하므로 불필요한 a 태그를 삭제했습니다. */}
                                         <Link href={item.href || '#'}>
                                             <item.icon className={`h-5 w-5 ${isSingleActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
                                             <span>{item.title}</span>

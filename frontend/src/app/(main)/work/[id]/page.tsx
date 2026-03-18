@@ -8,7 +8,8 @@ import Container from '@/components/layout/Container';
 import Footer from '@/components/layout/Footer';
 import { Loader2, Star, Users, ChevronLeft, BookCopy, Plus, MessageSquare, PenTool } from 'lucide-react';
 import { toast } from 'sonner';
-import { User } from 'lucide-react'; 
+import { User } from 'lucide-react';
+import { formatDetailAuthor } from '@/utils/formatters';
 
 // 방금 만든 판본 선택 모달을 불러옵니다
 import EditionSelectModal from '@/components/work/EditionSelectModal';
@@ -114,7 +115,9 @@ export default function WorkHubPage() {
                         <h1 className="text-[28px] md:text-[36px] font-black text-[#1d1d1f] leading-tight tracking-tight mb-2">
                             {work.title}
                         </h1>
-                        <p className="text-[16px] text-gray-500 font-medium mb-6">{work.author}</p>
+                        <p className="text-[16px] text-gray-500 font-medium mb-6">
+                            {formatDetailAuthor(work.author)}
+                        </p>
                         
                         {/* 통합 통계 뱃지 */}
                         <div className="inline-flex items-center gap-6 mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100">

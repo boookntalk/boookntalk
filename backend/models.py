@@ -59,7 +59,7 @@ class User(Base):
         secondary="follows",
         primaryjoin="User.id==Follow.following_id",
         secondaryjoin="User.id==Follow.follower_id",
-        backref="following_users"
+        back_populates="following" # backref 대신 명시적 연결
     )
     
     following = relationship(
@@ -67,7 +67,8 @@ class User(Base):
         secondary="follows",
         primaryjoin="User.id==Follow.follower_id",
         secondaryjoin="User.id==Follow.following_id",
-        overlaps="following_users"
+        back_populates="followers", # 서로 마주보게 연결
+        overlaps="followers"        # 겹치는 부분을 SQLAlchemy에게 인지시킴
     )
 
 # [3] Work 테이블 수정 (관계 추가)

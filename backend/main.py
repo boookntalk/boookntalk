@@ -16,6 +16,8 @@ from routers import home, memos, editions, library
 from dotenv import load_dotenv
 from collections import defaultdict
 
+from utils.author_parser import parse_author_string
+
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 
 # ==========================================
@@ -280,8 +282,6 @@ async def search_books_by_keyword(
         "display": len(results),
         "items": results
     }
-    
-# main.py 내부의 search_external_books 함수 교체
 
 @app.get("/api/books/search/{isbn}")
 async def search_external_books(isbn: str, extra: Optional[str] = None, db: Session = Depends(get_db)):
@@ -293,12 +293,12 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
     
     clean_isbn = isbn.replace("-", "").strip()
     
-    # --- [NEW] 1. 우리 DB(캐시) 먼저 확인 ---
+    # --- 1. 우리 DB(캐시) 먼저 확인 ---
     existing_edition = db.query(models.Edition).filter(
         (models.Edition.isbn == clean_isbn) | (models.Edition.isbn10 == clean_isbn)
     ).first()
 
-    # 🚨 [핵심 수정] DB에 책이 존재하고, '커버 이미지'도 온전히 있을 때만 캐시를 반환합니다.
+    # DB에 책이 존재하고, '커버 이미지'도 온전히 있을 때만 캐시를 반환합니다.
     if existing_edition and existing_edition.cover_image:
         work = existing_edition.work
         print(f"⚡ DB 캐시 적중 (완벽한 데이터): {work.title}") 
@@ -313,8 +313,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             "publisher": existing_edition.publisher,
             "pubDate": existing_edition.publish_date.strftime("%Y%m%d") if existing_edition.publish_date else "",
             "categoryName": existing_edition.kdc_code or work.category or "미분류",
-            "cover": existing_edition.cover_image, # 온전한 이미지
-            # ... (나머지 리턴 항목들은 기존과 동일하게 유지) ...
+            "cover": existing_edition.cover_image,
             "description": existing_edition.description or work.description or "",
             "pageCount": existing_edition.page_count or 0,
             "isbn": existing_edition.isbn,
@@ -327,16 +326,11 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             "first_discoverer": discoverer_name
         }
     elif existing_edition and not existing_edition.cover_image:
-        # DB에 책은 있지만 커버가 없는 경우
         print(f"⚠️ DB 캐시 적중했으나 커버 이미지 누락! 외부 API로 보완합니다: {existing_edition.work.title}")
-        # 여기서 return 하지 않고 넘어가면, 아래에 있는 네이버/국립중앙도서관 API 호출 로직이 실행됩니다!
     
-    # --- 외부 API 호출 준비 ---
+    # --- 2. 외부 API 호출 준비 ---
     async with httpx.AsyncClient() as client:
-        # 1. 국립중앙도서관 서지정보 API
         nlk_url = f"https://www.nl.go.kr/seoji/SearchApi.do?cert_key={NLK_API_KEY}&result_style=json&page_no=1&page_size=10&isbn={isbn}"
-        
-        # 2. 네이버 도서 검색 API
         naver_url = f"https://openapi.naver.com/v1/search/book_adv.json?d_isbn={isbn}"
         naver_headers = {
             "X-Naver-Client-Id": NAVER_CLIENT_ID or "",
@@ -349,7 +343,6 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             client.get(naver_url, headers=naver_headers, timeout=5.0),
             return_exceptions=True
         )
-        # 🚨 [디버깅 로그 추가] 네이버 API 상태 집중 확인 🚨
         print(f"--- 🔍 ISBN({isbn}) 검색 로그 ---")
 
         naver_data = {}
@@ -361,42 +354,60 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
                 naver_data = naver_res.json()
                 print("✅ 네이버 도서 검색 성공 (데이터 수신됨)")
             else:
-                print(f"❌ 네이버 API 에러 발생: {naver_res.text}") # 👈 여기서 원인이 밝혀집니다!
+                print(f"❌ 네이버 API 에러 발생: {naver_res.text}") 
 
         nlk_data = {}
         if not isinstance(nlk_res, Exception) and nlk_res.status_code == 200:
             nlk_data = nlk_res.json()
 
-        # 데이터 추출
         nlk_item = nlk_data.get('docs', [{}])[0] if nlk_data.get('docs') else {}
         naver_items = naver_data.get('items', [])
         naver_item = naver_items[0] if naver_items else {}
 
         # 제목 확인 (검색 실패 여부 판단)
-        title = nlk_item.get('TITLE') or naver_item.get('title')
-        if not title:
-            # 둘 다 없으면 404
+        raw_title = nlk_item.get('TITLE') or naver_item.get('title')
+        if not raw_title:
             raise HTTPException(status_code=404, detail="도서 정보를 찾을 수 없습니다.")
 
-        # [핵심 수정] 이미지 주소 찾기 (네이버 > 국립중앙도서관 순서로 확인)
+        # ▼▼▼ [NEW] 다권본 및 세트 도서 완벽 분리를 위한 제목 가공 엔진 ▼▼▼
+        # 국립중앙도서관의 '권차(VOL)' 데이터를 적극 활용합니다.
+        vol = nlk_item.get('VOL') or ""
+        clean_title = raw_title.strip()
+
+        if vol:
+            vol_str = str(vol).strip()
+            # 숫자로만 되어있으면 직관성을 위해 '권'을 붙여줌 (예: '1' -> '1권')
+            if vol_str.isdigit():
+                vol_str = f"{vol_str}권"
+
+            # 기존 제목에 해당 권수 단어가 명시되어 있지 않다면 강제로 꼬리표 부착
+            if vol_str not in clean_title:
+                clean_title = f"{clean_title} {vol_str}"
+
+        # 세트/전집 처리 (제목에 명시되어 있다면 깔끔하게 [세트] 태그로 포맷팅)
+        if "세트" in clean_title or "전집" in clean_title or "전권" in clean_title:
+            # 기존 지저분한 세트 단어를 지우고 앞에 [세트]를 통일감 있게 붙임
+            clean_title = clean_title.replace("세트", "").replace("전집", "").replace("()", "").strip()
+            if not clean_title.startswith("[세트]"):
+                clean_title = f"[세트] {clean_title}"
+
+        final_title = clean_title.strip()
+        # ▲▲▲ [NEW] 가공 엔진 끝 ▲▲▲
+
         cover = ""
-        # 1순위: 네이버 이미지 (화질이 더 좋을 확률 높음)
         if naver_item.get('image'):
             cover = naver_item.get('image')
-        # 2순위: 국립중앙도서관 이미지 (필드명이 다양할 수 있음)
         elif nlk_item.get('IMAGE_URL'):
              cover = nlk_item.get('IMAGE_URL')
-        elif nlk_item.get('TITLE_URL'): # 가끔 여기에 이미지가 있기도 함
+        elif nlk_item.get('TITLE_URL'): 
              cover = nlk_item.get('TITLE_URL')
         
         print(f"🖼️ 최종 추출된 커버 이미지 URL: '{cover}'\n--------------------------")
         
-        # 나머지 데이터 매핑
         author = nlk_item.get('AUTHOR') or naver_item.get('author') or "저자 미상"
         publisher = nlk_item.get('PUBLISHER') or naver_item.get('publisher') or "출판사 미상"
         pubDate = nlk_item.get('PUBLISH_PREDATE') or naver_item.get('pubdate') or ""
         
-        # 페이지 수 파싱
         page_raw = nlk_item.get('PAGE') or ""
         page_count = 0
         if page_raw:
@@ -405,12 +416,12 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             if nums: page_count = int(nums[0])
 
         return {
-            "title": title,
+            "title": final_title, # 👈 가공된 완벽한 제목 전달!
             "author": author,
             "publisher": publisher,
             "pubDate": pubDate,
             "categoryName": nlk_item.get('KDC') or "", 
-            "cover": cover, # 👈 여기가 가장 중요합니다!
+            "cover": cover, 
             "description": naver_item.get('description') or "",
             "pageCount": page_count,
             "isbn": isbn,
@@ -929,6 +940,80 @@ async def read_user_records(
         response_data.append(book_info)
 
     return response_data
+
+@app.get("/api/users/{user_email}/wish")
+async def get_my_wishlist(user_email: str, db: Session = Depends(get_db)):
+    """[내 서재 - 읽고 싶은 도서] 전용 API"""
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    records = db.query(models.Record).options(
+        joinedload(models.Record.edition).joinedload(models.Edition.work)
+    ).filter(
+        models.Record.user_id == user.id,
+        models.Record.status == "WISH"
+    ).order_by(models.Record.added_at.desc()).all()
+
+    results = []
+    for r in records:
+        if not r.edition or not r.edition.work: continue
+        work = r.edition.work
+        results.append({
+            "library_id": r.id,
+            "id": r.edition.id,
+            "title": work.title,
+            "author": work.author,
+            "cover": r.edition.cover_image,
+            "status": r.status,
+            "added_at": r.added_at.isoformat() if r.added_at else None,
+            "isbn": r.edition.isbn
+        })
+    return results
+
+@app.get("/api/users/{user_email}/tags")
+async def get_records_by_tags(user_email: str, db: Session = Depends(get_db)):
+    """[내 서재 - 나만의 태그] 태그별 도서 모아보기 API"""
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    records = db.query(models.Record).options(
+        joinedload(models.Record.edition).joinedload(models.Edition.work)
+    ).filter(models.Record.user_id == user.id).all()
+
+    if not records:
+        return []
+
+    record_ids = [r.id for r in records]
+    record_dict = {r.id: r for r in records}
+
+    record_tags = db.query(models.RecordTag.record_id, models.Tag.name)\
+        .join(models.Tag, models.RecordTag.tag_id == models.Tag.id)\
+        .filter(models.RecordTag.record_id.in_(record_ids)).all()
+
+    tag_groups = defaultdict(list)
+    for rec_id, tag_name in record_tags:
+        r = record_dict.get(rec_id)
+        if r and r.edition and r.edition.work:
+            tag_groups[tag_name].append({
+                "library_id": r.id,
+                "title": r.edition.work.title,
+                "author": r.edition.work.author,
+                "cover": r.edition.cover_image,
+                "status": r.status
+            })
+
+    results = []
+    for tag_name, books in tag_groups.items():
+        results.append({
+            "tag_name": tag_name,
+            "count": len(books),
+            "books": books
+        })
+    results.sort(key=lambda x: x["count"], reverse=True)
+    
+    return results
 
 @app.get("/api/records/{record_id}")
 async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
@@ -2269,3 +2354,78 @@ async def get_long_review_detail_direct(review_id: int, db: Session = Depends(ge
             "cover": edition.cover_image
         }
     }
+
+@app.get("/api/admin/sync-authors")
+async def sync_existing_authors(db: Session = Depends(get_db)):
+    """
+    [관리자 전용] 기존 DB에 저장된 모든 Work의 author 문자열을 
+    새로 업그레이드된 parse_author_string 엔진으로 다시 분석하여
+    Contributor 및 WorkContributor 테이블을 완벽하게 재정립합니다.
+    """
+    works = db.query(models.Work).all()
+    updated_count = 0
+
+    for work in works:
+        if not work.author:
+            continue
+
+        # 1. 기존에 연결된 낡은 참여자 연결 고리(WorkContributor)를 모두 끊습니다.
+        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
+        
+        # 2. 업그레이드된 새 엔진으로 원본 문자열을 다시 정교하게 파싱합니다.
+        parsed_authors = parse_author_string(work.author)
+        
+        # 3. 새로운 규칙에 맞게 DB에 다시 예쁘게 관계를 맺어줍니다.
+        for p_auth in parsed_authors:
+            # 해당 이름의 참여자가 DB에 있는지 확인 (없으면 새로 생성)
+            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+            if not contributor:
+                contributor = models.Contributor(name=p_auth['name'])
+                db.add(contributor)
+                db.flush() # ID를 즉시 발급받기 위해 flush
+
+            # 작품과 참여자를 새로운 역할(role)로 연결
+            link = models.WorkContributor(
+                work_id=work.id, 
+                contributor_id=contributor.id, 
+                role=p_auth['role']
+            )
+            db.add(link)
+
+        updated_count += 1
+
+    # 4. 모든 작업이 성공하면 최종 커밋!
+    try:
+        db.commit()
+        return {
+            "status": "success", 
+            "message": f"총 {updated_count}개 작품의 참여자 데이터가 새 규칙에 맞게 완벽히 정제되었습니다!"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"데이터 정제 중 오류 발생: {str(e)}")
+    
+@app.get("/api/admin/cleanup-contributors")
+async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
+    """
+    [관리자 전용] 어떤 작품(Work)과도 연결되지 않은 찌꺼기(고아) 참여자 데이터를
+    contributors 테이블에서 영구적으로 일괄 삭제합니다.
+    """
+    # 1. 현재 작품과 정상적으로 연결된 참여자들의 ID 목록을 뽑아냅니다.
+    active_contributor_ids = db.query(models.WorkContributor.contributor_id).distinct()
+    
+    # 2. 이 연결된 ID 목록에 포함되지 않는(not_in) 고아 참여자들을 찾아 전부 삭제합니다.
+    deleted_count = db.query(models.Contributor).filter(
+        models.Contributor.id.not_in(active_contributor_ids)
+    ).delete(synchronize_session=False)
+    
+    # 3. 데이터베이스에 삭제를 최종 확정합니다.
+    try:
+        db.commit()
+        return {
+            "status": "success", 
+            "message": f"대청소 완료! 총 {deleted_count}개의 찌꺼기 참여자 데이터가 영구 삭제되었습니다."
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"데이터 청소 중 오류 발생: {str(e)}")

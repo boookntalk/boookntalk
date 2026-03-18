@@ -9,12 +9,10 @@ import { toast } from 'sonner';
 import { 
     Star, Search, BookOpen, MoreVertical, 
     Trash2, Edit, MessageSquare,
-    Home, ChevronRight, Plus, Loader2,
-    PenTool // ▼ [NEW] 긴줄평용 펜촉 아이콘 임포트
+    Home, ChevronRight, Plus, PenTool 
 } from 'lucide-react';
 
 import BookDetailForm from './BookDetailForm';
-import Container from '@/components/layout/Container'; 
 import { Button } from "@/components/ui/button";
 import AddBookModal from '@/components/AddBookModal';
 import {
@@ -28,49 +26,45 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { formatCardAuthor } from '@/utils/formatters';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"; 
-
-// 저자 포맷팅 함수
-const formatCardAuthor = (authorStr: string) => {
-    if (!authorStr) return "저자 미상";
-    return authorStr
-        .replace(/\(지은이\)/g, '지음').replace(/\(저자\)/g, '지음')
-        .replace(/\(옮긴이\)/g, '옮김').replace(/\(역자\)/g, '옮김')
-        .replace(/[()]/g, '').trim();
-};
 
 export default function LibraryClient({ initialBooks, user }: { initialBooks: any[], user: any }) {
     const router = useRouter();
     const [mounted, setMounted] = useState(false);
     
-    // [핵심] 탭 메뉴 상태 (ALL, READING, WISH, COMPLETED)
     const [activeTab, setActiveTab] = useState('ALL');
     const [books, setBooks] = useState<any[]>(initialBooks); 
-    const [isLoading, setIsLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isAddBookOpen, setIsAddBookOpen] = useState(false);
     const [selectedBook, setSelectedBook] = useState<any>(null);
-    const [searchTerm, setSearchTerm] = useState('');
 
-    // 서재 탭 메뉴 구성
+    // ▼▼▼ [수정 1] 기획자님 의도대로 '읽고 싶음(WISH)' 탭 삭제 ▼▼▼
     const menuItems = [
         { label: '전체 도서', code: 'ALL' },
         { label: '읽는 중', code: 'READING' },
         { label: '완독', code: 'COMPLETED' },
-        { label: '읽고 싶음', code: 'WISH' },
     ];
 
     useEffect(() => {
         setMounted(true);
-    }, []);
+        if (user?.email) {
+            fetchLibrarySilently();
+        }
+    }, [user?.email]);
 
-    // 탭 및 검색어 필터링 로직
+    // ▼▼▼ [수정 2] WISH 데이터가 '전체 도서'에 섞이지 않도록 방어 로직 추가 ▼▼▼
     const filteredBooks = books.filter(book => {
-        const matchesTab = activeTab === 'ALL' || book.status === activeTab;
         const matchesSearch = book.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               book.author.toLowerCase().includes(searchTerm.toLowerCase());
-        return matchesTab && matchesSearch;
+                              
+        // '전체 도서' 탭일 때는 WISH(읽고 싶은 책)를 뺀 진짜 서재 책만 보여줍니다!
+        if (activeTab === 'ALL') {
+            return book.status !== 'WISH' && matchesSearch;
+        }
+        return book.status === activeTab && matchesSearch;
     });
 
     const handleBookClick = (book: any) => {
@@ -87,10 +81,7 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
         if (!user?.email) return;
         try {
             const res = await fetch(`${API_URL}/api/users/${user.email}/records`);
-            if (res.ok) {
-                const data = await res.json();
-                setBooks(data); 
-            }
+            if (res.ok) setBooks(await res.json()); 
         } catch (error) {
             console.error("Failed to fetch library", error);
         }
@@ -115,11 +106,7 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
 
     return (
         <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
-            
-            {/* ▼▼▼ [수정 핵심 1] Container 제거 및 1cm 규격, pt-6으로 상하단 압축 ▼▼▼ */}
             <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0 transition-all">
-                
-                {/* 상단: 경로 및 검색 (mb-6 -> mb-4 로 간격 축소) */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
                         <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors">
@@ -138,7 +125,6 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                     </div>
                 </div>
 
-                {/* 하단: 서재 탭 메뉴 (pb-3 -> pb-2 로 탭 높이 축소) */}
                 <div className="flex items-center gap-6 overflow-x-auto scrollbar-hide -mb-[1px]">
                     {menuItems.map((item) => (
                         <button
@@ -148,26 +134,22 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                             }`}
                         >
                             {item.label}
+                            {/* ▼▼▼ [수정 3] ALL 카운트에서도 WISH 개수는 제외하여 정확한 통계 제공 ▼▼▼ */}
                             <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded-full ${activeTab === item.code ? 'bg-blue-50 text-[#0066cc]' : 'bg-gray-100 text-gray-400'}`}>
-                                {item.code === 'ALL' ? books.length : books.filter(b => b.status === item.code).length}
+                                {item.code === 'ALL' 
+                                    ? books.filter(b => b.status !== 'WISH').length 
+                                    : books.filter(b => b.status === item.code).length}
                             </span>
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* 본문: 카드 리스트 영역 */}
             <div className="flex-1 overflow-y-auto scrollbar-hide">
-                {/* ▼▼▼ [수정 핵심 2] Container 제거 및 1cm 규격, pt-6으로 상단 여백 압축 ▼▼▼ */}
                 <div className="p-[var(--spacing-1cm,32px)] pt-6 pb-32">
                     <main className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
                         {filteredBooks.map((book, index) => (
-                            <div 
-                                key={book.library_id || index} 
-                                onClick={() => handleBookClick(book)} 
-                                className="group cursor-pointer flex flex-col h-full bg-white rounded-sm p-4 shadow-sm border border-gray-100 transition-all duration-300 hover:shadow-md hover:-translate-y-1 relative"
-                            >
-                                {/* 드롭다운 메뉴 */}
+                            <div key={book.library_id || index} onClick={() => handleBookClick(book)} className="group cursor-pointer flex flex-col h-full bg-white rounded-sm p-4 shadow-sm border border-gray-100 transition-all duration-300 hover:shadow-md hover:-translate-y-1 relative">
                                 <div className="absolute top-3 right-3 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -189,9 +171,7 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                 <div className="relative aspect-[1/1.4] w-[80%] mx-auto rounded-sm overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.08)] mb-3 bg-gray-50 flex items-center justify-center border border-gray-100 transition-all duration-300 group-hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)]">
                                     {book.cover ? (
                                         <Image src={book.cover} alt={book.title} fill sizes="(max-width: 768px) 50vw, 20vw" className="object-cover group-hover:scale-105 transition-transform duration-500" priority={index < 10} />
-                                    ) : ( 
-                                        <span className="text-[10px] text-gray-400 font-bold">No Cover</span> 
-                                    )}
+                                    ) : ( <span className="text-[10px] text-gray-400 font-bold">No Cover</span> )}
                                 </div>
 
                                 <div className="flex flex-col flex-1">
@@ -202,16 +182,8 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                         <BadgeByStatus status={book.status} /> 
                                         
                                         <div className="flex items-center gap-2">
-                                            {book.short_review && (
-                                                <span title="한줄평 작성됨" className="flex items-center">
-                                                    <MessageSquare size={12} className="text-[#0066cc]/50" />
-                                                </span>
-                                            )}
-                                            {book.has_long_review && (
-                                                <span title="긴줄평 작성됨" className="flex items-center">
-                                                    <PenTool size={12} className="text-emerald-500/80" />
-                                                </span>
-                                            )}
+                                            {book.short_review && (<span title="한줄평 작성됨" className="flex items-center"><MessageSquare size={12} className="text-[#0066cc]/50" /></span>)}
+                                            {book.has_long_review && (<span title="긴줄평 작성됨" className="flex items-center"><PenTool size={12} className="text-emerald-500/80" /></span>)}
                                             {book.rating > 0 && (
                                                 <div className="flex items-center gap-0.5 text-amber-400" title="별점">
                                                     <Star size={10} fill="currentColor" />
@@ -228,15 +200,12 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                     {filteredBooks.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-32 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200 mt-4">
                             <BookOpen size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-[#0066cc]" />
-                            <p className="font-bold text-[14px] text-gray-500">
-                                {activeTab === 'WISH' ? '아직 읽고 싶은 책으로 담은 도서가 없습니다.' : '조건에 맞는 도서가 없습니다.'}
-                            </p>
+                            <p className="font-bold text-[14px] text-gray-500">조건에 맞는 도서가 없습니다.</p>
                         </div>
                     )}
                 </div>
             </div>
             
-            {/* 플로팅 액션 버튼 및 모달 영역은 그대로 유지됩니다. */}
             <button onClick={() => setIsAddBookOpen(true)} className="fixed bottom-8 right-8 w-14 h-14 bg-[#1d1d1f] hover:bg-[#0066cc] text-white rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.2)] flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 z-40">
                 <Plus size={24} />
             </button>
@@ -245,13 +214,10 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                 <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden rounded-[28px] border-none shadow-2xl">
                     {selectedBook && (
                         <BookDetailForm 
-                            initialData={selectedBook} 
-                            onClose={() => setIsEditModalOpen(false)} 
+                            initialData={selectedBook} onClose={() => setIsEditModalOpen(false)} 
                             onSaved={(updatedData) => {
                                 setBooks(prev => prev.map(book => 
-                                    book.library_id === (selectedBook.library_id || selectedBook.id)
-                                        ? { ...book, ...updatedData } 
-                                        : book
+                                    book.library_id === (selectedBook.library_id || selectedBook.id) ? { ...book, ...updatedData } : book
                                 ));
                                 setIsEditModalOpen(false);
                             }}
@@ -267,7 +233,6 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
     );
 }
 
-// 뱃지 디자인 컴포넌트
 function BadgeByStatus({ status }: { status: string }) {
     switch (status) {
         case 'READING':

@@ -23,6 +23,11 @@ export default async function BookDetailPage({ params }: PageProps) {
     const resolvedParams = await params;
     const recordId = resolvedParams.recordId;
 
+    if (isNaN(Number(recordId))) {
+        console.warn(`[라우팅 방어] 잘못된 recordId 접근 방단: ${recordId}`);
+        return null; // Next.js가 올바른 /tags 폴더를 찾도록 렌더링을 조용히 중단합니다.
+    }
+
     // 3. 방어적 코드: recordId가 유효하지 않으면 조기 리턴
     if (!recordId || recordId === 'undefined') {
         console.error("Invalid recordId path:", recordId);
