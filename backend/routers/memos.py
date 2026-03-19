@@ -24,13 +24,9 @@ def create_memo(memo_in: MemoCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
 
     # 2. 책 정보 조회 (Edition)
-    # 실제로는 ISBN으로 조회하고, 없으면 알라딘 API 등을 통해 DB에 자동 등록하는 로직이 권장됨
-    # 여기서는 DB에 이미 책 정보가 있다고 가정
     edition = db.query(models.Edition).filter(models.Edition.isbn == memo_in.isbn).first()
     
-    # [방어 로직] 책이 DB에 없으면 임시 에러 (실제 서비스에선 자동 생성 필요)
     if not edition:
-        # (선택) 여기서 자동으로 책을 생성해 줄 수도 있습니다.
         raise HTTPException(status_code=404, detail="Book info not found. Please add the book first.")
 
     # 3. 서재(Record) 확인 및 자동 추가
@@ -40,7 +36,6 @@ def create_memo(memo_in: MemoCreate, db: Session = Depends(get_db)):
     ).first()
 
     if not record:
-        # 서재에 없으면 '읽는 중' 상태로 자동 추가 (센스 있는 UX!)
         record = models.Record(
             user_id=user.id,
             edition_id=edition.id,
@@ -66,3 +61,52 @@ def create_memo(memo_in: MemoCreate, db: Session = Depends(get_db)):
     db.refresh(new_memo)
     
     return {"status": "success", "memo_id": new_memo.id}
+
+# ▼▼▼ [NEW] 프론트엔드 화면을 위한 '내 기록 모아보기' API 추가 ▼▼▼
+@router.get("/user/{email}")
+def get_user_memos(email: str, db: Session = Depends(get_db)):
+    # 1. 유저 조회
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 2. 유저의 메모와 관련된 책 정보(Edition, Work)를 한 번에 조인(Join)하여 가져옵니다.
+    memos = db.query(
+        models.Memo, 
+        models.Record, 
+        models.Edition, 
+        models.Work
+    ).join(
+        models.Record, models.Memo.record_id == models.Record.id
+    ).join(
+        models.Edition, models.Record.edition_id == models.Edition.id
+    ).join(
+        models.Work, models.Edition.work_id == models.Work.id
+    ).filter(
+        models.Memo.user_id == user.id
+    ).order_by(models.Memo.created_at.desc()).all()
+
+    results = []
+    for memo, record, edition, work in memos:
+        # 프론트엔드 UI에 예쁘게 보이도록 발췌문(sentence)과 사색(thought)을 조합
+        content_parts = []
+        if memo.sentence:
+            content_parts.append(f"❝ {memo.sentence} ❞") # 인용구 스타일 적용
+        if memo.thought:
+            content_parts.append(memo.thought)
+            
+        combined_content = "\n\n".join(content_parts)
+
+        # 프론트엔드가 요구하는 JSON 규격에 정확히 맞춤
+        results.append({
+            "id": memo.id,
+            "library_id": record.id,  # 클릭 시 서재 상세 페이지로 이동하기 위한 키
+            "book_cover": edition.cover_image,
+            "book_title": work.title,
+            "book_author": work.author,
+            "content": combined_content,
+            "tags": [], # 태그 기능 확장을 대비한 빈 배열
+            "created_at": memo.created_at.isoformat() if memo.created_at else ""
+        })
+
+    return results

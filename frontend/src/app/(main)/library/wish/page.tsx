@@ -20,10 +20,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-
-// ▼ [주의] BookDetailForm 경로가 기획자님의 폴더 구조와 맞는지 꼭 확인해 주세요!
-// (보통 LibraryClient가 있는 폴더와 같은 곳에 있을 것입니다)
 import BookDetailForm from '@/app/(main)/library/BookDetailForm'
+import { BookItemCard } from '@/components/common/BookItemCard';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -134,13 +132,12 @@ export default function WishlistPage() {
                     {wishBooks.length > 0 ? (
                         <main className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
                             {wishBooks.map((book, index) => (
-                                <div 
-                                    key={book.library_id || index} 
-                                    onClick={() => handleBookClick(book.library_id)} 
-                                    className="group cursor-pointer flex flex-col h-full bg-white rounded-sm p-4 shadow-sm border border-gray-100 transition-all duration-300 hover:shadow-md hover:-translate-y-1 relative"
-                                >
-                                    {/* ▼▼▼ [NEW] 카드 우측 상단 드롭다운 메뉴 이식 ▼▼▼ */}
-                                    <div className="absolute top-3 right-3 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                // ▼▼▼ [핵심 설계] 드롭다운 호버 메뉴를 띄우기 위해 바깥쪽에 'group/wish' 래퍼 추가 ▼▼▼
+                                <div key={book.library_id || index} className="relative h-full group/wish">
+                                    
+                                    {/* ▼▼▼ [유지] 카드 우측 상단 드롭다운 메뉴 ▼▼▼ */}
+                                    {/* group-hover/wish를 사용하여 BookItemCard의 호버와 충돌하지 않게 분리했습니다. */}
+                                    <div className="absolute top-3 right-3 z-20 opacity-0 group-hover/wish:opacity-100 transition-opacity">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button variant="secondary" size="icon" className="h-7 w-7 rounded-full bg-white/90 shadow-sm hover:bg-white" onClick={(e) => e.stopPropagation()}>
@@ -158,29 +155,26 @@ export default function WishlistPage() {
                                         </DropdownMenu>
                                     </div>
 
-                                    {/* 책 표지 */}
-                                    <div className="relative aspect-[1/1.4] w-[80%] mx-auto rounded-sm overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.08)] mb-3 bg-gray-50 flex items-center justify-center border border-gray-100 transition-all duration-300 group-hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)]">
-                                        {book.cover ? (
-                                            <Image src={book.cover} alt={book.title} fill sizes="(max-width: 768px) 50vw, 20vw" className="object-cover group-hover:scale-105 transition-transform duration-500" priority={index < 10} />
-                                        ) : ( 
-                                            <span className="text-[10px] text-gray-400 font-bold">No Cover</span> 
-                                        )}
-                                    </div>
-
-                                    {/* 텍스트 정보 */}
-                                    <div className="flex flex-col flex-1">
-                                        <h3 className="font-bold text-[#1d1d1f] text-[14px] line-clamp-1 mb-1 group-hover:text-[#0066cc] transition-colors">{book.title}</h3>
-                                        <p className="text-[11px] text-gray-400 line-clamp-1 mb-3">{formatCardAuthor(book.author)}</p>
-                                        
-                                        <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-50">
+                                    {/* ▼▼▼ [적용] 공통 BookItemCard 컴포넌트 이식 ▼▼▼ */}
+                                    {/* 움직임이 제거되고 커버만 부드럽게 상승합니다. */}
+                                    <BookItemCard 
+                                        onClick={() => handleBookClick(book.library_id)}
+                                        cover={book.cover}
+                                        title={book.title}
+                                        author={book.author}
+                                        // 하단 좌측: 읽고 싶음 뱃지
+                                        footerLeft={
                                             <Badge className="bg-rose-50 text-rose-500 hover:bg-rose-50 border-0 h-5 px-1.5 text-[10px] font-bold">
                                                 읽고 싶음
                                             </Badge>
+                                        }
+                                        // 하단 우측: 담은 날짜
+                                        footerRight={
                                             <span className="text-[10px] text-gray-400 font-medium">
                                                 {book.added_at ? book.added_at.substring(0, 10) : ''} 담음
                                             </span>
-                                        </div>
-                                    </div>
+                                        }
+                                    />
                                 </div>
                             ))}
                         </main>

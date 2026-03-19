@@ -41,7 +41,7 @@ const navItems = [
     {
         title: "나의 기록", icon: Edit3,
         subItems: [
-            { title: '독서노트', href: '/my-records/memos', icon: ScrollText },
+            { title: '독서노트', href: '/my-records/notes', icon: ScrollText },
             { title: '한줄평', href: '/my-records/short-reviews', icon: MessageSquare },
             { title: '긴줄평', href: '/my-records/long-reviews', icon: PenTool },
         ]

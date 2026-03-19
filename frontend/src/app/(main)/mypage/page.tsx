@@ -7,6 +7,7 @@ import Container from '@/components/layout/Container';
 import Footer from '@/components/layout/Footer';
 import { Loader2, BookOpen, Star, FileText, TrendingUp, Edit3, Hash, BarChart3 } from 'lucide-react';
 import ProfileEditModal from '@/components/profile/ProfileEditModal';
+import AdminPanel from '@/components/admin/AdminPanel';
 
 export default function MyPage() {
     const { data: session, status } = useSession();
@@ -199,6 +200,7 @@ export default function MyPage() {
                         )}
                     </div>
                 </div>
+                <AdminPanel /> {/* 최고 관리자용 시스템 제어 패널 컴포넌트 삽입 */} 
             </Container>
             <Footer />
             {/* ▼▼▼ [NEW] 프로필 수정 모달 컴포넌트 삽입 ▼▼▼ */}

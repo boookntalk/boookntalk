@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Home, ChevronRight, MessageSquareQuote, Star, Globe, Lock, BookOpen, Loader2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { Home, ChevronRight, PenTool, Globe, Lock, BookOpen, Loader2, Hash, MessageSquareQuote, Calendar } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCardAuthor } from '@/utils/formatters';
 
@@ -16,7 +18,7 @@ import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 // ▼ 스마트 말줄임 툴팁 컴포넌트 (유지)
-function TruncatedReview({ content }: { content: string }) {
+function TruncatedMemo({ content }: { content: string }) {
     const textRef = useRef<HTMLParagraphElement>(null);
     const [isTruncated, setIsTruncated] = useState(false);
 
@@ -37,7 +39,7 @@ function TruncatedReview({ content }: { content: string }) {
                 <TooltipTrigger asChild>
                     <div className="flex-1 mb-4 w-full text-left cursor-pointer">
                         <p ref={textRef} className="text-[13px] text-gray-600 leading-relaxed font-medium break-keep line-clamp-4">
-                            "{content || "기록된 내용이 없습니다."}"
+                            {content || "기록된 내용이 없습니다."}
                         </p>
                     </div>
                 </TooltipTrigger>
@@ -51,20 +53,21 @@ function TruncatedReview({ content }: { content: string }) {
     );
 }
 
-export default function ShortReviewsClient({ initialReviews = [], user }: { initialReviews: any[], user: any }) {
+export default function ReadingNotesClient({ initialNotes = [] }: { initialNotes?: any[] }) {
+    const { status } = useSession();
     const router = useRouter();
-    const [reviews, setReviews] = useState(initialReviews);
+    const [notes, setNotes] = useState<any[]>(initialNotes);
 
-    if (!user) return <div className="w-full h-full flex justify-center items-center"><Loader2 className="animate-spin text-[#0066cc]" size={40} /></div>;
+    if (status === 'loading') return <div className="w-full h-full flex justify-center items-center"><Loader2 className="animate-spin text-[#0066cc]" size={40} /></div>;
 
-    const togglePublicStatus = async (recordId: number, currentStatus: boolean) => {
+    const togglePublicStatus = async (noteId: number, currentStatus: boolean) => {
         const newStatus = !currentStatus;
-        setReviews(prev => prev.map(r => r.record_id === recordId ? { ...r, is_short_review_public: newStatus } : r));
+        setNotes(prev => prev.map(n => n.id === noteId ? { ...n, is_public: newStatus } : n));
         try {
-            await fetch(`${API_URL}/api/my-library/${recordId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_short_review_public: newStatus }) });
+            await fetch(`${API_URL}/api/memos/${noteId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_public: newStatus }) });
             toast.success(newStatus ? "전체 공개되었습니다." : "비공개되었습니다.");
         } catch {
-            setReviews(prev => prev.map(r => r.record_id === recordId ? { ...r, is_short_review_public: currentStatus } : r));
+            setNotes(prev => prev.map(n => n.id === noteId ? { ...n, is_public: currentStatus } : n));
             toast.error("상태 변경 실패");
         }
     };
@@ -79,37 +82,36 @@ export default function ShortReviewsClient({ initialReviews = [], user }: { init
                         <ChevronRight size={14} className="opacity-50" />
                         <span className="text-gray-400">나의 기록</span>
                         <ChevronRight size={14} className="opacity-50" />
-                        <span className="text-[#1d1d1f] flex items-center gap-1"><MessageSquareQuote size={14} /> 한줄평</span>
+                        <span className="text-[#1d1d1f] flex items-center gap-1"><PenTool size={14} /> 독서노트</span>
                     </div>
                 </div>
                 <div className="flex flex-col mb-4">
                     <div className="flex items-center gap-3">
-                        <h1 className="text-[22px] font-black text-[#1d1d1f] flex items-center gap-2"><MessageSquareQuote size={24} className="text-[#0066cc] fill-blue-100" /> 나의 한줄평</h1>
-                        <Badge variant="secondary" className="bg-gray-200/50 text-gray-500 text-[12px] font-bold px-2 py-0.5">{reviews.length}개</Badge>
+                        <h1 className="text-[22px] font-black text-[#1d1d1f] flex items-center gap-2"><PenTool size={24} className="text-[#0066cc] fill-blue-100" /> 독서노트</h1>
+                        <Badge variant="secondary" className="bg-gray-200/50 text-gray-500 text-[12px] font-bold px-2 py-0.5">{notes.length}개</Badge>
                     </div>
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto scrollbar-hide">
                 <div className="p-[var(--spacing-1cm,32px)] pt-6 pb-32">
-                    {reviews.length === 0 ? (
+                    {notes.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-32 text-gray-400 bg-white rounded-sm p-4 shadow-sm border border-dashed border-gray-200 mt-4">
-                            <MessageSquareQuote size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-[#0066cc]" />
-                            <p className="font-bold text-[14px] text-gray-500 mb-1">아직 남긴 한줄평이 없습니다.</p>
+                            <PenTool size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-[#0066cc]" />
+                            <p className="font-bold text-[14px] text-gray-500 mb-1">아직 작성된 독서 노트가 없습니다.</p>
                         </div>
                     ) : (
                         <main className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
-                            {reviews.map((review) => (
+                            {notes.map((note) => (
                                 <BookRecordCard 
-                                    key={review.record_id} id={review.record_id}
-                                    onClick={() => router.push(`/library/${review.record_id}`)}
-                                    book_cover={review.cover} book_title={review.title} book_author={review.author}
-                                    rating={review.rating} // 한줄평은 별점 포함
-                                    children={<SmartTruncatedText content={review.short_review} wrapQuotes={true} />} // 한줄평은 따옴표 감싸기
-                                    footerLeft={<><Calendar size={12} /> {review.created_at?.split('T')[0]}</>}
+                                    key={note.id} id={note.id}
+                                    onClick={() => router.push(`/library/${note.library_id}#memo`)}
+                                    book_cover={note.book_cover} book_title={note.book_title} book_author={note.book_author}
+                                    children={<SmartTruncatedText content={note.content} wrapQuotes={false} />}
+                                    footerLeft={<><Calendar size={12} /> {note.created_at?.split('T')[0]}</>}
                                     footerRight={
-                                        <button onClick={() => togglePublicStatus(review.record_id, review.is_short_review_public)} className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${review.is_short_review_public ? 'text-[#0066cc] bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}>
-                                            {review.is_short_review_public ? <Globe size={10}/> : <Lock size={10}/>} {review.is_short_review_public ? '전체 공개' : '나만 보기'}
+                                        <button onClick={() => togglePublicStatus(note.id, note.is_public)} className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${note.is_public ? 'text-[#0066cc] bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}>
+                                            {note.is_public ? <Globe size={10}/> : <Lock size={10}/>} {note.is_public ? '전체 공개' : '나만 보기'}
                                         </button>
                                     }
                                 />

@@ -554,10 +554,18 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
                 for p_auth in parsed_authors:
                     contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
                     if not contributor:
-                        contributor = models.Contributor(name=p_auth['name'])
+                        # ▼▼▼ [수정됨] name과 original_name을 모두 챙겨서 저장! ▼▼▼
+                        contributor = models.Contributor(
+                            name=p_auth['name'], 
+                            original_name=p_auth.get('original_name')
+                        )
                         db.add(contributor)
                         db.commit()
                         db.refresh(contributor)
+                    # ▼▼▼ [NEW] 이미 존재하는 작가인데 원어 이름이 비어있다면? 채워줍니다! ▼▼▼
+                    elif p_auth.get('original_name') and not contributor.original_name:
+                        contributor.original_name = p_auth.get('original_name')
+                        db.commit()
                     
                     link_exists = db.query(models.WorkContributor).filter(
                         models.WorkContributor.work_id == work.id,
@@ -2379,10 +2387,20 @@ async def sync_existing_authors(db: Session = Depends(get_db)):
         for p_auth in parsed_authors:
             # 해당 이름의 참여자가 DB에 있는지 확인 (없으면 새로 생성)
             contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+            
             if not contributor:
-                contributor = models.Contributor(name=p_auth['name'])
+                # ▼▼▼ [수정됨] name과 original_name을 동시에 완벽하게 저장! ▼▼▼
+                contributor = models.Contributor(
+                    name=p_auth['name'],
+                    original_name=p_auth.get('original_name')
+                )
                 db.add(contributor)
                 db.flush() # ID를 즉시 발급받기 위해 flush
+            
+            # ▼▼▼ [NEW] 이미 등록된 작가인데 원어 이름이 없다면 추가로 채워넣기 ▼▼▼
+            elif p_auth.get('original_name') and not contributor.original_name:
+                contributor.original_name = p_auth.get('original_name')
+                db.flush()
 
             # 작품과 참여자를 새로운 역할(role)로 연결
             link = models.WorkContributor(
@@ -2429,3 +2447,52 @@ async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"데이터 청소 중 오류 발생: {str(e)}")
+    
+@app.get("/api/admin/merge-contributors")
+async def merge_specific_contributors(
+    target_id: int, 
+    source_ids: str, 
+    db: Session = Depends(get_db)
+):
+    """
+    [관리자 전용] 파편화된 작가들을 한 명(target_id)으로 강제 흡수 병합합니다.
+    사용법: /api/admin/merge-contributors?target_id=58&source_ids=59,60
+    """
+    try:
+        # "59,60" 문자열을 [59, 60] 리스트로 변환
+        source_id_list = [int(x.strip()) for x in source_ids.split(",")]
+        
+        for source_id in source_id_list:
+            if source_id == target_id: continue # 자기 자신은 무시
+            
+            # 1. source_id(가짜 톨킨)가 가진 작품 연결고리를 모두 찾습니다.
+            links = db.query(models.WorkContributor).filter(models.WorkContributor.contributor_id == source_id).all()
+            
+            for link in links:
+                # 2. target_id(진짜 톨킨)가 이미 이 작품과 연결되어 있는지 확인
+                exists = db.query(models.WorkContributor).filter(
+                    models.WorkContributor.work_id == link.work_id,
+                    models.WorkContributor.contributor_id == target_id,
+                    models.WorkContributor.role == link.role
+                ).first()
+
+                if exists:
+                    # 진짜 톨킨이 이미 연결되어 있다면, 가짜 연결고리는 중복이므로 삭제
+                    db.delete(link)
+                else:
+                    # 연결되어 있지 않다면, 가짜 연결고리의 주인을 '진짜 톨킨(target_id)'으로 바꿈!
+                    link.contributor_id = target_id
+            
+            # 3. 모든 책을 빼앗긴 가짜 톨킨(source_id)의 숨통을 끊습니다(영구 삭제).
+            source_contributor = db.query(models.Contributor).filter(models.Contributor.id == source_id).first()
+            if source_contributor:
+                db.delete(source_contributor)
+
+        db.commit()
+        return {
+            "status": "success", 
+            "message": f"파편화된 작가들({source_ids}번)이 진짜 작가({target_id}번)로 완벽하게 흡수 병합되었습니다!"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

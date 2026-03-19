@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { formatCardAuthor } from '@/utils/formatters';
+import { BookItemCard } from '@/components/common/BookItemCard';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"; 
 
@@ -146,8 +147,11 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                 <div className="p-[var(--spacing-1cm,32px)] pt-6 pb-32">
                     <main className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
                         {filteredBooks.map((book, index) => (
-                            <div key={book.library_id || index} onClick={() => handleBookClick(book)} className="group cursor-pointer flex flex-col h-full bg-white rounded-sm p-4 shadow-sm border border-gray-100 transition-all duration-300 hover:shadow-md hover:-translate-y-1 relative">
-                                <div className="absolute top-3 right-3 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                            // ▼▼▼ [핵심 설계] 드롭다운을 위한 바깥쪽 래퍼 'group/lib' 추가 ▼▼▼
+                            <div key={book.library_id || index} className="relative h-full group/lib">
+                                
+                                {/* ▼▼▼ [유지] 카드 우측 상단 드롭다운 메뉴 ▼▼▼ */}
+                                <div className="absolute top-3 right-3 z-20 opacity-0 group-hover/lib:opacity-100 transition-opacity">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button variant="secondary" size="icon" className="h-7 w-7 rounded-full bg-white/90 shadow-sm hover:bg-white" onClick={(e) => e.stopPropagation()}>
@@ -165,19 +169,17 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                     </DropdownMenu>
                                 </div>
 
-                                <div className="relative aspect-[1/1.4] w-[80%] mx-auto rounded-sm overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.08)] mb-3 bg-gray-50 flex items-center justify-center border border-gray-100 transition-all duration-300 group-hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)]">
-                                    {book.cover ? (
-                                        <Image src={book.cover} alt={book.title} fill sizes="(max-width: 768px) 50vw, 20vw" className="object-cover group-hover:scale-105 transition-transform duration-500" priority={index < 10} />
-                                    ) : ( <span className="text-[10px] text-gray-400 font-bold">No Cover</span> )}
-                                </div>
-
-                                <div className="flex flex-col flex-1">
-                                    <h3 className="font-bold text-[#1d1d1f] text-[14px] line-clamp-1 mb-1 group-hover:text-[#0066cc] transition-colors">{book.title}</h3>
-                                    <p className="text-[11px] text-gray-400 line-clamp-1 mb-3">{formatCardAuthor(book.author)}</p>
-                                    
-                                    <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-50">
-                                        <BadgeByStatus status={book.status} /> 
-                                        
+                                {/* ▼▼▼ [적용] 공통 BookItemCard 이식 ▼▼▼ */}
+                                {/* 카드는 고정되고 표지만 부드럽게 떠오릅니다! */}
+                                <BookItemCard 
+                                    onClick={() => handleBookClick(book)}
+                                    cover={book.cover}
+                                    title={book.title}
+                                    author={book.author}
+                                    // 하단 좌측: 상태 뱃지
+                                    footerLeft={<BadgeByStatus status={book.status} />}
+                                    // 하단 우측: 리뷰 및 별점 아이콘 모음
+                                    footerRight={
                                         <div className="flex items-center gap-2">
                                             {book.short_review && (<span title="한줄평 작성됨" className="flex items-center"><MessageSquare size={12} className="text-[#0066cc]/50" /></span>)}
                                             {book.has_long_review && (<span title="긴줄평 작성됨" className="flex items-center"><PenTool size={12} className="text-emerald-500/80" /></span>)}
@@ -188,8 +190,8 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                </div>
+                                    }
+                                />
                             </div>
                         ))}
                     </main>
