@@ -4,6 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import { Star, BookOpen } from 'lucide-react';
 import { formatCardAuthor } from '@/utils/formatters';
+import { FloatingCover } from '@/components/common/FloatingCover';
 
 interface BookRecordCardProps {
     id: string | number;
@@ -47,13 +48,7 @@ export function BookRecordCard({
             <div className="p-4 flex flex-col h-full relative z-10">
                 <div className="flex items-start gap-4 mb-4 pb-4 border-b border-gray-50">
                     {/* 책 커버: 호버 시 위로 살짝 올라가는 애니메이션 */}
-                    <div className="relative w-12 h-16 rounded-sm overflow-hidden bg-gray-50 flex-shrink-0 shadow-sm border border-gray-100 transition-transform duration-300 group-hover:-translate-y-1.5">
-                        {book_cover ? (
-                            <Image src={book_cover} alt={book_title} fill className="object-cover" unoptimized />
-                        ) : (
-                            <BookOpen className="w-full h-full p-3 text-gray-300" />
-                        )}
-                    </div>
+                    <FloatingCover src={book_cover} className="w-12 h-16 shrink-0" iconSize={20} />
                     <div className="flex flex-col justify-center flex-1 min-w-0 pt-1">
                         <h3 className="font-bold text-[#1d1d1f] text-[14px] leading-snug line-clamp-1 group-hover:text-[#0066cc] transition-colors">{book_title}</h3>
                         <span className="text-[11px] font-medium text-gray-400 line-clamp-1 mt-1">{formatCardAuthor(book_author)}</span>

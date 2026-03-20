@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { User, BookOpen, Clock, Heart, MessageCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { FloatingCover } from '@/components/common/FloatingCover';
 
 interface FollowingFeedProps {
     currentUserEmail?: string;
@@ -122,14 +123,17 @@ export default function FollowingFeed({ currentUserEmail }: FollowingFeedProps) 
                         className="p-6 cursor-pointer group flex flex-col md:flex-row gap-6"
                         onClick={() => router.push(`/square/long-review/${feed.review_id}`)}
                     >
-                        {/* 썸네일 (책 표지 대신) */}
+                        {/* ▼▼▼ [적용 완료] 썸네일 영역에 FloatingCover 교체 ▼▼▼ */}
                         <div className="w-24 shrink-0 flex-col items-center hidden sm:flex">
-                            <div className="w-full aspect-[1/1.4] bg-gray-50 border border-gray-100 rounded-md shadow-sm flex items-center justify-center text-gray-300 relative overflow-hidden group-hover:shadow-md transition-shadow">
-                                <BookOpen size={24} className="opacity-30" />
-                                {/* 실제 책 표지 URL이 넘어온다면 여기에 Image 태그 추가 */}
-                            </div>
+                            {/* 부모가 w-24로 너비를 잡았으므로 className="w-full aspect-[1/1.4]" 만 주면 완벽합니다. */}
+                            <FloatingCover 
+                                src={feed.cover || feed.book?.cover || feed.work?.cover} 
+                                alt={feed.work?.title || '도서 표지'} 
+                                className="w-full aspect-[1/1.4]" 
+                                iconSize={24} 
+                            />
                             <span className="text-[10px] font-bold text-gray-400 mt-2 text-center line-clamp-2 leading-tight">
-                                {feed.work.title}
+                                {feed.work?.title || '제목 없음'}
                             </span>
                         </div>
 

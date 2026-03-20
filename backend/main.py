@@ -856,7 +856,7 @@ async def read_user_records(
     current_user_email: Optional[str] = None, # ▼▼▼ [NEW] 현재 접속 중인 유저 확인용
     db: Session = Depends(get_db)
 ):
-    print(f"\n[API 호출] 대상 서재: {user_email}, 방문자: {current_user_email}, 상태: {status}")
+    # print(f"\n[API 호출] 대상 서재: {user_email}, 방문자: {current_user_email}, 상태: {status}")
  
     # 1. 서재 주인장 정보 조회
     user = db.query(models.User).filter(models.User.email == user_email).first()
@@ -2496,3 +2496,56 @@ async def merge_specific_contributors(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+# ===================================================================
+# [NEW] 나의 긴줄평 전체 목록 조회 전용 API (도돌이표 종결자!)
+# ===================================================================
+@app.get("/api/users/{user_email}/long-reviews")
+async def get_user_long_reviews(user_email: str, db: Session = Depends(get_db)):
+    """
+    내 서재에 남긴 '나의 긴줄평' 전체 목록을 가져옵니다. (내용, 제목 포함)
+    에디터가 생성한 빈 껍데기 리뷰는 백엔드에서 완벽하게 차단합니다.
+    """
+    user = db.query(models.User).filter(models.User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+    # LongReview 테이블에서 현재 유저의 기록만 가져옵니다.
+    long_reviews = db.query(models.LongReview)\
+        .join(models.Record, models.LongReview.record_id == models.Record.id)\
+        .options(
+            joinedload(models.LongReview.record)
+            .joinedload(models.Record.edition)
+            .joinedload(models.Edition.work)
+        )\
+        .filter(models.Record.user_id == user.id)\
+        .order_by(models.LongReview.created_at.desc())\
+        .all()
+        
+    results = []
+    for lr in long_reviews:
+        # 1. 빈 껍데기 완벽 차단 로직 (파이썬 정규식으로 HTML 태그 싹 제거)
+        clean_text = re.sub(r'<[^>]+>', '', str(lr.content or '')).replace('&nbsp;', '').strip()
+        title_text = str(lr.title or '').strip()
+        
+        # 2. 내용도 없고 제목도 없으면 (에디터가 만든 빈 껍데기면) 프론트로 보내지 않고 가차 없이 버림!
+        if not clean_text and not title_text:
+            continue
+            
+        record = lr.record
+        edition = record.edition
+        work = edition.work
+        
+        results.append({
+            "review_id": lr.id,             
+            "record_id": lr.record_id,      
+            "title": work.title if work else "제목 없음",
+            "author": work.author if work else "작가 미상",
+            "cover": edition.cover_image,
+            "long_review_title": lr.title,
+            "long_review_content": lr.content,
+            "is_long_review_draft": lr.is_draft,
+            "created_at": lr.created_at.isoformat() if lr.created_at else None
+        })
+        
+    return results

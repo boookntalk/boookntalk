@@ -4,6 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import { BookOpen } from 'lucide-react';
 import { formatCardAuthor } from '@/utils/formatters';
+import { FloatingCover } from '@/components/common/FloatingCover';
 
 interface BookItemCardProps {
     onClick: () => void;
@@ -31,14 +32,7 @@ export function BookItemCard({ onClick, cover, title, author, footerLeft, footer
             <div className="p-4 flex flex-col h-full relative z-10">
                 {/* ▼▼▼ [핵심] 카드 호버 시 책 커버 '만' 위로 상승 애니메이션 적용 ▼▼▼ */}
                 {/* (기존 이미지 스케일 제거, duration-300으로 부드럽게 통일) */}
-                <div className="relative aspect-[1/1.45] w-[80%] mx-auto rounded-sm overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-100 mb-4 shadow-sm
-                             transition-transform duration-300 ease-out group-hover:-translate-y-1.5 group-hover:shadow-md">
-                    {cover ? (
-                        <Image src={cover} alt={title} fill sizes="(max-width: 768px) 50vw, 20vw" className="object-cover" unoptimized />
-                    ) : (
-                        <BookOpen className="w-10 h-10 text-gray-300 opacity-50" />
-                    )}
-                </div>
+                <FloatingCover src={cover} alt={title} className="w-full aspect-[1/1.45]" iconSize={40} />
 
                 {/* 하단 텍스트(도서 정보) 영역 - 중앙 정렬 */}
                 <div className="flex flex-col flex-1 text-center px-1">

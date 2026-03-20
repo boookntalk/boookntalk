@@ -1,73 +1,84 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Home, ChevronRight, MessageSquareQuote, Star, Globe, Lock, BookOpen, Loader2, Calendar } from 'lucide-react';
+import { useSession } from 'next-auth/react'; // ▼ 세션 임포트 추가
+import Link from 'next/link';
+import { Home, ChevronRight, MessageSquareQuote, Globe, Lock, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatCardAuthor } from '@/utils/formatters';
 
 import { BookRecordCard } from '@/components/common/BookRecordCard';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-// ▼ 스마트 말줄임 툴팁 컴포넌트 (유지)
-function TruncatedReview({ content }: { content: string }) {
-    const textRef = useRef<HTMLParagraphElement>(null);
-    const [isTruncated, setIsTruncated] = useState(false);
+export default function ShortReviewsClient() {
+    const router = useRouter();
+    const { data: session, status } = useSession();
+    
+    const [reviews, setReviews] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true); // ▼ 로딩 상태 관리 추가
 
     useEffect(() => {
-        const checkTruncation = () => {
-            if (textRef.current) {
-                setIsTruncated(textRef.current.scrollHeight > textRef.current.clientHeight);
+        if (status === 'unauthenticated') {
+            router.push('/');
+            return;
+        }
+
+        if (session?.user?.email) {
+            fetchShortReviews(session.user.email);
+        }
+    }, [session, status, router]);
+
+    const fetchShortReviews = async (email: string) => {
+        setIsLoading(true);
+        try {
+            // 한줄평 전용 API 호출
+            const res = await fetch(`${API_URL}/api/users/${email}/short-reviews`);
+            if (res.ok) {
+                const data = await res.json();
+                setReviews(data);
             }
-        };
-        checkTruncation();
-        window.addEventListener('resize', checkTruncation);
-        return () => window.removeEventListener('resize', checkTruncation);
-    }, [content]);
-
-    return (
-        <TooltipProvider delayDuration={200}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <div className="flex-1 mb-4 w-full text-left cursor-pointer">
-                        <p ref={textRef} className="text-[13px] text-gray-600 leading-relaxed font-medium break-keep line-clamp-4">
-                            "{content || "기록된 내용이 없습니다."}"
-                        </p>
-                    </div>
-                </TooltipTrigger>
-                {isTruncated && (
-                    <TooltipContent side="top" align="center" className="w-[280px] bg-white/95 backdrop-blur-md p-4 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.12)] border border-gray-100 max-h-[250px] overflow-y-auto scrollbar-hide z-50">
-                        <p className="text-[13px] text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">{content}</p>
-                    </TooltipContent>
-                )}
-            </Tooltip>
-        </TooltipProvider>
-    );
-}
-
-export default function ShortReviewsClient({ initialReviews = [], user }: { initialReviews: any[], user: any }) {
-    const router = useRouter();
-    const [reviews, setReviews] = useState(initialReviews);
-
-    if (!user) return <div className="w-full h-full flex justify-center items-center"><Loader2 className="animate-spin text-[#0066cc]" size={40} /></div>;
+        } catch (error) {
+            console.error("한줄평 데이터 로딩 실패:", error);
+            toast.error("데이터를 불러오는 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const togglePublicStatus = async (recordId: number, currentStatus: boolean) => {
         const newStatus = !currentStatus;
         setReviews(prev => prev.map(r => r.record_id === recordId ? { ...r, is_short_review_public: newStatus } : r));
         try {
-            await fetch(`${API_URL}/api/my-library/${recordId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_short_review_public: newStatus }) });
+            await fetch(`${API_URL}/api/my-library/${recordId}`, { 
+                method: 'PATCH', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ is_short_review_public: newStatus }) 
+            });
             toast.success(newStatus ? "전체 공개되었습니다." : "비공개되었습니다.");
         } catch {
             setReviews(prev => prev.map(r => r.record_id === recordId ? { ...r, is_short_review_public: currentStatus } : r));
             toast.error("상태 변경 실패");
         }
     };
+
+    // ▼▼▼ 로딩 화면 (바운싱 도트) 확실하게 노출 ▼▼▼
+    if (isLoading || status === 'loading') {
+        return (
+            <div className="w-full h-[calc(100vh-100px)] bg-[#F5F5F7] flex flex-col justify-center items-center">
+                <div className="flex items-center gap-2 mb-4">
+                    <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '-0.3s' }}></div>
+                    <div className="w-2.5 h-2.5 bg-[#0066cc]/80 rounded-full animate-bounce" style={{ animationDelay: '-0.15s' }}></div>
+                    <div className="w-2.5 h-2.5 bg-[#0066cc]/60 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                </div>
+                <p className="text-[13px] font-bold text-gray-400 tracking-wide animate-pulse">
+                    한줄평을 불러오는 중...
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
@@ -104,8 +115,8 @@ export default function ShortReviewsClient({ initialReviews = [], user }: { init
                                     key={review.record_id} id={review.record_id}
                                     onClick={() => router.push(`/library/${review.record_id}`)}
                                     book_cover={review.cover} book_title={review.title} book_author={review.author}
-                                    rating={review.rating} // 한줄평은 별점 포함
-                                    children={<SmartTruncatedText content={review.short_review} wrapQuotes={true} />} // 한줄평은 따옴표 감싸기
+                                    rating={review.rating}
+                                    children={<SmartTruncatedText content={review.short_review} wrapQuotes={true} />}
                                     footerLeft={<><Calendar size={12} /> {review.created_at?.split('T')[0]}</>}
                                     footerRight={
                                         <button onClick={() => togglePublicStatus(review.record_id, review.is_short_review_public)} className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${review.is_short_review_public ? 'text-[#0066cc] bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}>

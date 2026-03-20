@@ -19,7 +19,7 @@ export default function HeroEditorialSection() {
                         <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-teal-500/10 rounded-full blur-[80px]"></div>
                         
                         <div className="relative z-10 mb-12">
-                            <div className="flex items-center gap-2 mb-8 inline-flex bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/5">
+                            <div className="flex items-center gap-2 mb-8 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/5">
                                 <Quote size={16} className="text-[#0066cc]" />
                                 <span className="text-[12px] font-extrabold text-white tracking-widest">TODAY'S SENTENCE</span>
                             </div>

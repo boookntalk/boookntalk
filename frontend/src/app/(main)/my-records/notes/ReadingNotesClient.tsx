@@ -1,76 +1,86 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Home, ChevronRight, PenTool, Globe, Lock, BookOpen, Loader2, Hash, MessageSquareQuote, Calendar } from 'lucide-react';
+import { Home, ChevronRight, PenTool, Globe, Lock, Calendar } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatCardAuthor } from '@/utils/formatters';
 
 import { BookRecordCard } from '@/components/common/BookRecordCard';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-// ▼ 스마트 말줄임 툴팁 컴포넌트 (유지)
-function TruncatedMemo({ content }: { content: string }) {
-    const textRef = useRef<HTMLParagraphElement>(null);
-    const [isTruncated, setIsTruncated] = useState(false);
-
-    useEffect(() => {
-        const checkTruncation = () => {
-            if (textRef.current) {
-                setIsTruncated(textRef.current.scrollHeight > textRef.current.clientHeight);
-            }
-        };
-        checkTruncation();
-        window.addEventListener('resize', checkTruncation);
-        return () => window.removeEventListener('resize', checkTruncation);
-    }, [content]);
-
-    return (
-        <TooltipProvider delayDuration={200}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <div className="flex-1 mb-4 w-full text-left cursor-pointer">
-                        <p ref={textRef} className="text-[13px] text-gray-600 leading-relaxed font-medium break-keep line-clamp-4">
-                            {content || "기록된 내용이 없습니다."}
-                        </p>
-                    </div>
-                </TooltipTrigger>
-                {isTruncated && (
-                    <TooltipContent side="top" align="center" className="w-[280px] bg-white/95 backdrop-blur-md p-4 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.12)] border border-gray-100 max-h-[250px] overflow-y-auto scrollbar-hide z-50">
-                        <p className="text-[13px] text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">{content}</p>
-                    </TooltipContent>
-                )}
-            </Tooltip>
-        </TooltipProvider>
-    );
-}
-
-export default function ReadingNotesClient({ initialNotes = [] }: { initialNotes?: any[] }) {
-    const { status } = useSession();
+export default function ReadingNotesClient() {
+    const { data: session, status } = useSession();
     const router = useRouter();
-    const [notes, setNotes] = useState<any[]>(initialNotes);
+    
+    // ▼ 초기값을 비우고 클라이언트에서 직접 로딩 상태를 관리
+    const [notes, setNotes] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    if (status === 'loading') return <div className="w-full h-full flex justify-center items-center"><Loader2 className="animate-spin text-[#0066cc]" size={40} /></div>;
+    // ▼ 화면 렌더링 시 데이터를 가져오는 로직
+    useEffect(() => {
+        if (status === 'unauthenticated') {
+            router.push('/');
+            return;
+        }
+
+        if (session?.user?.email) {
+            fetchReadingNotes(session.user.email);
+        }
+    }, [session, status, router]);
+
+    const fetchReadingNotes = async (email: string) => {
+        setIsLoading(true);
+        try {
+            // ▼▼▼ [핵심 수정] 기획자님이 찾아주신 진짜 API 주소 적용! ▼▼▼
+            const res = await fetch(`${API_URL}/api/memos/user/${email}`);
+            if (res.ok) {
+                const data = await res.json();
+                setNotes(data);
+            }
+        } catch (error) {
+            console.error("독서 노트 로딩 실패:", error);
+            toast.error("데이터를 불러오는 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const togglePublicStatus = async (noteId: number, currentStatus: boolean) => {
         const newStatus = !currentStatus;
         setNotes(prev => prev.map(n => n.id === noteId ? { ...n, is_public: newStatus } : n));
         try {
-            await fetch(`${API_URL}/api/memos/${noteId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_public: newStatus }) });
+            await fetch(`${API_URL}/api/memos/${noteId}`, { 
+                method: 'PATCH', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ is_public: newStatus }) 
+            });
             toast.success(newStatus ? "전체 공개되었습니다." : "비공개되었습니다.");
         } catch {
             setNotes(prev => prev.map(n => n.id === noteId ? { ...n, is_public: currentStatus } : n));
             toast.error("상태 변경 실패");
         }
     };
+
+    // ▼▼▼ 모던 바운싱 도트 로딩 화면 ▼▼▼
+    if (isLoading || status === 'loading') {
+        return (
+            <div className="w-full h-[calc(100vh-100px)] bg-[#F5F5F7] flex flex-col justify-center items-center">
+                <div className="flex items-center gap-2 mb-4">
+                    <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '-0.3s' }}></div>
+                    <div className="w-2.5 h-2.5 bg-[#0066cc]/80 rounded-full animate-bounce" style={{ animationDelay: '-0.15s' }}></div>
+                    <div className="w-2.5 h-2.5 bg-[#0066cc]/60 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                </div>
+                <p className="text-[13px] font-bold text-gray-400 tracking-wide animate-pulse">
+                    사색의 흔적을 불러오는 중...
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
@@ -104,13 +114,23 @@ export default function ReadingNotesClient({ initialNotes = [] }: { initialNotes
                         <main className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
                             {notes.map((note) => (
                                 <BookRecordCard 
-                                    key={note.id} id={note.id}
+                                    key={note.id} 
+                                    id={note.id}
                                     onClick={() => router.push(`/library/${note.library_id}#memo`)}
-                                    book_cover={note.book_cover} book_title={note.book_title} book_author={note.book_author}
+                                    book_cover={note.book_cover} 
+                                    book_title={note.book_title} 
+                                    book_author={note.book_author}
                                     children={<SmartTruncatedText content={note.content} wrapQuotes={false} />}
                                     footerLeft={<><Calendar size={12} /> {note.created_at?.split('T')[0]}</>}
                                     footerRight={
-                                        <button onClick={() => togglePublicStatus(note.id, note.is_public)} className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${note.is_public ? 'text-[#0066cc] bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}>
+                                        <button 
+                                            // ▼ 공개 상태 변경 시 카드 클릭 이벤트(이동) 방지
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                togglePublicStatus(note.id, note.is_public);
+                                            }} 
+                                            className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${note.is_public ? 'text-[#0066cc] bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'}`}
+                                        >
                                             {note.is_public ? <Globe size={10}/> : <Lock size={10}/>} {note.is_public ? '전체 공개' : '나만 보기'}
                                         </button>
                                     }

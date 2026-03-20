@@ -28,7 +28,6 @@ import {
     SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 
-// ▼▼▼ [핵심] 기획자님의 완벽한 3단 구조 UX가 반영된 메뉴 배열 ▼▼▼
 const navItems = [
     {
         title: "내 서재", icon: Library,
@@ -52,16 +51,26 @@ const navItems = [
             { title: '독서 통계', href: '/statistics', icon: PieChart },
         ]
     },
-    { title: "사색 라운지", href: "/community", icon: Globe } // 글로벌 메뉴 유지
+    { title: "사색 라운지", href: "/community", icon: Globe }
 ];
 
 export function LibrarySidebar() {
     const pathname = usePathname();
 
+    // ▼▼▼ [버그 해결] 라우팅 활성화 감지 로직 고도화 ▼▼▼
     const isActiveRoute = (href: string) => {
         if (!href) return false;
         if (href === '/' && pathname !== '/') return false;
-        return pathname.startsWith(href);
+        
+        // '도서(/library)' 메뉴 예외 처리: 하위 메뉴인 tags, wish로 이동했을 때는 도서 메뉴의 활성화를 강제로 끕니다.
+        if (href === '/library') {
+            if (pathname.startsWith('/library/tags') || pathname.startsWith('/library/wish')) {
+                return false;
+            }
+        }
+        
+        // 정확히 일치하거나, 해당 경로의 하위 상세 페이지(예: /library/123)일 때만 활성화
+        return pathname === href || pathname.startsWith(`${href}/`);
     };
 
     return (
@@ -78,11 +87,15 @@ export function LibrarySidebar() {
                                 return (
                                     <SidebarMenuItem key={index}>
                                         <SidebarMenuButton 
-                                            className={`w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold transition-colors rounded-xl ${isGroupActive ? 'text-[#0066cc]' : 'text-[#1d1d1f] hover:bg-gray-50'}`}
+                                            asChild
+                                            className={`w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold rounded-none cursor-default hover:bg-transparent hover:text-inherit active:bg-transparent ${isGroupActive ? 'text-[#0066cc]' : 'text-[#1d1d1f]'}`}
                                         >
-                                            <item.icon className={`h-5 w-5 ${isGroupActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
-                                            <span>{item.title}</span>
+                                            <div>
+                                                <item.icon className={`h-5 w-5 ${isGroupActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
+                                                <span>{item.title}</span>
+                                            </div>
                                         </SidebarMenuButton>
+                                        
                                         <SidebarMenuSub className="ml-2 border-l-gray-100 pl-2 my-1">
                                             {item.subItems.map((subItem, subIndex) => {
                                                  const isSubActive = isActiveRoute(subItem.href);
@@ -91,10 +104,10 @@ export function LibrarySidebar() {
                                                         <SidebarMenuSubButton
                                                             asChild
                                                             isActive={isSubActive}
-                                                            className="text-[14px] font-medium h-auto py-2 data-[active=true]:text-[#0066cc] data-[active=true]:font-bold data-[active=true]:bg-blue-50/50 rounded-lg"
+                                                            className="text-[14px] font-medium h-auto py-2 transition-all duration-200 rounded-none cursor-pointer hover:bg-gray-100 data-[active=true]:bg-[#e6f0fa] data-[active=true]:text-[#0066cc] data-[active=true]:font-bold data-[active=true]:shadow-none data-[active=true]:hover:bg-[#e6f0fa]"
                                                         >
                                                             <Link href={subItem.href} className="flex items-center gap-3">
-                                                                <subItem.icon className={`h-[18px] w-[18px] ${isSubActive ? 'text-[#0066cc]' : 'text-gray-400 opacity-80'}`} />
+                                                                <subItem.icon className={`h-[18px] w-[18px] transition-colors ${isSubActive ? 'text-[#0066cc]' : 'text-gray-400 opacity-80'}`} />
                                                                 <span>{subItem.title}</span>
                                                             </Link>
                                                         </SidebarMenuSubButton>
@@ -112,10 +125,10 @@ export function LibrarySidebar() {
                                     <SidebarMenuButton 
                                         asChild
                                         isActive={isSingleActive}
-                                        className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold text-[#1d1d1f] bg-transparent hover:bg-gray-50 transition-colors rounded-xl data-[active=true]:text-[#0066cc] data-[active=true]:bg-blue-50"
+                                        className="w-full justify-start gap-3 px-3 py-2.5 h-auto text-[15px] font-bold text-[#1d1d1f] transition-all duration-200 rounded-none cursor-pointer hover:bg-gray-100 data-[active=true]:bg-[#e6f0fa] data-[active=true]:text-[#0066cc] data-[active=true]:shadow-none data-[active=true]:hover:bg-[#e6f0fa]"
                                     >
                                         <Link href={item.href || '#'}>
-                                            <item.icon className={`h-5 w-5 ${isSingleActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
+                                            <item.icon className={`h-5 w-5 transition-colors ${isSingleActive ? 'text-[#0066cc]' : 'text-gray-400'}`} />
                                             <span>{item.title}</span>
                                         </Link>
                                     </SidebarMenuButton>

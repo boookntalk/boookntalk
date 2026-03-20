@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Star, BookType, ExternalLink, Edit3, Trash2, Hash, Layers } from 'lucide-react';
+import { FloatingCover } from '@/components/common/FloatingCover';
 
 interface BookTopInfoProps {
     record: any;
@@ -57,16 +58,14 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
                 <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,40px)] items-stretch">
                     {/* [1. 좌측 영역]: 도서 표지 */}
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
-                        <div className="relative aspect-[1/1.45] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100 rounded-xl overflow-hidden group">
-                            {edition?.cover_image || edition?.cover || work?.cover_image ? (
-                                <Image src={getHighResCover(edition.cover_image || edition.cover || work.cover_image)} alt={work?.title || 'Cover'} fill className="object-cover z-10 bg-gray-50 transition-transform duration-500 group-hover:scale-105" unoptimized />
-                            ) : (
-                                <div className="w-full h-full bg-gray-50 flex flex-col items-center justify-center text-gray-400">
-                                    <BookType size={32} className="mb-2 opacity-20" />
-                                    <span className="text-xs font-semibold">No Cover</span>
-                                </div>
-                            )}
-                        </div>
+                        {/* ▼▼▼ [적용 완료] 11시 방향 3D 입체 FloatingCover 적용 ▼▼▼ */}
+                        {/* 부모(w-[200px])가 너비를 잡아주므로, className="w-full aspect-[1/1.45]"로 비율만 맞춰주면 완벽합니다. */}
+                        <FloatingCover 
+                            src={edition?.cover_image || edition?.cover || work?.cover_image ? getHighResCover(edition.cover_image || edition.cover || work.cover_image) : null}
+                            alt={work?.title || 'Cover'}
+                            className="w-full aspect-[1/1.45]"
+                            iconSize={48}
+                        />
                         
                         {/* 외부 링크 버튼 (미리보기 제거 후 디자인 다듬기) */}
                         <div className="flex w-full mt-auto">
