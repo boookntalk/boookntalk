@@ -15,8 +15,10 @@ from sqlalchemy.exc import IntegrityError
 from routers import home, memos, editions, library
 from dotenv import load_dotenv
 from collections import defaultdict
-
 from utils.author_parser import parse_author_string
+from routers import insights
+from services.insight_service import sync_insight_on_status_change
+from utils.genre_parser import map_to_standard_genre # ▼▼▼ [NEW] 공통 장르 필터 임포트 ▼▼▼
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 
@@ -153,11 +155,15 @@ app.include_router(home.router)
 app.include_router(memos.router)
 app.include_router(editions.router)
 app.include_router(library.router)
+app.include_router(insights.router)
 
-# CORS 설정
+# ▼▼▼ [필수 확인] CORS 미들웨어 설정 ▼▼▼
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], 
+    allow_origins=[
+        "http://localhost:3000", # 프론트엔드 주소 완벽 허용
+        "http://127.0.0.1:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -170,6 +176,60 @@ if not os.path.exists(UPLOAD_DIR):
 
 # 2. 정적 파일 마운트 (이 코드가 있어야 http://localhost:8000/static/... 접근 가능)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# # ==========================================
+# # [BoooknTalk 장르 정제기] 
+# # 역할: KDC 코드 및 외부 API 텍스트를 기획자 표준 8개 대분류로 세탁
+# # ==========================================
+# def map_to_standard_genre(kdc_code: str, naver_category: str = "") -> str:
+#     # 1. 국립중앙도서관 KDC 코드 기반 1차 매핑 (가장 정확함)
+#     if kdc_code:
+#         kdc_prefix = str(kdc_code).strip()[:1] # 앞자리 100번대만 추출
+#         kdc_full = str(kdc_code).strip()
+        
+#         # 문학/소설 (800대)
+#         if kdc_prefix == '8': 
+#             # 814, 824 등 에세이/수필 계열 분리
+#             if kdc_full.startswith(('814', '824', '834', '844', '804')): 
+#                 return "에세이 / 논픽션"
+#             return "문학 / 소설"
+        
+#         # 인문/사회/철학 (100대 철학, 200대 종교, 300대 사회, 900대 역사)
+#         elif kdc_prefix in ['1', '2', '9']: return "인문 / 사회 / 철학"
+#         elif kdc_prefix == '3':
+#             # 320대 경제학 분리
+#             if kdc_full.startswith('32'): return "경제 / 경영"
+#             # 370대 교육학, 360대 법학 등
+#             if kdc_full.startswith(('37', '36')): return "학술 / 전문서"
+#             return "인문 / 사회 / 철학"
+            
+#         # 순수과학(400), 기술과학(500)
+#         elif kdc_prefix in ['4', '5']: return "과학 / IT / 공학"
+        
+#         # 예술/취미/스포츠 (600대)
+#         elif kdc_prefix == '6': return "실용 / 취미 / 예술"
+        
+#         # 언어 (700대)
+#         elif kdc_prefix == '7': return "학술 / 전문서"
+        
+#         # 총류 (000대) - 백과사전 등
+#         elif kdc_prefix == '0': return "기타"
+
+#     # 2. KDC 코드가 없을 경우, 네이버 카테고리 텍스트로 2차 매핑 (Fallback)
+#     if naver_category:
+#         cat_str = naver_category.lower()
+#         if any(x in cat_str for x in ['소설', '시', '희곡', '문학']): return "문학 / 소설"
+#         if any(x in cat_str for x in ['에세이', '수필', '산문', '전기', '르포']): return "에세이 / 논픽션"
+#         if any(x in cat_str for x in ['인문', '철학', '역사', '사회', '정치']): return "인문 / 사회 / 철학"
+#         if any(x in cat_str for x in ['경제', '경영', '재테크', '투자']): return "경제 / 경영"
+#         if any(x in cat_str for x in ['과학', 'it', '컴퓨터', '공학', '의학']): return "과학 / IT / 공학"
+#         if any(x in cat_str for x in ['실용', '취미', '예술', '여행', '요리', '건강']): return "실용 / 취미 / 예술"
+#         if any(x in cat_str for x in ['아동', '유아', '청소년', '그림책']): return "아동 / 청소년"
+#         if any(x in cat_str for x in ['만화', '웹툰', '그래픽노블']): return "만화 / 그래픽노블"
+#         if any(x in cat_str for x in ['학습', '교재', '전공', '수험서', '사전']): return "학술 / 전문서"
+
+#     # 모든 조건에 걸리지 않으면 안전하게 '기타' 처리
+#     return "기타"
 
 # -------------------------------------------------------------------
 # [4] 기본 및 인증 API (Auth Endpoints)
@@ -415,12 +475,24 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             nums = re.findall(r'\d+', str(page_raw))
             if nums: page_count = int(nums[0])
 
+        # ==========================================
+        # ▼▼▼ [NEW: 새로 추가되는 구역] 정제기 통과하여 표준 장르 확정 ▼▼▼
+        # ==========================================
+        raw_kdc = nlk_item.get('KDC') or ""
+        raw_naver_cat = naver_item.get('category') or "" # 네이버 API의 카테고리값 추출
+        
+        # 기획자님의 8대 표준 장르로 세탁 실행!
+        standard_category = map_to_standard_genre(raw_kdc, raw_naver_cat)
+        # ==========================================
+        # ▲▲▲ [새로 추가되는 구역 끝] ▲▲▲
+        # ==========================================
+
         return {
-            "title": final_title, # 👈 가공된 완벽한 제목 전달!
+            "title": final_title, 
             "author": author,
             "publisher": publisher,
             "pubDate": pubDate,
-            "categoryName": nlk_item.get('KDC') or "", 
+            "categoryName": standard_category,  # 👈 [수정됨] 기존 nlk_item.get('KDC') 대신 세탁된 장르 변수 투입!
             "cover": cover, 
             "description": naver_item.get('description') or "",
             "pageCount": page_count,
@@ -430,7 +502,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             "binding_type": "기타",
             "size_mm": "",
             "language": "한국어",
-            "kdc_code": nlk_item.get('KDC') or "",
+            "kdc_code": raw_kdc, # 원본 KDC 코드는 별도로 유지 (보존용)
             "first_discoverer": None
         }
 
@@ -479,8 +551,17 @@ async def get_book_public_detail(isbn: str, db: Session = Depends(get_db)):
 # [6] 서재 관리 API (Library Management)
 # -------------------------------------------------------------------
 
+# -------------------------------------------------------------------
+# [6] 서재 관리 API (Library Management) - 도서 등록 마스터 노드
+# -------------------------------------------------------------------
+
 @app.post("/api/books")
 async def register_book(request: RegisterBookRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    기능: 외부 API에서 검색된 도서를 BoooknTalk DB(Work, Edition)에 저장하고, 
+          동시에 유저의 서재(Record)에 'WISH(읽고 싶은 책)' 상태로 등록하며,
+          실시간 인사이트 통계를 업데이트합니다.
+    """
     # 1. 사용자 조회
     user = db.query(models.User).filter(models.User.email == request.user_email).first()
     if not user:
@@ -494,7 +575,7 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
         is_bnt_generated = True
 
     # ---------------------------------------------------------
-    # [3. Work (작품) 확인 및 생성]
+    # [3. Work (작품 메타데이터) 확인 및 생성]
     # ---------------------------------------------------------
     work = db.query(models.Work).filter(
         models.Work.title == request.title, 
@@ -507,15 +588,14 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             author=request.author, 
             description=request.description,
             category=request.categoryName,
-            original_title=request.originalTitle # [NEW] 원서명 저장
+            original_title=request.originalTitle 
         )
         db.add(work)
         db.commit()
         db.refresh(work)
         
-        # 3-2. 작가 정보 및 알라딘 ID 연동
+        # 3-2. 작가 정보 및 알라딘 ID 연동 (기존 로직 유지)
         try:
-            # A. 상세 정보(authorId 포함)가 있는 경우 우선 처리
             if hasattr(request, 'detailed_authors') and request.detailed_authors:
                 for a_info in request.detailed_authors:
                     a_name = a_info.get('authorName')
@@ -547,14 +627,11 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
                         link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=a_role)
                         db.add(link)
                         db.commit()
-
-            # B. 상세 정보가 없는 경우 기존 문자열 파싱 (Fallback)
             else:
                 parsed_authors = parse_author_string(request.author)
                 for p_auth in parsed_authors:
                     contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
                     if not contributor:
-                        # ▼▼▼ [수정됨] name과 original_name을 모두 챙겨서 저장! ▼▼▼
                         contributor = models.Contributor(
                             name=p_auth['name'], 
                             original_name=p_auth.get('original_name')
@@ -562,7 +639,6 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
                         db.add(contributor)
                         db.commit()
                         db.refresh(contributor)
-                    # ▼▼▼ [NEW] 이미 존재하는 작가인데 원어 이름이 비어있다면? 채워줍니다! ▼▼▼
                     elif p_auth.get('original_name') and not contributor.original_name:
                         contributor.original_name = p_auth.get('original_name')
                         db.commit()
@@ -577,11 +653,10 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
                         link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
                         db.add(link)
                         db.commit()
-                    
         except Exception as e:
             print(f"⚠️ 작가 정보 저장 중 오류 발생 (무시됨): {e}")
     else:
-        # [NEW] 기존 데이터와 비교하여 더 나은 정보가 들어오면 업데이트
+        # 기존 데이터 대비 더 나은 정보 업데이트
         work_updated = False
         if request.description and request.description != work.description:
             work.description = request.description
@@ -597,11 +672,10 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             db.refresh(work)
 
     # ---------------------------------------------------------
-    # [4. Edition (판본) 생성]
+    # [4. Edition (판본) 생성 및 업데이트]
     # ---------------------------------------------------------
     edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
 
-    # 날짜 파싱 공통 로직
     parsed_pub_date = None
     if request.pubDate:
         clean_date = request.pubDate.replace(".", "").replace("-", "").strip()
@@ -614,17 +688,6 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             pass
 
     if not edition:
-        parsed_pub_date = None
-        if request.pubDate:
-            clean_date = request.pubDate.replace(".", "").replace("-", "").strip()
-            try:
-                if len(clean_date) >= 8:
-                    parsed_pub_date = datetime.strptime(clean_date[:8], "%Y%m%d")
-                elif len(clean_date) == 4:
-                    parsed_pub_date = datetime.strptime(clean_date, "%Y")
-            except Exception as e:
-                print(f"Date parsing error: {e}")
-        
         edition = models.Edition(
             isbn=final_isbn,           
             isbn10=request.isbn10,
@@ -640,17 +703,13 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             language=request.language,
             size_mm=request.size_mm,
             price=request.price,
-            
-            # ▼▼▼ [NEW] BoooknTalk 최초 발견자(등록자) 영구 박제 ▼▼▼
             created_by_id=user.id
         )
         db.add(edition)
         db.commit()
         db.refresh(edition)
     else:
-        # [NEW] 기존 판본 데이터에 빈칸이 있거나 값이 다르면 업데이트 (created_by_id는 건드리지 않음)
         ed_updated = False
-        
         if request.isbn10 and not edition.isbn10:
             edition.isbn10 = request.isbn10
             ed_updated = True
@@ -681,7 +740,7 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             db.refresh(edition)
 
     # ---------------------------------------------------------
-    # [5. Record (서재) 생성]
+    # [5. Record (서재) 등록 및 통계 실시간 업데이트]
     # ---------------------------------------------------------
     record = db.query(models.Record).filter(
         models.Record.user_id == user.id, 
@@ -698,17 +757,28 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
         rating=0.0
     )
     db.add(new_record)
-    db.commit()
+    db.commit() # 서재 등록 완료!
+
+    # ▼▼▼ [NEW] 공통 트리거 발동! (신규 등록 = None -> WISH) ▼▼▼
+    sync_insight_on_status_change(
+        db=db,
+        user_id=user.id,
+        old_status=None,          
+        new_status=new_record.status, # "WISH"
+        finish_date=new_record.finish_date,
+        genre_name=work.category if work else "기타",
+        author_name=work.author if work else "알 수 없음"
+    )
+    db.commit() # 통계 테이블 변경사항 최종 저장!
 
     # ▼▼▼ [핵심 2] 백그라운드 이미지 다운로드 지시 ▼▼▼
-    # 외부 URL(http)이고, 아직 로컬 주소(localhost)가 아닐 때만 실행
     if request.cover and request.cover.startswith("http") and "localhost" not in request.cover:
         print(f"🚀 [Background] 이미지 다운로드 대기열 등록: Edition ID {edition.id}")
         background_tasks.add_task(
             download_and_update_cover, 
-            edition.id,         # 저장된 판본 ID
-            request.cover,      # 네이버/도서관 이미지 URL
-            SessionLocal        # 백그라운드용 독립 DB 세션 팩토리
+            edition.id,         
+            request.cover,      
+            SessionLocal        
         )
 
     return {
@@ -802,52 +872,89 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
         
     return results
 
+# ===================================================================
+# [핵심] 서재 기록(상태, 별점, 코멘트, 태그 등) 수정 마스터 API
+# 프론트엔드(BookDetailForm.tsx)에서 "저장" 버튼을 누를 때 호출됩니다.
+# ==========================================
 @app.patch("/api/my-library/{library_id}")
 async def update_library_entry(library_id: int, update_data: LibraryUpdate, db: Session = Depends(get_db)):
     """
-    서재 기록 수정 (상태, 별점, 코멘트, 태그, 매체 등)
+    서재 기록 수정 (상태 변경 및 데이터 동기화)
+    - 역할: 도서의 상태(WISH, READING, COMPLETED)를 변경하거나 평점, 독서록 등을 업데이트합니다.
+    - 추가 기능: 상태 변경 시 '인사이트 통계' 트리거를 발동시켜 전체 통계 수치를 실시간으로 증감시킵니다.
     """
+    # 1. DB에서 수정할 서재 기록(Record)을 가져옵니다.
     record = db.query(models.Record).filter(models.Record.id == library_id).first()
-    
     if not record:
         raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
 
+    # ▼▼▼ [NEW] 트리거 발동을 위해 '변경 전 상태'를 미리 백업해둡니다. ▼▼▼
+    old_status = record.status 
+    
+    # 2. 프론트엔드에서 보낸 데이터 중 값이 있는 것만 추출합니다.
     update_dict = update_data.dict(exclude_unset=True)
     
-    # 1. 태그 데이터는 별도 테이블에 저장해야 하므로 빼냅니다.
+    # 3. 태그 데이터는 별도 관계(RecordTag) 테이블에 저장해야 하므로 딕셔너리에서 잠시 빼냅니다.
     tags_data = update_dict.pop('tags', None)
 
-    # 2. 일반 컬럼(current_page, reading_format 등) 업데이트
+    # 4. 프론트엔드에서 넘어온 일반 컬럼(status, rating, current_page 등)을 DB 객체에 덮어씌웁니다.
     for key, value in update_dict.items():
         setattr(record, key, value)
 
-    # 3. 태그 관계 저장 로직 (Many-to-Many)
+    # 5. 태그(Tag) 관계 저장 로직 (Many-to-Many 처리)
     if tags_data is not None:
-        # 기존 연결된 태그 삭제 후 재등록 (가장 깔끔한 동기화 방식)
+        # 기존에 연결된 낡은 태그들을 모두 깔끔하게 지웁니다.
         db.query(models.RecordTag).filter(models.RecordTag.record_id == library_id).delete()
         for tag_name in tags_data:
             tag_name = tag_name.strip()
             if not tag_name: continue
             
-            # Tags 테이블에 이미 있는 태그인지 확인
+            # Tags 마스터 테이블에 이미 있는 태그인지 확인하고, 없으면 새로 등록합니다.
             tag = db.query(models.Tag).filter(models.Tag.name == tag_name).first()
             if not tag:
                 tag = models.Tag(name=tag_name)
                 db.add(tag)
-                db.commit() # ID 발급을 위해 즉시 커밋
+                db.commit() # 새 태그의 고유 ID 발급을 위해 즉시 커밋
                 db.refresh(tag)
             
-            # Record와 Tag 연결
+            # Record(서재)와 Tag(태그)를 연결해주는 브릿지 데이터를 생성합니다.
             db.add(models.RecordTag(record_id=library_id, tag_id=tag.id))
 
+    # 6. DB 트랜잭션 처리 (인사이트 통계 업데이트 포함)
     try:
+        # ▼▼▼ [핵심] 통계 트리거 발동! (변경 전 상태 -> 변경 후 상태) ▼▼▼
+        if old_status != record.status:
+            work = record.edition.work if record.edition else None
+            
+            # ▼▼▼ [에러 원인 완벽 해결] 문자열 날짜를 파이썬 datetime 객체로 변환! ▼▼▼
+            parsed_finish_date = None
+            if record.finish_date:
+                if isinstance(record.finish_date, str):
+                    # "2026-03-22" 같은 프론트엔드 문자열을 날짜 객체로 파싱
+                    parsed_finish_date = datetime.strptime(record.finish_date.split('T')[0], "%Y-%m-%d")
+                else:
+                    parsed_finish_date = record.finish_date
+            
+            sync_insight_on_status_change(
+                db=db,
+                user_id=record.user_id,
+                old_status=old_status,          
+                new_status=record.status,       
+                finish_date=parsed_finish_date, # 변환된 완벽한 날짜 객체 투입!
+                genre_name=work.category if work else "기타",
+                author_name=work.author if work else "알 수 없음"
+            )
+
+        # 7. 변경된 서재 기록과 통계 데이터를 최종적으로 DB에 확정(Commit)합니다.
         db.commit()
         db.refresh(record)
         return {"message": "Updated successfully", "data": record.id}
+        
     except Exception as e:
         db.rollback()
+        # [NEW] 터미널에서 어떤 에러인지 정확히 볼 수 있도록 팩트 로깅 추가
+        print(f"❌ [상태 변경 에러 상세 원인]: {str(e)}") 
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/api/users/{user_email}/records")
 async def read_user_records(
@@ -1798,59 +1905,80 @@ async def delete_short_review(record_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "message": "한줄평이 삭제되었습니다."}
 
 # ===================================================================
-# [NEW] 마이페이지 (통계 대시보드) API
+# [수정] 마이페이지 (통계 대시보드) API - 연도별 필터링 기능 추가
 # ===================================================================
 
 @app.get("/api/mypage/stats/{user_email}")
-async def get_mypage_stats(user_email: str, db: Session = Depends(get_db)):
+async def get_mypage_stats(
+    user_email: str, 
+    year: Optional[int] = Query(None, description="특정 연도 필터링 (없으면 전체)"), # ▼▼▼ [NEW] 연도 파라미터 추가
+    db: Session = Depends(get_db)
+):
     """
-    유저의 프로필, 요약 통계, 월별 독서량 추이, 선호 장르, 태그 등을 한 번에 반환합니다.
+    유저의 프로필, 요약 통계, 장르/태그 분석을 반환합니다. 
+    year 파라미터가 있으면 해당 연도 데이터만 필터링합니다.
     """
     user = db.query(models.User).filter(models.User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
 
-    # 1. 프로필 정보
+    # 1. 프로필 정보 (연도와 무관하게 고정)
     profile = {
         "nickname": user.nickname or user.email.split('@')[0],
         "bio": user.bio or "아직 작성된 한 줄 소개가 없습니다.",
         "profile_image": user.profile_image or ""
     }
 
-    # 2. 독서 기록 전체 가져오기 (Work, Edition 조인)
+    # 2. 독서 기록 전체 가져오기
     records = db.query(models.Record).options(
         joinedload(models.Record.edition).joinedload(models.Edition.work)
     ).filter(models.Record.user_id == user.id).all()
 
-    # 요약 통계 계산
-    finished_books = [r for r in records if r.status == 'FINISHED']
+    # ▼▼▼ [핵심 로직] 연도(year) 값이 넘어왔을 경우 파이썬 메모리에서 정밀 필터링 ▼▼▼
+    if year:
+        filtered_records = []
+        for r in records:
+            # 완독한 책은 '완독일(finish_date)' 기준, 읽는 중/읽고 싶은 책은 '서재에 담은 날(added_at)' 기준으로 해당 연도인지 판별합니다.
+            if r.status in ['FINISHED', 'COMPLETED'] and r.finish_date and r.finish_date.year == year:
+                filtered_records.append(r)
+            elif r.status not in ['FINISHED', 'COMPLETED'] and r.added_at and r.added_at.year == year:
+                filtered_records.append(r)
+        
+        # 필터링된 데이터로 덮어씌우기
+        records = filtered_records
+
+    # 3. 요약 통계 계산 (필터링된 records 기준)
+    finished_books = [r for r in records if r.status in ['FINISHED', 'COMPLETED']]
     reading_books = [r for r in records if r.status == 'READING']
+    
+    # ▼▼▼ [복구 1] 읽고 싶은 책 카운트 변수 추가 ▼▼▼
+    wish_books = [r for r in records if r.status == 'WISH']
     
     rated_books = [r for r in records if r.rating is not None and r.rating > 0]
     avg_rating = sum(r.rating for r in rated_books) / len(rated_books) if rated_books else 0.0
     
     total_pages = sum(r.current_page for r in records if r.current_page)
 
-    # 3. 올해 월별 독서량 추이 (완독 기준)
-    current_year = datetime.now().year
+    # 4. 올해 월별 독서량 추이 (이 부분은 기존 '독서 흐름'을 위해 현재 연도로 고정하거나 프론트 요청 연도 사용)
+    target_year = year if year else datetime.now().year
     monthly_trend = {month: 0 for month in range(1, 13)}
     
     for r in finished_books:
-        if r.finish_date and r.finish_date.year == current_year:
+        if r.finish_date and r.finish_date.year == target_year:
             monthly_trend[r.finish_date.month] += 1
             
     trend_data = [{"month": f"{m}월", "count": monthly_trend[m]} for m in range(1, 13)]
 
-    # 4. 장르(카테고리) 취향 분석
+    # 5. 장르(카테고리) 취향 분석
     genre_counts = {}
     for r in records:
         if r.edition and r.edition.work and r.edition.work.category:
-            cat = r.edition.work.category.split('>')[0].strip() # 대분류만 추출 (예: 국내도서 > 소설 -> 국내도서)
+            cat = r.edition.work.category.split('>')[0].strip()
             genre_counts[cat] = genre_counts.get(cat, 0) + 1
             
     top_genres = [{"genre": k, "count": v} for k, v in sorted(genre_counts.items(), key=lambda item: item[1], reverse=True)[:5]]
 
-    # 5. 최다 사용 태그 (Word Cloud용)
+    # 6. 최다 사용 태그 (Word Cloud용)
     user_record_ids = [r.id for r in records]
     tag_counts = {}
     if user_record_ids:
@@ -1862,18 +1990,36 @@ async def get_mypage_stats(user_email: str, db: Session = Depends(get_db)):
             tag_counts[tag_name] = tag_counts.get(tag_name, 0) + 1
             
     top_tags = [{"text": k, "count": v} for k, v in sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)[:10]]
+    
+    # ▼▼▼ [완벽 복구 & 업그레이드] 기록의 무게 계산 ▼▼▼
+    # records 배열은 이미 기획자님이 선택한 연도(year)에 맞게 정밀 필터링된 상태입니다!
+    # 따라서 해당 연도에 작성된 한줄평과 긴줄평 갯수만 정확하게 카운팅합니다.
+    short_review_count = sum(1 for r in records if getattr(r, 'short_review', None) and str(r.short_review).strip() != "")
+    long_review_count = sum(1 for r in records if getattr(r, 'long_review', None) and str(r.long_review).strip() != "")
+
+    # 독서노트는 가장 안전하게 기존 InsightSummary 테이블의 전체 누적 데이터를 참조합니다.
+    insight_summary = db.query(models.InsightSummary).filter(models.InsightSummary.user_id == user.id).first()
+    memo_count = insight_summary.total_memos if insight_summary else 0
 
     return {
         "profile": profile,
         "summary": {
             "total_finished": len(finished_books),
             "total_reading": len(reading_books),
+            "total_wish": len(wish_books), # 아까 복구했던 읽고 싶은 책
             "avg_rating": round(avg_rating, 1),
             "total_pages": total_pages
         },
         "trend_data": trend_data,
         "top_genres": top_genres,
-        "top_tags": top_tags
+        "top_tags": top_tags,
+        
+        # ▼▼▼ [핵심] 프론트엔드가 애타게 기다리던 기록의 무게 데이터 전송! ▼▼▼
+        "records_weight": {
+            "memo_count": memo_count,
+            "short_review_count": short_review_count,
+            "long_review_count": long_review_count
+        }
     }
 
 # ===================================================================
@@ -2492,6 +2638,39 @@ async def merge_specific_contributors(
         return {
             "status": "success", 
             "message": f"파편화된 작가들({source_ids}번)이 진짜 작가({target_id}번)로 완벽하게 흡수 병합되었습니다!"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# [관리자 전용] 과거 도서 장르 일괄 세탁(마이그레이션) API
+# ==========================================
+@app.get("/api/admin/sync-genres")
+async def sync_existing_genres(db: Session = Depends(get_db)):
+    works = db.query(models.Work).all()
+    updated_count = 0
+
+    for work in works:
+        old_cat = work.category or ""
+        
+        # 숫자로만 되어있으면 KDC 힌트로, 아니면 네이버 문자열 힌트로 넘김
+        kdc_hint = old_cat if old_cat.replace('.', '').isdigit() else ""
+        naver_hint = old_cat if not kdc_hint else ""
+
+        # 방금 분리한 공통 모듈의 정제기 통과!
+        new_cat = map_to_standard_genre(kdc_code=kdc_hint, naver_category=naver_hint)
+
+        # 기존 장르와 다를 때만 업데이트
+        if work.category != new_cat:
+            work.category = new_cat
+            updated_count += 1
+
+    try:
+        db.commit()
+        return {
+            "status": "success", 
+            "message": f"장르 대청소 완벽 종료! 총 {updated_count}개 작품의 장르가 북앤톡 8대 표준 장르로 세탁되었습니다."
         }
     except Exception as e:
         db.rollback()

@@ -150,15 +150,27 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                             // ▼▼▼ [핵심 설계] 드롭다운을 위한 바깥쪽 래퍼 'group/lib' 추가 ▼▼▼
                             <div key={book.library_id || index} className="relative h-full group/lib">
                                 
-                                {/* ▼▼▼ [유지] 카드 우측 상단 드롭다운 메뉴 ▼▼▼ */}
+                                {/* ▼▼▼ [수정 완료] 카드 우측 상단 드롭다운 메뉴 ▼▼▼ */}
                                 <div className="absolute top-3 right-3 z-20 opacity-0 group-hover/lib:opacity-100 transition-opacity">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            <Button variant="secondary" size="icon" className="h-7 w-7 rounded-full bg-white/90 shadow-sm hover:bg-white" onClick={(e) => e.stopPropagation()}>
+                                            {/* ▼ 1. 검정색 테두리가 생기지 않도록 focus 클래스 4종 세트 추가 */}
+                                            <Button 
+                                                variant="secondary" 
+                                                size="icon" 
+                                                className="h-7 w-7 rounded-full bg-white/90 shadow-sm hover:bg-white focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0" 
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
                                                 <MoreVertical size={14} className="text-gray-500" />
                                             </Button>
                                         </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-44">
+                                        
+                                        {/* ▼ 2. 닫힐 때 원래 버튼으로 포커스가 돌아가는(잔상이 남는) 현상 방지 */}
+                                        <DropdownMenuContent 
+                                            align="end" 
+                                            className="w-44"
+                                            onCloseAutoFocus={(e) => e.preventDefault()}
+                                        >
                                             <DropdownMenuItem onClick={(e) => openEditModal(e, book)}>
                                                 <Edit size={14} className="mr-2" /> 상태 변경
                                             </DropdownMenuItem>
@@ -220,10 +232,18 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                             initialData={selectedBook} 
                             onClose={() => setIsEditModalOpen(false)} 
                             onSaved={(updatedData) => {
+                                // 1. 화면의 도서 데이터를 최신 상태로 즉시 변경
                                 setBooks(prev => prev.map(book => 
                                     book.library_id === (selectedBook.library_id || selectedBook.id) ? { ...book, ...updatedData } : book
                                 ));
+                                
+                                // 2. 모달 닫기
                                 setIsEditModalOpen(false);
+
+                                // ▼▼▼ [핵심] 첫 번째 저장 토스트가 끝날 무렵(0.8초 뒤) 두 번째 토스트가 짠! 하고 등장 ▼▼▼
+                                setTimeout(() => {
+                                    toast.success("독서 기록이 최신 상태로 업데이트되었습니다!");
+                                }, 800);
                             }}
                         />
                     )}

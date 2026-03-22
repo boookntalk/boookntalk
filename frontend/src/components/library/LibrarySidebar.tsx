@@ -48,7 +48,7 @@ const navItems = [
     {
         title: "인사이트", icon: BarChart2,
         subItems: [
-            { title: '독서 통계', href: '/statistics', icon: PieChart },
+            { title: '서재 인사이트', href: '/my-records/insights', icon: PieChart },
         ]
     },
     { title: "사색 라운지", href: "/community", icon: Globe }

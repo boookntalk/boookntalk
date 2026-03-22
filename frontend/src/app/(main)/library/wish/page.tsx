@@ -191,15 +191,21 @@ export default function WishlistPage() {
             {/* ▼▼▼ [NEW] 상태 변경을 위한 모달 렌더링 영역 ▼▼▼ */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden rounded-[28px] border-none shadow-2xl">
+                    <DialogTitle className="sr-only">도서 기록 변경</DialogTitle>
                     {selectedBook && (
                         <BookDetailForm 
                             initialData={selectedBook} 
                             onClose={() => setIsEditModalOpen(false)} 
                             onSaved={(updatedData) => {
-                                // 핵심 로직: 상태가 WISH에서 READING이나 COMPLETED로 바뀌면 목록에서 즉시 제거!
+                                // 상태가 WISH에서 READING이나 COMPLETED로 바뀌면 목록에서 즉시 제거!
                                 if (updatedData.status !== 'WISH') {
                                     setWishBooks(prev => prev.filter(b => b.library_id !== selectedBook.library_id));
-                                    toast.success("상태가 변경되어 서재로 이동되었습니다!");
+                                    
+                                    // ▼▼▼ [핵심] 첫 번째 토스트가 뜬 후, 0.8초(800ms) 뒤에 두 번째 토스트가 우아하게 등장하도록 시간차 세팅! ▼▼▼
+                                    setTimeout(() => {
+                                        toast.success("상태가 변경되어 서재로 이동되었습니다!");
+                                    }, 800);
+                                    
                                 } else {
                                     // WISH 그대로 정보만 수정된 경우
                                     setWishBooks(prev => prev.map(book => 

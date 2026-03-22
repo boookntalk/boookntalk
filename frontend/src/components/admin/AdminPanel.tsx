@@ -1,9 +1,11 @@
+// 파일 경로: src/component/admin/AdminPanel.tsx
 'use client';
 
 import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { ShieldAlert, RefreshCw, Trash2, GitMerge, Loader2 } from 'lucide-react';
+// ▼▼▼ [추가] 장르 세탁용 마법 지팡이(Wand2) 아이콘 임포트 ▼▼▼
+import { ShieldAlert, RefreshCw, Trash2, GitMerge, Loader2, Wand2 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -17,10 +19,29 @@ export default function AdminPanel() {
     const [targetId, setTargetId] = useState('');
     const [sourceIds, setSourceIds] = useState('');
 
-    // ▼▼▼ [핵심 방어벽] 오직 'boookntalk@gmail.com' 계정만 이 화면을 볼 수 있습니다! ▼▼▼
+    // [핵심 방어벽] 오직 'boookntalk@gmail.com' 계정만 이 화면을 볼 수 있습니다!
     if (session?.user?.email !== 'boookntalk@gmail.com') {
         return null; // 일반 유저에게는 흔적조차 보이지 않습니다.
     }
+
+    // ▼▼▼ [NEW] 장르 데이터 일괄 세탁 엔진 가동 ▼▼▼
+    const handleSyncGenres = async () => {
+        if (!confirm("과거 도서의 장르 데이터를 북앤톡 8대 표준 장르로 일괄 세탁하시겠습니까?")) return;
+        setIsLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/admin/sync-genres`);
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+            } else {
+                throw new Error(data.detail);
+            }
+        } catch (error: any) {
+            toast.error(error.message || "장르 세탁 작업 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     // 1. 작가 데이터 정제 (다리미 엔진 가동)
     const handleSyncAuthors = async () => {
@@ -91,6 +112,18 @@ export default function AdminPanel() {
                 {/* 왼쪽: 일괄 처리 버튼들 */}
                 <div className="flex flex-col gap-4">
                     <h3 className="text-sm font-bold text-gray-700">데이터베이스 일괄 정비</h3>
+                    
+                    {/* ▼▼▼ [NEW] 장르 세탁 버튼 추가 ▼▼▼ */}
+                    <Button 
+                        onClick={handleSyncGenres} 
+                        disabled={isLoading}
+                        variant="outline" 
+                        className="justify-start border-purple-200 text-purple-700 hover:bg-purple-50"
+                    >
+                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                        장르 데이터 일괄 세탁 (Sync Genres)
+                    </Button>
+
                     <Button 
                         onClick={handleSyncAuthors} 
                         disabled={isLoading}
@@ -98,7 +131,7 @@ export default function AdminPanel() {
                         className="justify-start border-blue-200 text-blue-700 hover:bg-blue-50"
                     >
                         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                        1단계: 작가 데이터 전면 재정제 (Sync)
+                        작가 데이터 전면 재정제 (Sync Authors)
                     </Button>
                     <Button 
                         onClick={handleCleanup} 
@@ -107,7 +140,7 @@ export default function AdminPanel() {
                         className="justify-start border-red-200 text-red-700 hover:bg-red-50"
                     >
                         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                        2단계: 찌꺼기 데이터 영구 삭제 (Cleanup)
+                        찌꺼기 데이터 영구 삭제 (Cleanup)
                     </Button>
                 </div>
 

@@ -1,4 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Text, Float, DateTime
+# 파일 경로: backend/models.py (기존 코드 하단에 추가)
+# 역할 및 기능: BoooknTalk 서재 인사이트 화면을 0.1초 만에 렌더링하기 위한 이벤트 기반의 통계 전용(역정규화) 테이블들을 정의합니다.
+
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Text, Float, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -260,3 +263,75 @@ class Follow(Base):
     is_alarm_on = Column(Boolean, default=False) 
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# ===================================================================
+# [인사이트 및 통계 전용 영역] 실시간 JOIN을 대체하는 역정규화 테이블
+# ===================================================================
+
+# 기능: 유저의 '전체 기간(All-time)' 독서 및 기록 요약 데이터를 저장합니다. (섹션 1, 4 대응)
+class InsightSummary(Base):
+    __tablename__ = "insight_summaries"
+
+    # user_id 자체를 PK로 사용하여 1:1 관계를 강제하고 조회 속도를 극대화합니다.
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    
+    # [섹션 1] 서재의 지형 데이터
+    total_read_books = Column(Integer, default=0)    # 완독한 책
+    total_reading_books = Column(Integer, default=0) # 읽고 있는 책
+    total_wish_books = Column(Integer, default=0)    # 읽고 싶은 책
+    
+    # [섹션 4] 기록의 무게 데이터
+    total_memos = Column(Integer, default=0)         # 독서노트 수
+    total_short_reviews = Column(Integer, default=0) # 한줄평 수
+    total_long_reviews = Column(Integer, default=0)  # 긴줄평 수
+
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", backref="insight_summary")
+
+
+# 기능: 유저의 '연도별/월별' 완독 흐름 데이터를 저장합니다. (섹션 3 대응)
+class InsightMonthly(Base):
+    __tablename__ = "insight_monthlies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    year = Column(Integer, nullable=False)  # 예: 2026
+    month = Column(Integer, nullable=False) # 예: 3 (1~12)
+    read_count = Column(Integer, default=0) # 해당 연/월에 완독한 총 권수
+
+    # 동일한 유저가 같은 연도/월에 여러 로우를 생성하지 못하도록 고유 제약조건 설정
+    __table_args__ = (
+        UniqueConstraint('user_id', 'year', 'month', name='uq_user_year_month'),
+    )
+
+
+# 기능: 유저가 완독한 도서의 '장르(카테고리)' 스펙트럼 데이터를 저장합니다. (섹션 2 - 도넛 차트 대응)
+class InsightGenre(Base):
+    __tablename__ = "insight_genres"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    genre_name = Column(String(100), nullable=False) # 예: "소설/시/희곡", "인문/철학"
+    read_count = Column(Integer, default=0)          # 해당 장르의 완독 권수
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'genre_name', name='uq_user_genre'),
+    )
+
+
+# 기능: 유저가 가장 많이 완독한 '작가 TOP 3' 랭킹을 추출하기 위한 데이터를 저장합니다. (섹션 2 - 랭킹 대응)
+class InsightAuthor(Base):
+    __tablename__ = "insight_authors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    author_name = Column(String(100), nullable=False) # 작가명
+    read_count = Column(Integer, default=0)           # 해당 작가의 책 완독 권수
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'author_name', name='uq_user_author'),
+    )

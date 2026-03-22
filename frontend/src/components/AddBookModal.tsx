@@ -1,3 +1,6 @@
+// 파일 경로: frontend/src/components/AddBookModal.tsx
+// 역할 및 기능: 외부 API에서 도서를 검색하고, 검색된 도서를 BoooknTalk 마스터 API에 전송하여 도서 등록, 서재 저장, 통계 업데이트를 한 번에 처리하는 모달 컴포넌트입니다.
+
 'use client';
 
 import React, { useState } from 'react';
@@ -10,15 +13,20 @@ interface AddBookModalProps {
   userEmail: string;
 }
 
+/**
+ * 함수 기능: 도서 검색 및 등록을 위한 전체 모달 UI를 렌더링하고 상태(State)를 관리합니다.
+ */
 export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModalProps) {
   const [isbnInput, setIsbnInput] = useState('');
-  const [addonInput, setAddonInput] = useState(''); // 5자리 부가기호
+  const [addonInput, setAddonInput] = useState(''); 
   
   const [isLoading, setIsLoading] = useState(false);
   const [searchResult, setSearchResult] = useState<any>(null);
   const [error, setError] = useState('');
 
-  // 1. 책 검색
+  /**
+   * 함수 기능: 사용자가 입력한 ISBN 값의 유효성을 검사하고, 백엔드 API를 호출하여 도서 메타데이터를 검색 및 상태에 저장합니다.
+   */
   const handleSearch = async () => {
     const cleanIsbn = isbnInput.trim().replace(/-/g, '');
     
@@ -37,7 +45,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
     setSearchResult(null);
 
     try {
-      // 검색은 메인 ISBN으로만 진행
       const res = await fetch(`http://localhost:8000/api/books/search/${cleanIsbn}`);
       
       if (!res.ok) {
@@ -53,7 +60,9 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
     }
   };
 
-  // 2. 책 등록
+  /**
+   * 함수 기능: 단일 마스터 API(/api/books)를 호출하여 도서 메타데이터 저장, 서재 등록, 인사이트 통계 업데이트를 백엔드에 일괄 위임합니다.
+   */
   const handleRegister = async () => {
     if (!searchResult || !userEmail) {
       alert("로그인 정보가 없거나 도서 정보가 없습니다.");
@@ -63,6 +72,7 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
     try {
       setIsLoading(true);
       
+      // 시스템에 도서 등록 및 서재 추가를 한 번에 요청하는 페이로드 구성
       const payload = {
         user_email: userEmail,
         title: searchResult.title,
@@ -77,7 +87,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
         pageCount: searchResult.pageCount,
         categoryName: searchResult.categoryName,
         detailed_authors: searchResult.detailed_authors,
-        // [서지정보]
         originalTitle: searchResult.originalTitle,
         binding_type: searchResult.binding_type,
         kdc_code: searchResult.kdc_code,
@@ -86,8 +95,7 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
         price: searchResult.price
       };
 
-      console.log("🚀 백엔드로 전송하는 데이터:", payload);
-
+      // 단일 마스터 노드로 데이터 전송
       const res = await fetch("http://localhost:8000/api/books", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,9 +103,7 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
       });
 
       if (!res.ok) {
-        // 만약 여기서도 에러가 나면 응답이 JSON인지 확인하기 위해 text로 먼저 받습니다.
         const errorText = await res.text();
-        console.error("❌ 서버 에러 응답 원본:", errorText);
         try {
             const errorData = JSON.parse(errorText);
             throw new Error(errorData.detail || '도서 등록에 실패했습니다.');
@@ -106,9 +112,14 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
         }
       }
 
-      alert('도서가 성공적으로 등록되었습니다!');
+      // 불필요한 이중 API 호출 로직 제거 완료. 백엔드에서 서재 등록과 트리거 발동을 모두 처리합니다.
+
+      alert('도서가 성공적으로 내 서재에 담겼습니다!');
       onClose();
-      //window.location.reload(); 
+      
+      // 인사이트 화면의 최신화된 카운트를 즉시 반영하기 위해 리로드 실행
+      window.location.reload(); 
+      
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -116,6 +127,9 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
     }
   };
 
+  /**
+   * 함수 기능: 부가기호 입력 필드의 값을 숫자 5자리로만 제한하여 상태에 반영합니다.
+   */
   const handleAddonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/[^0-9]/g, '');
     if (val.length <= 5) setAddonInput(val);
@@ -142,7 +156,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
           <div className="flex flex-col gap-4 mb-6">
             <label className="text-xs font-bold text-gray-500 ml-1">ISBN 정보 입력</label>
             <div className="flex gap-2">
-              {/* ISBN 입력 */}
               <div className="relative flex-grow">
                 <input
                   type="text"
@@ -155,7 +168,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
                 <Search className="absolute left-3.5 top-3.5 text-gray-400" size={20} />
               </div>
 
-              {/* 5자리 부가기호 입력 */}
               <div className="w-28 flex-shrink-0">
                 <input
                   type="text"
@@ -166,7 +178,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
                 />
               </div>
 
-              {/* 검색 버튼 */}
               <button
                 onClick={handleSearch}
                 disabled={isLoading}
@@ -176,16 +187,13 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
               </button>
             </div>
 
-            {/* [복구됨] 2. ISBN/세트 관련 도움말 (파란색 박스) */}
             <div className="flex flex-col gap-3 bg-blue-50 p-4 rounded-xl text-blue-700 border border-blue-100">
-              {/* 첫 번째 줄 */}
               <div className="flex items-start gap-2.5">
                 <Info size={18} className="flex-shrink-0 mt-0.5" />
                 <p className="text-sm leading-snug">
                   ISBN-13 또는 ISBN-10을 입력해주세요.
                 </p>
               </div>
-              {/* 두 번째 줄 */}
               <div className="flex items-start gap-2.5">
                 <Info size={18} className="flex-shrink-0 mt-0.5" />
                 <p className="text-sm leading-snug">
@@ -202,13 +210,11 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
           )}
 
           {searchResult ? (
-            /* 검색 결과가 있을 때 */
             <div className="border border-gray-200 rounded-2xl p-4 flex gap-5 bg-white shadow-sm hover:shadow-md transition-shadow">
               <div className="relative w-28 h-40 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-100 shadow-inner">
-                {/* searchResult.cover를 searchResult.cover_image로 변경 (또는 백엔드 응답 필드 확인) */}
                 {(searchResult.cover || searchResult.cover_image) ? (
                   <Image
-                    src={searchResult.cover || searchResult.cover_image} // 둘 다 대응하도록 수정
+                    src={searchResult.cover || searchResult.cover_image}
                     alt={searchResult.title}
                     fill
                     className="object-cover"
@@ -240,11 +246,9 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
               </div>
             </div>
           ) : (
-            /* 검색 결과가 없을 때 (초기 상태) - 가이드 이미지 표시 */
             !isLoading && !error && (
               <div className="flex flex-col items-center justify-center pt-2 pb-6">
                 <div className="relative w-full aspect-[2/1] max-w-[400px]">
-                  {/* [수정 경로 적용] public 바로 아래에 파일이 있는 경우 */}
                   <Image 
                     src="/guide_isbn.png" 
                     alt="ISBN 가이드"

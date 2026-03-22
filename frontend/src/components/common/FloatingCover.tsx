@@ -20,7 +20,7 @@ export function FloatingCover({ src, alt = "도서 커버", className = "w-full 
         <div className={`relative bg-gray-50/80 rounded-sm border border-gray-100 shrink-0 ${className}`}>
             
             {/* 2. 떠오르는 표지(Floating Cover): 11시 방향(-x, -y)으로 이동하며 5시 방향으로 깊은 그림자를 만듭니다. */}
-            <div className="absolute inset-0 w-full h-full bg-white rounded-sm border border-gray-200 overflow-hidden transition-all duration-300 ease-out hover:-translate-x-1.5 hover:-translate-y-1.5 hover:shadow-[6px_6px_15px_rgba(0,0,0,0.12)] flex items-center justify-center z-10 cursor-pointer">
+            <div className="absolute inset-0 w-full h-full bg-white rounded-sm border border-gray-200 overflow-hidden transition-all duration-300 ease-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[4px_4px_10px_rgba(0,0,0,0.08)] flex items-center justify-center z-10 cursor-pointer">
                 {src ? (
                     <Image 
                         src={src} 

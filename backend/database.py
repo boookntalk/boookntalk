@@ -25,7 +25,7 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     pool_size=10,        # 동시 접속 대응을 위해 조금 늘림
     max_overflow=20,
-    pool_recycle=300,    # 연결 유지 시간을 짧게 잡아 끊김 방지
+    pool_recycle=1800,    # 연결 유지 시간을 짧게 잡아 끊김 방지
     pool_pre_ping=True   # 연결 전 살아있는지 항상 확인 (핵심 옵션!)
 )
 
