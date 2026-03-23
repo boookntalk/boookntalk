@@ -1,3 +1,6 @@
+// 파일 경로: src/components/layout/LibrarySidebar.tsx
+// 역할 및 기능: BoooknTalk 서비스의 좌측 네비게이션(LNB) 컴포넌트로, 사용자가 서재, 기록, 작가(및 옮긴이), 인사이트 등의 주요 기능으로 이동할 수 있도록 라우팅 메뉴를 제공합니다.
+
 'use client';
 
 import React from 'react';
@@ -14,7 +17,10 @@ import {
     Tags,
     Bookmark,
     PenTool,
-    PieChart
+    PieChart,
+    Users, 
+    Clock,
+    Languages // ▼ '옮긴이 타임라인' 하위 메뉴용 아이콘 추가
 } from 'lucide-react';
 import {
     Sidebar,
@@ -46,6 +52,14 @@ const navItems = [
         ]
     },
     {
+        title: "나의 작가", icon: Users,
+        subItems: [
+            { title: '작가', href: '/my-authors/timeline', icon: Clock },
+            // ▼▼▼ [NEW] 작가 하위에 '옮긴이 타임라인' 메뉴 추가 ▼▼▼
+            { title: '옮긴이(번역))', href: '/my-translators/timeline', icon: Languages },
+        ]
+    },
+    {
         title: "인사이트", icon: BarChart2,
         subItems: [
             { title: '서재 인사이트', href: '/my-records/insights', icon: PieChart },
@@ -54,10 +68,10 @@ const navItems = [
     { title: "사색 라운지", href: "/community", icon: Globe }
 ];
 
+// 함수 기능: 현재 URL 경로(pathname)와 메뉴의 href를 비교하여 해당 메뉴가 활성화 상태인지 판별합니다.
 export function LibrarySidebar() {
     const pathname = usePathname();
 
-    // ▼▼▼ [버그 해결] 라우팅 활성화 감지 로직 고도화 ▼▼▼
     const isActiveRoute = (href: string) => {
         if (!href) return false;
         if (href === '/' && pathname !== '/') return false;
@@ -69,7 +83,7 @@ export function LibrarySidebar() {
             }
         }
         
-        // 정확히 일치하거나, 해당 경로의 하위 상세 페이지(예: /library/123)일 때만 활성화
+        // 정확히 일치하거나, 해당 경로의 하위 상세 페이지일 때만 활성화
         return pathname === href || pathname.startsWith(`${href}/`);
     };
 

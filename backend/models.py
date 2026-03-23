@@ -6,32 +6,46 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
-# [1] 참여자(작가) 정보 테이블 (NEW)
+# ===================================================================
+# [1] 참여자(작가/옮긴이) 정보 마스터 테이블 (수정 완료)
+# ===================================================================
 class Contributor(Base):
     __tablename__ = "contributors"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
-    aladin_author_id = Column(Integer, unique=True, nullable=True) # [추가] 알라딘 작가 고유 ID
+    
+    # [수정] 알라딘에 종속되지 않는 범용 외부 식별자 구조
+    external_source = Column(String(50), nullable=True) # 예: 'NAVER', 'ALADIN', 'NLK'(국립중앙도서관)
+    external_id = Column(String(100), nullable=True, index=True) 
+    
     original_name = Column(String, nullable=True)
     description = Column(String, nullable=True)
 
+    # [수정] 외부 API 연동 시점 기록 (타임라인 캐싱 갱신용)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+
     work_participations = relationship("WorkContributor", back_populates="contributor")
 
-# [2] 작품-참여자 연결 테이블 (NEW - 다대다 관계)
+    # 외부 소스와 ID 조합은 고유해야 함
+    __table_args__ = (
+        UniqueConstraint('external_source', 'external_id', name='uq_external_source_id'),
+    )
+
+# ===================================================================
+# [2] 작품-참여자 연결 테이블 (다대다 관계 유지)
+# ===================================================================
 class WorkContributor(Base):
     __tablename__ = "work_contributors"
 
     id = Column(Integer, primary_key=True, index=True)
-    work_id = Column(Integer, ForeignKey("works.id"))
-    contributor_id = Column(Integer, ForeignKey("contributors.id"))
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="CASCADE"))
+    contributor_id = Column(Integer, ForeignKey("contributors.id", ondelete="CASCADE"))
     
-    role = Column(String, nullable=False)  # Author, Translator, Illustrator 등
+    role = Column(String(50), nullable=False, index=True)  # 'AUTHOR' 또는 'TRANSLATOR' 등으로 엄격히 관리
     
-    # 관계 설정
     work = relationship("Work", back_populates="contributors")
     contributor = relationship("Contributor", back_populates="work_participations")
-
 
 # 1. 사용자 (Users) - OAuth 및 프로 버전 대응
 class User(Base):
@@ -74,20 +88,25 @@ class User(Base):
         overlaps="followers"        # 겹치는 부분을 SQLAlchemy에게 인지시킴
     )
 
-# [3] Work 테이블 수정 (관계 추가)
+# ===================================================================
+# [3] Work 테이블 (수정 완료)
+# ===================================================================
 class Work(Base):
     __tablename__ = "works"
     
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
-    author = Column(String) # (원본 문자열 유지)
+    
+    # ▼▼▼ [핵심 수정] 에러의 원인이었던 author_display를 author로 완벽히 원복했습니다. ▼▼▼
+    author = Column(String) 
+    
     description = Column(Text, nullable=True)
     category = Column(String, nullable=True)
     
-    # [추가] 서지정보 Level 2/3: 원서명 (번역서 식별 및 UI 표기용)
+    # 서지정보 Level 2/3: 원서명 (번역서 식별 및 UI 표기용)
     original_title = Column(String, nullable=True) 
     
-    # 참여자 목록 관계
+    # 참여자 목록 및 판본 관계 설정
     contributors = relationship("WorkContributor", back_populates="work")
     editions = relationship("Edition", back_populates="work")
 
@@ -334,4 +353,30 @@ class InsightAuthor(Base):
 
     __table_args__ = (
         UniqueConstraint('user_id', 'author_name', name='uq_user_author'),
+    )
+
+# ===================================================================
+# [4] 인사이트 통계: 작가 및 옮긴이 전용 (InsightAuthor 대체)
+# ===================================================================
+# 기능: 유저가 완독한 도서의 참여자(작가/옮긴이)별 권수 랭킹 데이터를 저장합니다. 동명이인 문제를 완벽 차단합니다.
+class InsightContributor(Base):
+    __tablename__ = "insight_contributors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # [핵심 수정] 문자열 이름이 아닌 실제 DB의 Contributor ID를 바라보게 설정
+    contributor_id = Column(Integer, ForeignKey("contributors.id", ondelete="CASCADE"), nullable=False)
+    
+    # 통계용 캐싱 이름 (Join 없이 빠른 화면 렌더링용)
+    contributor_name = Column(String(100), nullable=False) 
+    
+    # [핵심 수정] 작가 랭킹과 옮긴이 랭킹을 분리하기 위한 역할 컬럼
+    role = Column(String(50), nullable=False) # 'AUTHOR' / 'TRANSLATOR'
+    
+    read_count = Column(Integer, default=0)
+
+    # 한 유저의 통계 내에서 특정 참여자+역할 데이터는 유일해야 함
+    __table_args__ = (
+        UniqueConstraint('user_id', 'contributor_id', 'role', name='uq_user_contributor_role'),
     )

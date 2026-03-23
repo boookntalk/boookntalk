@@ -1,8 +1,11 @@
+// 파일 경로: app/long-reviews/LongReviewsClient.tsx (프로젝트 구조에 맞게 경로 확인)
+// 역할 및 기능: BoooknTalk 서비스의 개인 긴줄평 목록을 불러와 렌더링하고, 각 기록의 공개/비공개 상태를 관리하는 클라이언트 컴포넌트
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react'; // ▼ 세션 임포트 추가
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { Home, ChevronRight, PenTool, Globe, Lock, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
@@ -14,12 +17,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function LongReviewsClient() {
     const router = useRouter();
-    const { data: session, status } = useSession(); // ▼ 로그인 정보 가져오기
+    const { data: session, status } = useSession();
     
     const [reviews, setReviews] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    // ▼▼▼ [핵심] 실제 긴줄평 데이터 불러오기 로직 ▼▼▼
     useEffect(() => {
         if (status === 'unauthenticated') {
             router.push('/'); 
@@ -31,16 +33,13 @@ export default function LongReviewsClient() {
         }
     }, [session, status, router]);
 
+    // 함수 기능: 로그인한 사용자의 이메일을 기반으로 백엔드 API를 호출하여 긴줄평 데이터를 비동기적으로 가져오고 상태를 업데이트함
     const fetchLongReviews = async (email: string) => {
         setIsLoading(true);
         try {
-            // ▼▼▼ [핵심] 엉뚱한 /records 대신, 방금 만든 진짜 API를 호출합니다! ▼▼▼
             const res = await fetch(`${API_URL}/api/users/${email}/long-reviews`);
             if (res.ok) {
                 const data = await res.json();
-                
-                // 백엔드에서 이미 빈 껍데기를 다 걸러서 보내주므로, 
-                // 프론트에서는 아무것도 고민할 필요 없이 그대로 세팅만 하면 끝!
                 setReviews(data);
             }
         } catch (error) {
@@ -51,10 +50,12 @@ export default function LongReviewsClient() {
         }
     };
 
+    // 함수 기능: 특정 긴줄평 기록의 공개/비공개(임시저장) 상태를 토글(Optimistic UI 적용)하고 백엔드 API에 상태 업데이트 요청을 보냄
     const togglePublicStatus = async (e: React.MouseEvent, recordId: number, isDraft: boolean) => {
         e.stopPropagation(); 
         const newDraftStatus = !isDraft; 
         
+        // Optimistic UI Update
         setReviews(prev => prev.map(r => r.record_id === recordId ? { ...r, is_long_review_draft: newDraftStatus } : r));
         
         try {
@@ -65,24 +66,20 @@ export default function LongReviewsClient() {
             });
             toast.success(newDraftStatus ? "비공개(임시저장) 상태로 전환되었습니다." : "광장에 전체 공개되었습니다.");
         } catch {
+            // 실패 시 롤백
             setReviews(prev => prev.map(r => r.record_id === recordId ? { ...r, is_long_review_draft: isDraft } : r));
             toast.error("상태 변경에 실패했습니다.");
         }
     };
 
-    // ▼▼▼ [적용 완료] 2. 모던 바운싱 도트 (Bouncing Dots) 로딩 화면 ▼▼▼
     if (isLoading || status === 'loading') {
         return (
             <div className="w-full h-[calc(100vh-100px)] bg-[#F5F5F7] flex flex-col justify-center items-center">
                 <div className="flex items-center gap-2 mb-4">
-                    {/* 첫 번째 점: 가장 먼저 튀어오름 */}
                     <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '-0.3s' }}></div>
-                    {/* 두 번째 점: 살짝 늦게 튀어오름 */}
                     <div className="w-2.5 h-2.5 bg-[#0066cc]/80 rounded-full animate-bounce" style={{ animationDelay: '-0.15s' }}></div>
-                    {/* 세 번째 점: 마지막에 튀어오름 */}
                     <div className="w-2.5 h-2.5 bg-[#0066cc]/60 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
                 </div>
-                {/* BoooknTalk 감성에 맞는 로딩 텍스트 */}
                 <p className="text-[13px] font-bold text-gray-400 tracking-wide animate-pulse">
                     긴줄평을 불러오는 중...
                 </p>
@@ -93,10 +90,11 @@ export default function LongReviewsClient() {
     return (
         <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
             {/* 상단 네비게이션 영역 */}
-            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0 transition-all">
+            {/* [핵심 수정] 렌더링 시 요소가 날아오는 버그를 수정하기 위해 기존의 'transition-all' 클래스를 제거했습니다. */}
+            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0">
                 <div className="flex items-center justify-between mb-4 min-h-[20px]">
                     <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
-                        <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc]"><Home size={15} /> 홈</Link>
+                        <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors"><Home size={15} /> 홈</Link>
                         <ChevronRight size={14} className="opacity-50" />
                         <span className="text-gray-400">나의 기록</span>
                         <ChevronRight size={14} className="opacity-50" />
@@ -126,16 +124,13 @@ export default function LongReviewsClient() {
                         </div>
                     ) : (
                         <main className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
-                            {/* ▼ map 함수에 index 추가 */}
                             {reviews.map((review, index) => {
                                 const isDraft = review.is_long_review_draft;
-                                
-                                {/* ▼▼▼ [핵심] record_id가 중복되거나 없어도 절대 에러가 나지 않는 완벽한 고유 키 생성 ▼▼▼ */}
                                 const uniqueKey = `review-${review.record_id || 'empty'}-${index}`;
                                 
                                 return (
                                     <BookRecordCard 
-                                        key={uniqueKey} // <- 에러를 잠재우는 마법의 Key
+                                        key={uniqueKey}
                                         id={review.record_id || index}
                                         onClick={() => router.push(`/library/${review.record_id}`)}
                                         book_cover={review.cover}
@@ -151,11 +146,10 @@ export default function LongReviewsClient() {
                                                 )}
                                                 <h4 className="font-black text-[#1d1d1f] text-[15px] mb-2 line-clamp-1">{review.long_review_title || '제목 없음'}</h4>
                                                 
-                                                {/* ▼▼▼ [핵심 수정] 툴팁(SmartTruncatedText)을 제거하고, 3줄 말줄임(line-clamp-3) 텍스트로 깔끔하게 교체 ▼▼▼ */}
                                                 <p className="text-[13px] text-gray-500 leading-relaxed line-clamp-3 break-keep">
                                                     {(review.long_review_content || '')
-                                                        .replace(/<[^>]*>?/gm, '') // HTML 태그 제거
-                                                        .replace(/&nbsp;/g, ' ')   // 에디터 공백 제거
+                                                        .replace(/<[^>]*>?/gm, '')
+                                                        .replace(/&nbsp;/g, ' ')
                                                         .trim()}
                                                 </p>
                                             </div>

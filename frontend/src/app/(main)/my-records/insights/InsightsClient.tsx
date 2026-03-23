@@ -1,16 +1,14 @@
 // 파일 경로: src/app/(main)/my-records/insights/InsightsClient.tsx
-// 역할 및 기능: 서재 인사이트 화면의 클라이언트 컴포넌트로, 백엔드 API와 통신하여 유저의 실제 독서 통계 및 흐름 데이터를 1cm 간격 디자인 규격에 맞춰 시각화합니다. (연도별 필터링 기능 추가)
+// 역할 및 기능: 서재 인사이트 화면의 클라이언트 컴포넌트로, 백엔드 API와 통신하여 유저의 실제 독서 통계 및 흐름 데이터를 1cm 간격 디자인 규격에 맞춰 시각화합니다. (연도별 필터링, 완독/읽는 중 요약 및 값이 0보다 클 때만 막대 차트 위에 값 표시)
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Home, ChevronRight, BarChart3, BookOpen, BookCheck, Bookmark, PenTool, MessageSquareQuote, AlignLeft, Trophy, Loader2, HelpCircle, PieChart, Calendar, Star } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart as RechartsPieChart, Pie, Cell, LabelList, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart as RechartsPieChart, Pie, Cell, CartesianGrid, LabelList } from 'recharts';
 import { InsightCard } from '@/components/common/InsightCard';
-import { formatCardAuthor } from '@/utils/formatters';
 
-// ▼▼▼ [NEW] Shadcn UI Select 컴포넌트 임포트 ▼▼▼
 import {
   Select,
   SelectContent,
@@ -31,12 +29,10 @@ const GENRE_COLORS = ['#0066cc', '#3385d6', '#66a3e0', '#99c2ea', '#cce0f5'];
 const chartConfig = {
   finished_count: {
     label: "완독",
-    // 이미지 내의 연한 네온 파랑
     color: "#80bfff", 
   },
   reading_count: {
     label: "읽는 중",
-    // 이미지 내의 조금 더 진한 네온 파랑
     color: "#007fff", 
   },
 } satisfies ChartConfig;
@@ -49,7 +45,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
     const [summaryData, setSummaryData] = useState<any>(null);
     const [flowData, setFlowData] = useState<any>(null);
     
-    // ▼▼▼ [수정] 연도 상태를 통합 관리합니다. 초기값은 'all' (전체 기간) ▼▼▼
     const [selectedYear, setSelectedYear] = useState<string>('all'); 
     const [flowYear, setFlowYear] = useState<string>(new Date().getFullYear().toString());
     
@@ -58,16 +53,14 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     
-    // ▼▼▼ [수정] 현재 연도부터 과거 5년까지의 선택지 생성 배열 ▼▼▼
     const currentYear = new Date().getFullYear();
     const yearOptions = Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
 
-    // 1. 전체 요약 데이터 호출 (selectedYear가 변경될 때마다 재호출)
+    // 함수 기능: 선택된 연도(selectedYear)에 따라 유저의 전체 누적 또는 특정 연도의 요약 통계 데이터를 백엔드에서 불러옵니다.
     useEffect(() => {
         const fetchSummary = async () => {
             setIsLoadingSummary(true);
             try {
-                // 연도가 'all'이면 쿼리 파라미터를 붙이지 않고, 숫자가 있으면 ?year=2026 형태로 호출합니다.
                 const url = selectedYear === 'all' 
                     ? `${API_URL}/api/mypage/stats/${userEmail}`
                     : `${API_URL}/api/mypage/stats/${userEmail}?year=${selectedYear}`;
@@ -86,12 +79,11 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
         fetchSummary();
     }, [userEmail, selectedYear]);
 
-    // 2. 흐름 데이터 호출 (flowYear가 변경될 때마다 재호출)
+    // 함수 기능: 차트 전용 연도 필터(flowYear)에 따라 유저의 월별 독서 흐름 데이터를 백엔드에서 불러옵니다.
     useEffect(() => {
         const fetchFlow = async () => {
             setIsLoadingFlow(true);
             try {
-                // ▼▼▼ [수정] selectedYear 대신 flowYear를 바라보도록 변경! ▼▼▼
                 const res = await fetch(`${API_URL}/api/insights/user/${userEmail}/yearly-flow?year=${flowYear}`);
                 if (res.ok) {
                     const data = await res.json();
@@ -104,7 +96,13 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
             }
         };
         fetchFlow();
-    }, [userEmail, flowYear]); // 의존성 배열도 flowYear로 변경
+    }, [userEmail, flowYear]);
+
+    // 함수 기능: 월별 차트 데이터 배열을 순회하여 해당 기간 내 '읽는 중' 상태인 도서의 총합을 안전하게 계산합니다.
+    const totalReadingInPeriod = useMemo(() => {
+        if (!flowData || !Array.isArray(flowData.flow_data)) return 0;
+        return flowData.flow_data.reduce((acc: number, curr: any) => acc + (curr.reading_count || 0), 0);
+    }, [flowData]);
 
     if (!summaryData && isLoadingSummary) {
         return (
@@ -120,9 +118,7 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
 
     if (!summaryData) return <div className="p-8 text-center text-gray-500">데이터를 불러올 수 없습니다.</div>;
 
-    // ※ 주의: 기존 summaryData.overview 대신 백엔드의 get_mypage_stats가 반환하는 구조(summary, top_genres, top_tags)에 맞게 매핑합니다.
     const { summary, top_genres, top_tags } = summaryData;
-    // (기존 records_weight 데이터는 흐름API나 별도 API에서 제공한다고 가정하고 안전하게 처리)
     const records_weight = summaryData.records_weight || { memo_count: 0, short_review_count: 0, long_review_count: 0 };
 
     return (
@@ -138,7 +134,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                         <span className="text-[#1d1d1f] flex items-center gap-1"><BarChart3 size={14} /> 서재 인사이트</span>
                     </div>
 
-                    {/* ▼▼▼ [NEW] 공통 컴포넌트 Select를 활용한 세련된 연도 필터링 UI ▼▼▼ */}
                     <div className="flex items-center">
                         <Select value={selectedYear} onValueChange={setSelectedYear}>
                             <SelectTrigger className="w-[130px] h-9 bg-white border-gray-200 text-[#1d1d1f] font-bold text-[13px] rounded-full focus:ring-[#0066cc]">
@@ -167,7 +162,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
             {/* 본문 콘텐츠 */}
             <div className="flex-1 overflow-y-auto scrollbar-hide relative">
                 
-                {/* 데이터 로딩 중 반투명 오버레이 처리 */}
                 {isLoadingSummary && (
                      <div className="absolute inset-0 bg-[#F5F5F7]/50 z-10 flex items-center justify-center backdrop-blur-[1px]">
                          <Loader2 className="w-8 h-8 animate-spin text-[#0066cc]" />
@@ -181,7 +175,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                         <h2 className="text-[16px] font-bold text-[#1d1d1f] mb-4">
                             서재의 지형 <span className="text-[12px] text-gray-400 font-medium ml-2">{selectedYear === 'all' ? '(전체 누적)' : `(${selectedYear}년 기준)`}</span>
                         </h2>
-                        {/* ▼▼▼ [수정] 3열에서 4열(lg:grid-cols-4)로 그리드 확장 ▼▼▼ */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             
                             <InsightCard className="flex items-center gap-4">
@@ -204,7 +197,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                                 </div>
                             </InsightCard>
 
-                            {/* ▼▼▼ [완벽 복구] 평균 별점 왼쪽에 '읽고 싶은 책' 카드 삽입 ▼▼▼ */}
                             <InsightCard className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
                                     <Bookmark size={24} className="text-rose-500" />
@@ -231,14 +223,11 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                     {/* [섹션 2] 취향 분석 */}
                     <section className="grid grid-cols-1 lg:grid-cols-2 gap-[var(--spacing-1cm,32px)]">
                         <InsightCard>
-                            
-                            {/* ▼▼▼ [수정] 물음표 아이콘에 주의 환기용 옐로우(Amber) 컬러 적용 ▼▼▼ */}
                             <div className="flex items-center gap-2 mb-6">
                                 <h2 className="text-[16px] font-bold text-[#1d1d1f] flex items-center gap-2">
                                     <PieChart size={18} className="text-[#0066cc]" /> 선호 장르 스펙트럼
                                 </h2>
                                 <div className="relative group flex items-center cursor-help">
-                                    {/* ▼ [핵심] text-gray-400을 text-amber-500으로 교체. 호버 시엔 기존처럼 파란색으로 바뀝니다! ▼ */}
                                     <HelpCircle size={15} className="text-amber-500 hover:text-[#0066cc] transition-colors" />
                                     <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-max max-w-[240px] bg-gray-800 text-white text-[12px] leading-relaxed px-3 py-2 rounded-md shadow-lg z-10 pointer-events-none">
                                         <p>내 서재에 담긴 모든 도서</p>
@@ -256,7 +245,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                                     <div className="h-[250px] w-full">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <RechartsPieChart>
-                                                {/* Recharts 요구 포맷에 맞춰 데이터 매핑 */}
                                                 <Pie data={top_genres.map((g:any)=>({name: g.genre, value: g.count}))} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
                                                     {top_genres.map((entry: any, index: number) => (
                                                         <Cell key={`cell-${index}`} fill={GENRE_COLORS[index % GENRE_COLORS.length]} />
@@ -280,7 +268,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                             )}
                         </InsightCard>
 
-                        {/* 기존 top_authors 데이터가 없는 경우 태그 데이터를 노출하도록 보완 */}
                         <InsightCard>
                             <h2 className="text-[16px] font-bold text-[#1d1d1f] mb-6 flex items-center gap-2">
                                 <Trophy size={18} className="text-[#0066cc]" /> 가장 많이 사용한 태그 TOP 5
@@ -305,7 +292,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                     <section>
                         <InsightCard>
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
-                                {/* ▼▼▼ [NEW] 차트 전용 독립 필터 장착 ▼▼▼ */}
                                 <div className="flex items-center gap-3">
                                     <h2 className="text-[16px] font-bold text-[#1d1d1f]">독서 흐름</h2>
                                     
@@ -323,11 +309,24 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                                     </Select>
                                 </div>
 
-                                <div className="sm:text-right">
-                                    <p className="text-[12px] font-bold text-gray-400 mb-0.5">선택 기간 완독 도서</p>
-                                    <p className="text-[20px] font-black text-[#0066cc]">
-                                        총 {flowData ? flowData.total_read_in_period : 0}<span className="text-[13px] text-gray-400 ml-1">권</span>
-                                    </p>
+                                <div className="flex items-center sm:justify-end gap-6">
+                                    <div className="text-right">
+                                        <p className="text-[12px] font-bold text-gray-400 mb-0.5 flex items-center gap-1.5 justify-end">
+                                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: chartConfig.finished_count.color }}></span>완독
+                                        </p>
+                                        <p className="text-[20px] font-black text-[#1d1d1f]">
+                                            {flowData ? flowData.total_read_in_period : 0}<span className="text-[13px] text-gray-400 ml-1">권</span>
+                                        </p>
+                                    </div>
+                                    <div className="w-px h-8 bg-gray-200"></div>
+                                    <div className="text-right">
+                                        <p className="text-[12px] font-bold text-gray-400 mb-0.5 flex items-center gap-1.5 justify-end">
+                                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: chartConfig.reading_count.color }}></span>읽는 중
+                                        </p>
+                                        <p className="text-[20px] font-black text-[#1d1d1f]">
+                                            {totalReadingInPeriod}<span className="text-[13px] text-gray-400 ml-1">권</span>
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -338,7 +337,6 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                                     </div>
                                 )}
                                 
-                                {/* ▼▼▼ [수정] Shadcn UI의 ChartContainer를 활용한 멀티플 바 차트 ▼▼▼ */}
                                 <ChartContainer config={chartConfig} className="h-full w-full">
                                     <BarChart accessibilityLayer data={flowData?.flow_data || []} margin={{ top: 25, right: 0, left: -20, bottom: 0 }}>
                                         <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.3} />
@@ -359,9 +357,25 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                                             content={<ChartTooltipContent indicator="dashed" />}
                                         />
                                         
-                                        {/* ChartContainer가 제공하는 var(--color-키값)을 사용하여 테마 색상 자동 적용 */}
-                                        <Bar dataKey="finished_count" fill="var(--color-finished_count)" radius={4} />
-                                        <Bar dataKey="reading_count" fill="var(--color-reading_count)" radius={4} />
+                                        {/* ▼▼▼ [핵심 수정] formatter 속성을 통해 값이 0 초과일 때만 숫자 표시 ▼▼▼ */}
+                                        <Bar dataKey="finished_count" fill="var(--color-finished_count)" radius={4}>
+                                            <LabelList 
+                                                dataKey="finished_count" 
+                                                position="top" 
+                                                offset={10} 
+                                                className="fill-[#9ca3af] text-[11px] font-bold" 
+                                                formatter={(value: number) => (value > 0 ? value : '')}
+                                            />
+                                        </Bar>
+                                        <Bar dataKey="reading_count" fill="var(--color-reading_count)" radius={4}>
+                                            <LabelList 
+                                                dataKey="reading_count" 
+                                                position="top" 
+                                                offset={10} 
+                                                className="fill-[#9ca3af] text-[11px] font-bold" 
+                                                formatter={(value: number) => (value > 0 ? value : '')}
+                                            />
+                                        </Bar>
                                     </BarChart>
                                 </ChartContainer>
                             </div>
