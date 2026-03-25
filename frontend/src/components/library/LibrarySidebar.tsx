@@ -54,9 +54,10 @@ const navItems = [
     {
         title: "나의 작가", icon: Users,
         subItems: [
-            { title: '작가', href: '/my-authors/timeline', icon: Clock },
-            // ▼▼▼ [NEW] 작가 하위에 '옮긴이 타임라인' 메뉴 추가 ▼▼▼
-            { title: '옮긴이(번역))', href: '/my-translators/timeline', icon: Languages },
+            // ▼ 우리가 합의한 URL(writer)과 아이콘 적용!
+            { title: '작가', href: '/my-authors/writer', icon: Clock },
+            // ▼ 옮긴이도 my-authors 하위의 translator로 통일하고 오타 수정!
+            { title: '옮긴이(번역)', href: '/my-authors/translator', icon: Languages },
         ]
     },
     {

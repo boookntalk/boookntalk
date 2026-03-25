@@ -10,12 +10,16 @@ PROJECT ROOT: boookntalk
 │   ├── models.py
 │   ├── requirements.txt
 │   ├── routers
+│   │   ├── admin.py
+│   │   ├── authors.py
 │   │   ├── editions.py
 │   │   ├── home.py
 │   │   ├── insights.py
 │   │   ├── library.py
 │   │   └── memos.py
 │   ├── services
+│   │   ├── admin_service.py
+│   │   ├── author_service.py
 │   │   ├── book_service.py
 │   │   └── insight_service.py
 │   ├── static
@@ -51,6 +55,7 @@ PROJECT ROOT: boookntalk
 │   │   │   ├── 9dc5e163-c03a-4183-bb4c-e6424c235316.jpg
 │   │   │   ├── 9e3c2e81-32f5-4473-a044-72f79e644288.jpg
 │   │   │   ├── b10a2328-6f42-41fc-8415-87cc3d873252.jpg
+│   │   │   ├── b1608159-22a0-4399-ad09-6b2a98ee4cb1.jpg
 │   │   │   ├── b34c51e9-d10f-4c8a-b53d-e9774b007738.jpg
 │   │   │   ├── b88efbc6-e7ba-4780-a6bc-5a27910813b7.jpg
 │   │   │   ├── d75816da-b097-4994-b7fe-16ae4b6165e6.jpg
@@ -68,7 +73,9 @@ PROJECT ROOT: boookntalk
 │   ├── utils
 │   │   ├── __init__.py
 │   │   ├── author_parser.py
-│   │   └── image_handler.py
+│   │   ├── genre_parser.py
+│   │   ├── image_handler.py
+│   │   └── isni_generator.py
 │   └── utils_org.py
 ├── db
 │   ├── data
@@ -1370,6 +1377,7 @@ PROJECT ROOT: boookntalk
 │   ├── src
 │   │   ├── app
 │   │   │   ├── (main)
+│   │   │   │   ├── community
 │   │   │   │   ├── layout.tsx
 │   │   │   │   ├── library
 │   │   │   │   │   ├── BookDetailForm.tsx
@@ -1387,6 +1395,14 @@ PROJECT ROOT: boookntalk
 │   │   │   │   │   │   └── [userId]
 │   │   │   │   │   │       └── page.tsx
 │   │   │   │   │   └── wish
+│   │   │   │   │       └── page.tsx
+│   │   │   │   ├── my-authors
+│   │   │   │   │   ├── layout.tsx
+│   │   │   │   │   ├── translator
+│   │   │   │   │   │   ├── AuthorTranslatorClient.tsx
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── writer
+│   │   │   │   │       ├── AuthorWriterClient.tsx
 │   │   │   │   │       └── page.tsx
 │   │   │   │   ├── my-records
 │   │   │   │   │   ├── insights
@@ -1412,6 +1428,7 @@ PROJECT ROOT: boookntalk
 │   │   │   │   │   └── page.tsx
 │   │   │   │   ├── square
 │   │   │   │   │   └── page.tsx
+│   │   │   │   ├── statistics
 │   │   │   │   └── work
 │   │   │   │       └── [id]
 │   │   │   │           └── page.tsx
@@ -1471,6 +1488,8 @@ PROJECT ROOT: boookntalk
 │   │   │   │   ├── avatar.tsx
 │   │   │   │   ├── badge.tsx
 │   │   │   │   ├── button.tsx
+│   │   │   │   ├── card.tsx
+│   │   │   │   ├── chart.tsx
 │   │   │   │   ├── checkbox.tsx
 │   │   │   │   ├── dialog.tsx
 │   │   │   │   ├── dropdown-menu.tsx
@@ -1998,7 +2017,7 @@ FILE PATH: frontend/package.json
     "next-auth": "^4.24.13",
     "react": "^18",
     "react-dom": "^18",
-    "recharts": "^3.8.0",
+    "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "suneditor": "^2.47.8",
     "suneditor-react": "^3.6.1",
@@ -8827,18 +8846,43 @@ export default function MyRecordsLayout({ children }: { children: React.ReactNod
 FILE PATH: frontend/src/app/(main)/my-records/insights/InsightsClient.tsx
 ============================================================
 // 파일 경로: src/app/(main)/my-records/insights/InsightsClient.tsx
-// 역할 및 기능: 서재 인사이트 화면의 클라이언트 컴포넌트로, 백엔드 API와 통신하여 유저의 실제 독서 통계 및 흐름 데이터를 1cm 간격 디자인 규격에 맞춰 시각화합니다.
+// 역할 및 기능: 서재 인사이트 화면의 클라이언트 컴포넌트로, 백엔드 API와 통신하여 유저의 실제 독서 통계 및 흐름 데이터를 1cm 간격 디자인 규격에 맞춰 시각화합니다. (연도별 필터링, 완독/읽는 중 요약 및 값이 0보다 클 때만 막대 차트 위에 값 표시)
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Home, ChevronRight, ChevronLeft, BarChart3, BookOpen, BookCheck, Bookmark, PenTool, MessageSquareQuote, AlignLeft, Trophy, Loader2, HelpCircle, PieChart } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart as RechartsPieChart, Pie, Cell, LabelList } from 'recharts';
+import { Home, ChevronRight, BarChart3, BookOpen, BookCheck, Bookmark, PenTool, MessageSquareQuote, AlignLeft, Trophy, Loader2, HelpCircle, PieChart, Calendar, Star } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart as RechartsPieChart, Pie, Cell, CartesianGrid, LabelList } from 'recharts';
 import { InsightCard } from '@/components/common/InsightCard';
-import { formatCardAuthor } from '@/utils/formatters';
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 
 const GENRE_COLORS = ['#0066cc', '#3385d6', '#66a3e0', '#99c2ea', '#cce0f5'];
+
+const chartConfig = {
+  finished_count: {
+    label: "완독",
+    color: "#80bfff", 
+  },
+  reading_count: {
+    label: "읽는 중",
+    color: "#007fff", 
+  },
+} satisfies ChartConfig;
 
 interface InsightsClientProps {
     userEmail: string;
@@ -8847,18 +8891,28 @@ interface InsightsClientProps {
 export default function InsightsClient({ userEmail }: InsightsClientProps) {
     const [summaryData, setSummaryData] = useState<any>(null);
     const [flowData, setFlowData] = useState<any>(null);
-    const [selectedYear, setSelectedYear] = useState<number | 'all'>(new Date().getFullYear());
+    
+    const [selectedYear, setSelectedYear] = useState<string>('all'); 
+    const [flowYear, setFlowYear] = useState<string>(new Date().getFullYear().toString());
     
     const [isLoadingSummary, setIsLoadingSummary] = useState(true);
     const [isLoadingFlow, setIsLoadingFlow] = useState(true);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     
-    // 1. 전체 요약 데이터 호출
+    const currentYear = new Date().getFullYear();
+    const yearOptions = Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
+
+    // 함수 기능: 선택된 연도(selectedYear)에 따라 유저의 전체 누적 또는 특정 연도의 요약 통계 데이터를 백엔드에서 불러옵니다.
     useEffect(() => {
         const fetchSummary = async () => {
+            setIsLoadingSummary(true);
             try {
-                const res = await fetch(`${API_URL}/api/insights/user/${userEmail}/summary`);
+                const url = selectedYear === 'all' 
+                    ? `${API_URL}/api/mypage/stats/${userEmail}`
+                    : `${API_URL}/api/mypage/stats/${userEmail}?year=${selectedYear}`;
+
+                const res = await fetch(url, { cache: 'no-store' });
                 if (res.ok) {
                     const data = await res.json();
                     setSummaryData(data);
@@ -8870,14 +8924,14 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
             }
         };
         fetchSummary();
-    }, [userEmail]);
+    }, [userEmail, selectedYear]);
 
-    // 2. 흐름 데이터 호출
+    // 함수 기능: 차트 전용 연도 필터(flowYear)에 따라 유저의 월별 독서 흐름 데이터를 백엔드에서 불러옵니다.
     useEffect(() => {
         const fetchFlow = async () => {
             setIsLoadingFlow(true);
             try {
-                const res = await fetch(`${API_URL}/api/insights/user/${userEmail}/yearly-flow?year=${selectedYear}`);
+                const res = await fetch(`${API_URL}/api/insights/user/${userEmail}/yearly-flow?year=${flowYear}`);
                 if (res.ok) {
                     const data = await res.json();
                     setFlowData(data);
@@ -8889,9 +8943,15 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
             }
         };
         fetchFlow();
-    }, [userEmail, selectedYear]);
+    }, [userEmail, flowYear]);
 
-    if (isLoadingSummary) {
+    // 함수 기능: 월별 차트 데이터 배열을 순회하여 해당 기간 내 '읽는 중' 상태인 도서의 총합을 안전하게 계산합니다.
+    const totalReadingInPeriod = useMemo(() => {
+        if (!flowData || !Array.isArray(flowData.flow_data)) return 0;
+        return flowData.flow_data.reduce((acc: number, curr: any) => acc + (curr.reading_count || 0), 0);
+    }, [flowData]);
+
+    if (!summaryData && isLoadingSummary) {
         return (
             <div className="w-full min-h-screen flex items-center justify-center bg-[#F5F5F7]">
                 <div className="flex gap-2">
@@ -8905,17 +8965,8 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
 
     if (!summaryData) return <div className="p-8 text-center text-gray-500">데이터를 불러올 수 없습니다.</div>;
 
-    const { overview, genre_spectrum, top_authors, records_weight } = summaryData;
-
-    const handlePrevYear = () => {
-        if (selectedYear === 'all') setSelectedYear(new Date().getFullYear());
-        else setSelectedYear(selectedYear - 1);
-    };
-
-    const handleNextYear = () => {
-        if (selectedYear === 'all') return;
-        setSelectedYear(selectedYear + 1);
-    };
+    const { summary, top_genres, top_tags } = summaryData;
+    const records_weight = summaryData.records_weight || { memo_count: 0, short_review_count: 0, long_review_count: 0 };
 
     return (
         <div className="w-full min-h-screen flex flex-col bg-[#F5F5F7]">
@@ -8923,13 +8974,29 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
             <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
-                        <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc]"><Home size={15} /> 홈</Link>
+                        <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors"><Home size={15} /> 홈</Link>
                         <ChevronRight size={14} className="opacity-50" />
                         <span className="text-gray-400">나의 기록</span>
                         <ChevronRight size={14} className="opacity-50" />
                         <span className="text-[#1d1d1f] flex items-center gap-1"><BarChart3 size={14} /> 서재 인사이트</span>
                     </div>
+
+                    <div className="flex items-center">
+                        <Select value={selectedYear} onValueChange={setSelectedYear}>
+                            <SelectTrigger className="w-[130px] h-9 bg-white border-gray-200 text-[#1d1d1f] font-bold text-[13px] rounded-full focus:ring-[#0066cc]">
+                                <Calendar size={14} className="mr-2 text-gray-400" />
+                                <SelectValue placeholder="기간 선택" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-gray-100 shadow-xl">
+                                <SelectItem value="all" className="font-bold text-[13px]">전체 기간</SelectItem>
+                                {yearOptions.map(year => (
+                                    <SelectItem key={year} value={year} className="font-bold text-[13px]">{year}년</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
+                
                 <div className="flex flex-col mb-4">
                     <div className="flex items-center gap-3">
                         <h1 className="text-[22px] font-black text-[#1d1d1f] flex items-center gap-2">
@@ -8939,56 +9006,79 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto scrollbar-hide">
+            {/* 본문 콘텐츠 */}
+            <div className="flex-1 overflow-y-auto scrollbar-hide relative">
+                
+                {isLoadingSummary && (
+                     <div className="absolute inset-0 bg-[#F5F5F7]/50 z-10 flex items-center justify-center backdrop-blur-[1px]">
+                         <Loader2 className="w-8 h-8 animate-spin text-[#0066cc]" />
+                     </div>
+                )}
+
                 <div className="p-[var(--spacing-1cm,32px)] pt-6 pb-32 flex flex-col gap-[var(--spacing-1cm,32px)] max-w-5xl mx-auto">
                     
                     {/* [섹션 1] 서재의 지형 */}
                     <section>
-                        <h2 className="text-[16px] font-bold text-[#1d1d1f] mb-4">서재의 지형</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <h2 className="text-[16px] font-bold text-[#1d1d1f] mb-4">
+                            서재의 지형 <span className="text-[12px] text-gray-400 font-medium ml-2">{selectedYear === 'all' ? '(전체 누적)' : `(${selectedYear}년 기준)`}</span>
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            
                             <InsightCard className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
                                     <BookCheck size={24} className="text-[#0066cc]" />
                                 </div>
                                 <div>
                                     <p className="text-[13px] font-bold text-gray-400 mb-1">완독한 책</p>
-                                    <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{overview.read_books}<span className="text-[14px] font-bold text-gray-400 ml-1">권</span></p>
+                                    <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{summary?.total_finished || 0}<span className="text-[14px] font-bold text-gray-400 ml-1">권</span></p>
                                 </div>
                             </InsightCard>
+                            
                             <InsightCard className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
                                     <BookOpen size={24} className="text-emerald-500" />
                                 </div>
                                 <div>
                                     <p className="text-[13px] font-bold text-gray-400 mb-1">읽고 있는 책</p>
-                                    <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{overview.reading_books}<span className="text-[14px] font-bold text-gray-400 ml-1">권</span></p>
+                                    <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{summary?.total_reading || 0}<span className="text-[14px] font-bold text-gray-400 ml-1">권</span></p>
                                 </div>
                             </InsightCard>
+
                             <InsightCard className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
                                     <Bookmark size={24} className="text-rose-500" />
                                 </div>
                                 <div>
                                     <p className="text-[13px] font-bold text-gray-400 mb-1">읽고 싶은 책</p>
-                                    <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{overview.wish_books}<span className="text-[14px] font-bold text-gray-400 ml-1">권</span></p>
+                                    <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{summary?.total_wish || 0}<span className="text-[14px] font-bold text-gray-400 ml-1">권</span></p>
                                 </div>
                             </InsightCard>
+
+                            <InsightCard className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                                    <Star size={24} className="text-amber-400 fill-amber-400" />
+                                </div>
+                                <div>
+                                    <p className="text-[13px] font-bold text-gray-400 mb-1">평균 별점</p>
+                                    <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{summary?.avg_rating || 0.0}<span className="text-[14px] font-bold text-gray-400 ml-1">점</span></p>
+                                </div>
+                            </InsightCard>
+
                         </div>
                     </section>
 
                     {/* [섹션 2] 취향 분석 */}
                     <section className="grid grid-cols-1 lg:grid-cols-2 gap-[var(--spacing-1cm,32px)]">
                         <InsightCard>
-                            {/* ▼▼▼ 호버 툴팁이 적용된 타이틀 영역 ▼▼▼ */}
                             <div className="flex items-center gap-2 mb-6">
                                 <h2 className="text-[16px] font-bold text-[#1d1d1f] flex items-center gap-2">
                                     <PieChart size={18} className="text-[#0066cc]" /> 선호 장르 스펙트럼
                                 </h2>
                                 <div className="relative group flex items-center cursor-help">
-                                    <HelpCircle size={15} className="text-gray-400 hover:text-[#0066cc] transition-colors" />
+                                    <HelpCircle size={15} className="text-amber-500 hover:text-[#0066cc] transition-colors" />
                                     <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-max max-w-[240px] bg-gray-800 text-white text-[12px] leading-relaxed px-3 py-2 rounded-md shadow-lg z-10 pointer-events-none">
                                         <p>내 서재에 담긴 모든 도서</p>
-                                        <p className="font-bold text-[#0066cc] bg-white/10 px-1 rounded inline-block mt-0.5 mb-0.5">
+                                        <p className="font-bold text-[#eded00] bg-white/10 px-1 rounded inline-block mt-0.5 mb-0.5">
                                             완독 + 읽는 중 + 찜
                                         </p>
                                         <p>을(를) 기준으로 취향을 분석합니다.</p>
@@ -8997,13 +9087,13 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                                 </div>
                             </div>
 
-                            {genre_spectrum.length > 0 ? (
+                            {top_genres && top_genres.length > 0 ? (
                                 <>
                                     <div className="h-[250px] w-full">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <RechartsPieChart>
-                                                <Pie data={genre_spectrum} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
-                                                    {genre_spectrum.map((entry: any, index: number) => (
+                                                <Pie data={top_genres.map((g:any)=>({name: g.genre, value: g.count}))} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
+                                                    {top_genres.map((entry: any, index: number) => (
                                                         <Cell key={`cell-${index}`} fill={GENRE_COLORS[index % GENRE_COLORS.length]} />
                                                     ))}
                                                 </Pie>
@@ -9012,90 +9102,129 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                                         </ResponsiveContainer>
                                     </div>
                                     <div className="flex flex-wrap justify-center gap-4 mt-2">
-                                        {genre_spectrum.map((entry: any, index: number) => (
-                                            <div key={entry.name} className="flex items-center gap-1.5">
+                                        {top_genres.map((entry: any, index: number) => (
+                                            <div key={entry.genre} className="flex items-center gap-1.5">
                                                 <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: GENRE_COLORS[index % GENRE_COLORS.length] }}></span>
-                                                <span className="text-[12px] font-bold text-gray-500">{entry.name} ({entry.value}권)</span>
+                                                <span className="text-[12px] font-bold text-gray-500">{entry.genre} ({entry.count}권)</span>
                                             </div>
                                         ))}
                                     </div>
                                 </>
                             ) : (
-                                <div className="h-[250px] flex items-center justify-center text-[13px] text-gray-400 font-bold">아직 완독한 장르 데이터가 없습니다.</div>
+                                <div className="h-[250px] flex items-center justify-center text-[13px] text-gray-400 font-bold">해당 기간의 장르 데이터가 없습니다.</div>
                             )}
                         </InsightCard>
 
                         <InsightCard>
                             <h2 className="text-[16px] font-bold text-[#1d1d1f] mb-6 flex items-center gap-2">
-                                <Trophy size={18} className="text-[#0066cc]" /> 가장 사랑한 작가 TOP 5
+                                <Trophy size={18} className="text-[#0066cc]" /> 가장 많이 사용한 태그 TOP 5
                             </h2>
                             <div className="flex flex-col gap-4">
-                                {top_authors.length > 0 ? top_authors.map((author: any) => (
-                                    <div key={author.rank} className="flex items-center justify-between p-4 rounded-sm bg-gray-50/50 border border-gray-100">
+                                {top_tags && top_tags.length > 0 ? top_tags.slice(0, 5).map((tag: any, idx: number) => (
+                                    <div key={tag.text} className="flex items-center justify-between p-4 rounded-sm bg-gray-50/50 border border-gray-100">
                                         <div className="flex items-center gap-4">
-                                            <span className={`text-[18px] font-black ${author.rank === 1 ? 'text-[#0066cc]' : 'text-gray-300'}`}>0{author.rank}</span>
-                                            <span className="text-[15px] font-bold text-[#1d1d1f]">
-                                                {formatCardAuthor(author.name)}
-                                            </span>
+                                            <span className={`text-[18px] font-black ${idx === 0 ? 'text-[#0066cc]' : 'text-gray-300'}`}>0{idx + 1}</span>
+                                            <span className="text-[15px] font-bold text-[#1d1d1f]">#{tag.text}</span>
                                         </div>
-                                        <span className="text-[13px] font-bold text-gray-400">{author.count}권</span>
+                                        <span className="text-[13px] font-bold text-gray-400">{tag.count}회</span>
                                     </div>
                                 )) : (
-                                    <div className="py-10 text-center text-[13px] text-gray-400 font-bold">아직 완독한 작가 데이터가 없습니다.</div>
+                                    <div className="py-10 text-center text-[13px] text-gray-400 font-bold">해당 기간의 태그 데이터가 없습니다.</div>
                                 )}
                             </div>
                         </InsightCard>
                     </section>
 
-                    {/* [섹션 3] 연간/월간 독서 흐름 */}
+                    {/* [섹션 3] 독서 흐름 차트 */}
                     <section>
                         <InsightCard>
-                            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-4">
-                                <div>
-                                    <div className="flex items-center gap-3 mb-1.5">
-                                        <h2 className="text-[16px] font-bold text-[#1d1d1f]">독서 흐름</h2>
-                                        <div className="flex items-center gap-1 bg-gray-50 rounded-sm px-1.5 py-1 border border-gray-100">
-                                            <button onClick={handlePrevYear} className="p-0.5 hover:bg-gray-200 rounded-sm transition-colors text-gray-500"><ChevronLeft size={16}/></button>
-                                            <span className="text-[13px] font-bold text-[#1d1d1f] w-[70px] text-center">
-                                                {selectedYear === 'all' ? '전체 기간' : `${selectedYear}년`}
-                                            </span>
-                                            <button onClick={handleNextYear} disabled={selectedYear === 'all'} className="p-0.5 hover:bg-gray-200 rounded-sm transition-colors disabled:opacity-30 text-gray-500"><ChevronRight size={16}/></button>
-                                            
-                                            <div className="w-[1px] h-3 bg-gray-300 mx-1"></div>
-                                            <button 
-                                                onClick={() => setSelectedYear(selectedYear === 'all' ? new Date().getFullYear() : 'all')} 
-                                                className={`px-2 py-0.5 text-[11px] font-bold rounded-sm transition-colors ${selectedYear === 'all' ? 'bg-[#0066cc] text-white' : 'text-gray-400 hover:text-[#0066cc] hover:bg-blue-50'}`}
-                                            >
-                                                {selectedYear === 'all' ? '연도별 보기' : '전체 보기'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <p className="text-[13px] text-gray-400 font-medium">
-                                        {selectedYear === 'all' ? 'BoooknTalk과 함께한 전체 기간의 연도별 완독 기록입니다.' : `${selectedYear}년 한 해 동안의 월별 완독 기록입니다.`}
-                                    </p>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-[16px] font-bold text-[#1d1d1f]">독서 흐름</h2>
+                                    
+                                    <Select value={flowYear} onValueChange={setFlowYear}>
+                                        <SelectTrigger className="w-[110px] h-8 bg-gray-50 border-gray-100 text-[#1d1d1f] font-bold text-[12px] rounded-full focus:ring-[#0066cc]">
+                                            <Calendar size={13} className="mr-1.5 text-gray-400" />
+                                            <SelectValue placeholder="기간 선택" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl border-gray-100 shadow-xl">
+                                            <SelectItem value="all" className="font-bold text-[12px]">전체 기간</SelectItem>
+                                            {yearOptions.map(year => (
+                                                <SelectItem key={year} value={year} className="font-bold text-[12px]">{year}년</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                                <div className="sm:text-right">
-                                    <p className="text-[12px] font-bold text-gray-400 mb-0.5">선택 기간 완독 도서</p>
-                                    <p className="text-[20px] font-black text-[#0066cc]">총 {flowData ? flowData.total_read_in_period : 0}<span className="text-[13px] text-gray-400 ml-1">권</span></p>
+
+                                <div className="flex items-center sm:justify-end gap-6">
+                                    <div className="text-right">
+                                        <p className="text-[12px] font-bold text-gray-400 mb-0.5 flex items-center gap-1.5 justify-end">
+                                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: chartConfig.finished_count.color }}></span>완독
+                                        </p>
+                                        <p className="text-[20px] font-black text-[#1d1d1f]">
+                                            {flowData ? flowData.total_read_in_period : 0}<span className="text-[13px] text-gray-400 ml-1">권</span>
+                                        </p>
+                                    </div>
+                                    <div className="w-px h-8 bg-gray-200"></div>
+                                    <div className="text-right">
+                                        <p className="text-[12px] font-bold text-gray-400 mb-0.5 flex items-center gap-1.5 justify-end">
+                                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: chartConfig.reading_count.color }}></span>읽는 중
+                                        </p>
+                                        <p className="text-[20px] font-black text-[#1d1d1f]">
+                                            {totalReadingInPeriod}<span className="text-[13px] text-gray-400 ml-1">권</span>
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                             
                             <div className="h-[250px] w-full relative">
-                                {isLoadingFlow ? (
+                                {isLoadingFlow && (
                                     <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
                                         <Loader2 className="w-6 h-6 animate-spin text-[#0066cc]" />
                                     </div>
-                                ) : null}
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={flowData?.flow_data || []} margin={{ top: 25, right: 0, left: -20, bottom: 0 }}>
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: 600 }} dy={10} />
-                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: 600 }} />
-                                        <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '2px', border: '1px solid #e5e7eb', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }} />
-                                        <Bar dataKey="count" fill="#0066cc" radius={[0, 0, 0, 0]} maxBarSize={40}>
-                                            <LabelList dataKey="count" position="top" fill="#9ca3af" fontSize={11} fontWeight={700} formatter={(val: number) => val > 0 ? val : ''} />
+                                )}
+                                
+                                <ChartContainer config={chartConfig} className="h-full w-full">
+                                    <BarChart accessibilityLayer data={flowData?.flow_data || []} margin={{ top: 25, right: 0, left: -20, bottom: 0 }}>
+                                        <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.3} />
+                                        <XAxis 
+                                            dataKey="name" 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tickMargin={10}
+                                            tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: 600 }} 
+                                        />
+                                        <YAxis 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: 600 }} 
+                                        />
+                                        <ChartTooltip
+                                            cursor={false}
+                                            content={<ChartTooltipContent indicator="dashed" />}
+                                        />
+                                        
+                                        {/* ▼▼▼ [핵심 수정] formatter 속성을 통해 값이 0 초과일 때만 숫자 표시 ▼▼▼ */}
+                                        <Bar dataKey="finished_count" fill="var(--color-finished_count)" radius={4}>
+                                            <LabelList 
+                                                dataKey="finished_count" 
+                                                position="top" 
+                                                offset={10} 
+                                                className="fill-[#9ca3af] text-[11px] font-bold" 
+                                                formatter={(value: number) => (value > 0 ? value : '')}
+                                            />
+                                        </Bar>
+                                        <Bar dataKey="reading_count" fill="var(--color-reading_count)" radius={4}>
+                                            <LabelList 
+                                                dataKey="reading_count" 
+                                                position="top" 
+                                                offset={10} 
+                                                className="fill-[#9ca3af] text-[11px] font-bold" 
+                                                formatter={(value: number) => (value > 0 ? value : '')}
+                                            />
                                         </Bar>
                                     </BarChart>
-                                </ResponsiveContainer>
+                                </ChartContainer>
                             </div>
                         </InsightCard>
                     </section>
@@ -9171,11 +9300,14 @@ export default function InsightsPage() {
 ============================================================
 FILE PATH: frontend/src/app/(main)/my-records/long-reviews/LongReviewsClient.tsx
 ============================================================
+// 파일 경로: app/long-reviews/LongReviewsClient.tsx (프로젝트 구조에 맞게 경로 확인)
+// 역할 및 기능: BoooknTalk 서비스의 개인 긴줄평 목록을 불러와 렌더링하고, 각 기록의 공개/비공개 상태를 관리하는 클라이언트 컴포넌트
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react'; // ▼ 세션 임포트 추가
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { Home, ChevronRight, PenTool, Globe, Lock, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
@@ -9187,12 +9319,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function LongReviewsClient() {
     const router = useRouter();
-    const { data: session, status } = useSession(); // ▼ 로그인 정보 가져오기
+    const { data: session, status } = useSession();
     
     const [reviews, setReviews] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    // ▼▼▼ [핵심] 실제 긴줄평 데이터 불러오기 로직 ▼▼▼
     useEffect(() => {
         if (status === 'unauthenticated') {
             router.push('/'); 
@@ -9204,16 +9335,13 @@ export default function LongReviewsClient() {
         }
     }, [session, status, router]);
 
+    // 함수 기능: 로그인한 사용자의 이메일을 기반으로 백엔드 API를 호출하여 긴줄평 데이터를 비동기적으로 가져오고 상태를 업데이트함
     const fetchLongReviews = async (email: string) => {
         setIsLoading(true);
         try {
-            // ▼▼▼ [핵심] 엉뚱한 /records 대신, 방금 만든 진짜 API를 호출합니다! ▼▼▼
             const res = await fetch(`${API_URL}/api/users/${email}/long-reviews`);
             if (res.ok) {
                 const data = await res.json();
-                
-                // 백엔드에서 이미 빈 껍데기를 다 걸러서 보내주므로, 
-                // 프론트에서는 아무것도 고민할 필요 없이 그대로 세팅만 하면 끝!
                 setReviews(data);
             }
         } catch (error) {
@@ -9224,10 +9352,12 @@ export default function LongReviewsClient() {
         }
     };
 
+    // 함수 기능: 특정 긴줄평 기록의 공개/비공개(임시저장) 상태를 토글(Optimistic UI 적용)하고 백엔드 API에 상태 업데이트 요청을 보냄
     const togglePublicStatus = async (e: React.MouseEvent, recordId: number, isDraft: boolean) => {
         e.stopPropagation(); 
         const newDraftStatus = !isDraft; 
         
+        // Optimistic UI Update
         setReviews(prev => prev.map(r => r.record_id === recordId ? { ...r, is_long_review_draft: newDraftStatus } : r));
         
         try {
@@ -9238,24 +9368,20 @@ export default function LongReviewsClient() {
             });
             toast.success(newDraftStatus ? "비공개(임시저장) 상태로 전환되었습니다." : "광장에 전체 공개되었습니다.");
         } catch {
+            // 실패 시 롤백
             setReviews(prev => prev.map(r => r.record_id === recordId ? { ...r, is_long_review_draft: isDraft } : r));
             toast.error("상태 변경에 실패했습니다.");
         }
     };
 
-    // ▼▼▼ [적용 완료] 2. 모던 바운싱 도트 (Bouncing Dots) 로딩 화면 ▼▼▼
     if (isLoading || status === 'loading') {
         return (
             <div className="w-full h-[calc(100vh-100px)] bg-[#F5F5F7] flex flex-col justify-center items-center">
                 <div className="flex items-center gap-2 mb-4">
-                    {/* 첫 번째 점: 가장 먼저 튀어오름 */}
                     <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '-0.3s' }}></div>
-                    {/* 두 번째 점: 살짝 늦게 튀어오름 */}
                     <div className="w-2.5 h-2.5 bg-[#0066cc]/80 rounded-full animate-bounce" style={{ animationDelay: '-0.15s' }}></div>
-                    {/* 세 번째 점: 마지막에 튀어오름 */}
                     <div className="w-2.5 h-2.5 bg-[#0066cc]/60 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
                 </div>
-                {/* BoooknTalk 감성에 맞는 로딩 텍스트 */}
                 <p className="text-[13px] font-bold text-gray-400 tracking-wide animate-pulse">
                     긴줄평을 불러오는 중...
                 </p>
@@ -9266,10 +9392,11 @@ export default function LongReviewsClient() {
     return (
         <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
             {/* 상단 네비게이션 영역 */}
-            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0 transition-all">
+            {/* [핵심 수정] 렌더링 시 요소가 날아오는 버그를 수정하기 위해 기존의 'transition-all' 클래스를 제거했습니다. */}
+            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0">
                 <div className="flex items-center justify-between mb-4 min-h-[20px]">
                     <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
-                        <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc]"><Home size={15} /> 홈</Link>
+                        <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors"><Home size={15} /> 홈</Link>
                         <ChevronRight size={14} className="opacity-50" />
                         <span className="text-gray-400">나의 기록</span>
                         <ChevronRight size={14} className="opacity-50" />
@@ -9299,16 +9426,13 @@ export default function LongReviewsClient() {
                         </div>
                     ) : (
                         <main className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
-                            {/* ▼ map 함수에 index 추가 */}
                             {reviews.map((review, index) => {
                                 const isDraft = review.is_long_review_draft;
-                                
-                                {/* ▼▼▼ [핵심] record_id가 중복되거나 없어도 절대 에러가 나지 않는 완벽한 고유 키 생성 ▼▼▼ */}
                                 const uniqueKey = `review-${review.record_id || 'empty'}-${index}`;
                                 
                                 return (
                                     <BookRecordCard 
-                                        key={uniqueKey} // <- 에러를 잠재우는 마법의 Key
+                                        key={uniqueKey}
                                         id={review.record_id || index}
                                         onClick={() => router.push(`/library/${review.record_id}`)}
                                         book_cover={review.cover}
@@ -9324,11 +9448,10 @@ export default function LongReviewsClient() {
                                                 )}
                                                 <h4 className="font-black text-[#1d1d1f] text-[15px] mb-2 line-clamp-1">{review.long_review_title || '제목 없음'}</h4>
                                                 
-                                                {/* ▼▼▼ [핵심 수정] 툴팁(SmartTruncatedText)을 제거하고, 3줄 말줄임(line-clamp-3) 텍스트로 깔끔하게 교체 ▼▼▼ */}
                                                 <p className="text-[13px] text-gray-500 leading-relaxed line-clamp-3 break-keep">
                                                     {(review.long_review_content || '')
-                                                        .replace(/<[^>]*>?/gm, '') // HTML 태그 제거
-                                                        .replace(/&nbsp;/g, ' ')   // 에디터 공백 제거
+                                                        .replace(/<[^>]*>?/gm, '')
+                                                        .replace(/&nbsp;/g, ' ')
                                                         .trim()}
                                                 </p>
                                             </div>
@@ -10631,10 +10754,18 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                             initialData={selectedBook} 
                             onClose={() => setIsEditModalOpen(false)} 
                             onSaved={(updatedData) => {
+                                // 1. 화면의 도서 데이터를 최신 상태로 즉시 변경
                                 setBooks(prev => prev.map(book => 
                                     book.library_id === (selectedBook.library_id || selectedBook.id) ? { ...book, ...updatedData } : book
                                 ));
+                                
+                                // 2. 모달 닫기
                                 setIsEditModalOpen(false);
+
+                                // ▼▼▼ [핵심] 첫 번째 저장 토스트가 끝날 무렵(0.8초 뒤) 두 번째 토스트가 짠! 하고 등장 ▼▼▼
+                                setTimeout(() => {
+                                    toast.success("독서 기록이 최신 상태로 업데이트되었습니다!");
+                                }, 800);
                             }}
                         />
                     )}
@@ -10937,15 +11068,21 @@ export default function WishlistPage() {
             {/* ▼▼▼ [NEW] 상태 변경을 위한 모달 렌더링 영역 ▼▼▼ */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden rounded-[28px] border-none shadow-2xl">
+                    <DialogTitle className="sr-only">도서 기록 변경</DialogTitle>
                     {selectedBook && (
                         <BookDetailForm 
                             initialData={selectedBook} 
                             onClose={() => setIsEditModalOpen(false)} 
                             onSaved={(updatedData) => {
-                                // 핵심 로직: 상태가 WISH에서 READING이나 COMPLETED로 바뀌면 목록에서 즉시 제거!
+                                // 상태가 WISH에서 READING이나 COMPLETED로 바뀌면 목록에서 즉시 제거!
                                 if (updatedData.status !== 'WISH') {
                                     setWishBooks(prev => prev.filter(b => b.library_id !== selectedBook.library_id));
-                                    toast.success("상태가 변경되어 서재로 이동되었습니다!");
+                                    
+                                    // ▼▼▼ [핵심] 첫 번째 토스트가 뜬 후, 0.8초(800ms) 뒤에 두 번째 토스트가 우아하게 등장하도록 시간차 세팅! ▼▼▼
+                                    setTimeout(() => {
+                                        toast.success("상태가 변경되어 서재로 이동되었습니다!");
+                                    }, 800);
+                                    
                                 } else {
                                     // WISH 그대로 정보만 수정된 경우
                                     setWishBooks(prev => prev.map(book => 
@@ -11329,6 +11466,731 @@ export default async function BookDetailPage({ params }: PageProps) {
             <BookDetailClient initialData={initialData} user={session.user} />
         </div>
     );
+}
+
+
+============================================================
+FILE PATH: frontend/src/app/(main)/my-authors/layout.tsx
+============================================================
+// 파일 경로: src/app/(main)/my-authors/layout.tsx
+// 역할 및 기능: BoooknTalk의 '나의 작가' 하위 메뉴들에 공통으로 LNB(사이드바) 레이아웃을 씌워주는 컴포넌트
+
+'use client';
+
+import React from 'react';
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { LibrarySidebar } from '@/components/library/LibrarySidebar';
+import Footer from '@/components/layout/Footer';
+
+// 함수 기능: 다른 메뉴들과 동일한 Flexbox 규격으로 좌측 LNB와 우측 메인 화면(및 푸터)을 배치합니다.
+export default function AuthorsLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <SidebarProvider defaultOpen={true}>
+            <div className="flex w-full h-full bg-[#F5F5F7] overflow-hidden">
+                {/* 좌측: 고정된 공통 LNB */}
+                <aside className="hidden md:block w-64 flex-none border-r border-gray-300 bg-white h-full">
+                    <LibrarySidebar />
+                </aside>
+                
+                {/* 우측: 나의 작가 컨텐츠 및 푸터 */}
+                <div className="flex-1 flex flex-col h-full overflow-hidden">
+                    {/* 메인 스크롤 영역 */}
+                    <main className="flex-1 overflow-y-auto bg-[#F5F5F7] scrollbar-hide">
+                        {children}
+                    </main>
+                    <footer className="flex-none bg-white border-t border-gray-200">
+                        <Footer />
+                    </footer>
+                </div>
+            </div>
+        </SidebarProvider>
+    );
+}
+
+
+============================================================
+FILE PATH: frontend/src/app/(main)/my-authors/translator/AuthorTranslatorClient.tsx
+============================================================
+// 파일 경로: src/app/(main)/my-authors/translator/AuthorTranslatorClient.tsx
+// 역할 및 기능: 화면을 좌우로 분할하여 좌측에는 번역가 목록을, 우측에는 선택된 번역가의 연도별 번역 도서 타임라인을 보여주는 컴포넌트입니다.
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+// ▼ [추가] 아코디언 버튼용 Plus, Minus 아이콘 추가
+import { Home, ChevronRight, Languages, Search, BookOpen, ExternalLink, X, Plus, Minus } from 'lucide-react';
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+
+interface TranslatorListItem {
+    id: number;
+    name: string;
+    read_count: number;
+}
+
+interface BookstoreModalData {
+    isOpen: boolean;
+    bookTitle: string;
+    isbn: string;
+}
+
+export default function AuthorTranslatorClient() {
+    const [translators, setTranslators] = useState<TranslatorListItem[]>([]);
+    const [searchTerm, setSearchTerm] = useState("");
+    
+    const [selectedTranslator, setSelectedTranslator] = useState<string | null>(null);
+    const [timelineData, setTimelineData] = useState<any[]>([]);
+    const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
+    
+    const [modalData, setModalData] = useState<BookstoreModalData>({ isOpen: false, bookTitle: '', isbn: '' });
+
+    // ▼ [추가 1] 아코디언 닫힘 상태 관리 및 필터 탭 상태
+    const [collapsedYears, setCollapsedYears] = useState<Set<string>>(new Set());
+    const [filterMode, setFilterMode] = useState<'ALL' | 'MY_BOOKS'>('ALL');
+
+    const toggleYear = (year: string) => {
+        setCollapsedYears(prev => {
+            const next = new Set(prev);
+            if (next.has(year)) next.delete(year);
+            else next.add(year);
+            return next;
+        });
+    };
+
+    useEffect(() => {
+        const fetchTranslators = async () => {
+            try {
+                const response = await fetch('http://localhost:8000/api/authors/translator/list?user_id=1');
+                if (response.ok) {
+                    const data = await response.json();
+                    setTranslators(data);
+                }
+            } catch (error) {
+                console.error("번역가 목록 로딩 실패:", error);
+            }
+        };
+        fetchTranslators();
+    }, []);
+
+    useEffect(() => {
+        if (!selectedTranslator) return;
+
+        const fetchTimeline = async () => {
+            setIsLoadingTimeline(true);
+            
+            // ▼ [수정 1] 잔상(Flickering) 방지 및 필터/아코디언 상태 초기화
+            setTimelineData([]); 
+            setCollapsedYears(new Set());
+            setFilterMode('ALL');
+
+            try {
+                const response = await fetch(`http://localhost:8000/api/authors/translator/${encodeURIComponent(selectedTranslator)}/timeline`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setTimelineData(data);
+                } else {
+                    setTimelineData([]);
+                }
+            } catch (error) {
+                console.error("타임라인 로딩 실패:", error);
+                setTimelineData([]);
+            } finally {
+                setIsLoadingTimeline(false);
+            }
+        };
+        fetchTimeline();
+    }, [selectedTranslator]);
+
+    const filteredTranslators = translators.filter(t => t.name.includes(searchTerm));
+
+    const handleBookClick = (book: any) => {
+        if (book.is_in_square) {
+            alert(`내부 도서 상세 페이지로 이동: ${book.title}`);
+        } else {
+            setModalData({ isOpen: true, bookTitle: book.title, isbn: book.isbn });
+        }
+    };
+
+    return (
+        <div className="flex w-full h-full overflow-hidden bg-[#F5F5F7]">
+            {/* 좌측 패널 (유지) */}
+            <div className="w-[320px] flex-none bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+                <div className="p-5 border-b border-gray-100 flex-none">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Languages size={20} className="text-[#0066cc]" />
+                        <h2 className="text-[18px] font-black text-[#1d1d1f]">나의 번역가들</h2>
+                    </div>
+                    <div className="relative w-full">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                        <Input 
+                            placeholder="번역가 이름 검색" 
+                            className="pl-9 h-9 text-[13px] bg-gray-50 border-transparent focus-visible:bg-white focus-visible:ring-[#0066cc]"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5 scrollbar-hide">
+                    {filteredTranslators.map((translator) => (
+                        <button
+                            key={translator.id}
+                            onClick={() => setSelectedTranslator(translator.name)}
+                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left group
+                                ${selectedTranslator === translator.name 
+                                    ? 'bg-[#0066cc] text-white shadow-md' 
+                                    : 'hover:bg-gray-50 text-[#1d1d1f]'}`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors
+                                    ${selectedTranslator === translator.name ? 'bg-white/20' : 'bg-[#f0f5fa] group-hover:bg-[#e6f0fa]'}`}>
+                                    <Languages size={18} className={selectedTranslator === translator.name ? 'text-white' : 'text-[#0066cc]'} />
+                                </div>
+                                <span className={`text-[15px] font-bold ${selectedTranslator === translator.name ? 'text-white' : 'text-[#1d1d1f]'}`}>
+                                    {translator.name}
+                                </span>
+                            </div>
+                            <Badge variant="secondary" className={`text-[11px] font-bold px-2 py-0.5 
+                                ${selectedTranslator === translator.name ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                                {translator.read_count}권
+                            </Badge>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* 우측 패널 */}
+            <div className="flex-1 flex flex-col h-full overflow-y-auto relative">
+                {!selectedTranslator ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center">
+                        <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                            <Languages size={32} className="text-gray-300" />
+                        </div>
+                        <h3 className="text-[18px] font-black text-[#1d1d1f] mb-2">번역가를 선택해주세요</h3>
+                        <p className="text-[14px] text-gray-400 font-medium">왼쪽 목록에서 번역가를 선택하면 번역 발자취를 볼 수 있습니다.</p>
+                    </div>
+                ) : (
+                    <div className="w-full flex flex-col pb-20">
+                        <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0">
+                            <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400 mb-4">
+                                <Link href="/" className="hover:text-[#0066cc]"><Home size={15} /></Link>
+                                <ChevronRight size={14} className="opacity-50" />
+                                <span>나의 번역가</span>
+                                <ChevronRight size={14} className="opacity-50" />
+                                <span className="text-[#1d1d1f]">{selectedTranslator}</span>
+                            </div>
+                            
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <h1 className="text-[26px] font-black text-[#1d1d1f]">
+                                        {selectedTranslator} 번역가의 발자취
+                                    </h1>
+                                    {!isLoadingTimeline && timelineData.length > 0 && (
+                                        <Badge variant="secondary" className="bg-white border border-gray-200 text-[#0066cc] text-[13px] font-bold px-2.5 py-1">
+                                            총 {timelineData.reduce((acc, year) => acc + year.books.length, 0)}권 번역
+                                        </Badge>
+                                    )}
+                                </div>
+
+                                {/* ▼ [수정 2] 필터 모드 탭 추가 */}
+                                {!isLoadingTimeline && timelineData.length > 0 && (
+                                    <div className="flex bg-gray-200/50 p-1 rounded-xl">
+                                        <button 
+                                            onClick={() => setFilterMode('ALL')}
+                                            className={`px-4 py-1.5 text-[13px] font-bold rounded-lg transition-all ${filterMode === 'ALL' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-gray-500 hover:text-[#1d1d1f]'}`}
+                                        >
+                                            전체 도서
+                                        </button>
+                                        <button 
+                                            onClick={() => setFilterMode('MY_BOOKS')}
+                                            className={`px-4 py-1.5 text-[13px] font-bold rounded-lg transition-all ${filterMode === 'MY_BOOKS' ? 'bg-[#0066cc] text-white shadow-sm' : 'text-gray-500 hover:text-[#1d1d1f]'}`}
+                                        >
+                                            내 서재만
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="p-[var(--spacing-1cm,32px)]">
+                            {isLoadingTimeline ? (
+                                <div className="flex flex-col items-center justify-center py-24 gap-5">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                    </div>
+                                    <p className="text-[13px] font-bold text-gray-400 animate-pulse">번역 발자취를 따라가고 있습니다...</p>
+                                </div>
+                            ) : (
+                                <div className="w-full max-w-4xl"> 
+                                    <div className="relative border-l-2 border-[#0066cc]/20 ml-3 md:ml-6 space-y-12">
+                                        {/* ▼ [수정 3] 필터링 로직 + 아코디언 O버튼 적용 */}
+                                        {timelineData
+                                            .map(yearData => {
+                                                if (filterMode === 'ALL') return yearData;
+                                                return {
+                                                    ...yearData,
+                                                    books: yearData.books.filter((book: any) => book.is_in_square)
+                                                };
+                                            })
+                                            .filter(yearData => yearData.books.length > 0)
+                                            .map((yearData, index) => {
+                                                const isCollapsed = collapsedYears.has(yearData.year);
+                                                
+                                                return (
+                                                    <div key={index} className="relative pl-8 md:pl-12">
+                                                        {/* 노드 버튼 (Plus/Minus) */}
+                                                        <div 
+                                                            onClick={() => toggleYear(yearData.year)}
+                                                            className={`absolute flex items-center justify-center w-7 h-7 rounded-full -left-[15px] top-0 shadow-sm z-10 cursor-pointer transition-all duration-200 hover:scale-110
+                                                                ${isCollapsed 
+                                                                    ? 'bg-white border-[3px] border-gray-300 text-gray-400 hover:border-[#0066cc] hover:text-[#0066cc]' 
+                                                                    : 'bg-[#0066cc] border-[3px] border-[#0066cc] text-white shadow-md'}`}
+                                                        >
+                                                            {isCollapsed ? <Plus size={14} strokeWidth={3} /> : <Minus size={14} strokeWidth={3} />}
+                                                        </div>
+                                                        
+                                                        {/* 연도 헤더 */}
+                                                        <div className="flex items-center gap-3 mb-6 -mt-1 w-fit select-none">
+                                                            <h2 className="text-[28px] font-black text-[#1d1d1f] leading-none tracking-tight">
+                                                                {yearData.year}
+                                                            </h2>
+                                                            <Badge variant="outline" className="text-[12px] font-bold text-gray-400 border-gray-200 px-2 py-0.5">
+                                                                {yearData.books.length}권
+                                                            </Badge>
+                                                        </div>
+
+                                                        {/* 도서 목록 (아코디언 토글 적용 + 등록/미등록 배경색 구분) */}
+                                                        <div className={`flex flex-col gap-4 transition-all duration-300 origin-top ${isCollapsed ? 'hidden' : 'block'}`}>
+                                                            {/* ▼ [수정] map 함수에 bookIndex를 추가하고, key에 결합합니다! */}
+                                                            {yearData.books.map((book: any, bookIndex: number) => (
+                                                                <div 
+                                                                    key={`${book.id}_${bookIndex}`} 
+                                                                    onClick={() => handleBookClick(book)}
+                                                                    className={`group p-5 rounded-xl shadow-sm border transition-all cursor-pointer flex items-center justify-between hover:shadow-md
+                                                                        ${book.is_in_square 
+                                                                            ? 'bg-[#e6f0fa]/50 border-[#0066cc]/10 hover:border-[#0066cc]/30' 
+                                                                            : 'bg-white border-gray-100 hover:border-[#0066cc]/30'}`}
+                                                                >
+                                                                    <div className="flex flex-col gap-1.5">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <h3 className="text-[16px] font-bold text-[#1d1d1f] group-hover:text-[#0066cc] transition-colors line-clamp-1">
+                                                                                {book.title}
+                                                                            </h3>
+                                                                            {!book.is_in_square && (
+                                                                                <Badge variant="outline" className="bg-gray-50 text-gray-400 border-gray-200 text-[10px] px-1.5 py-0">미등록</Badge>
+                                                                            )}
+                                                                        </div>
+                                                                        <p className="text-[13px] font-medium text-gray-400 flex items-center gap-1.5">
+                                                                            <BookOpen size={12} /> 출간일: {book.publish_date}
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-[#e6f0fa] transition-colors shrink-0">
+                                                                        {book.is_in_square ? (
+                                                                            <ChevronRight size={16} className="text-gray-400 group-hover:text-[#0066cc]" />
+                                                                        ) : (
+                                                                            <ExternalLink size={14} className="text-gray-400 group-hover:text-[#0066cc]" />
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* 외부 서점 모달 (유지) */}
+            {modalData.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1d1d1f]/40 backdrop-blur-sm transition-opacity">
+                    <div className="bg-white w-[400px] rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-[18px] font-black text-[#1d1d1f] mb-1">외부 서점에서 보기</h3>
+                                <p className="text-[13px] font-bold text-gray-400 line-clamp-1">"{modalData.bookTitle}"</p>
+                            </div>
+                            <button onClick={() => setModalData(prev => ({ ...prev, isOpen: false }))} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+                                <X size={20} className="text-gray-500" />
+                            </button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3 bg-gray-50/50">
+                            <a href={`https://www.aladin.co.kr/search/wsearchresult.aspx?SearchTarget=All&SearchWord=${modalData.isbn}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-[#0066cc] hover:shadow-sm transition-all group">
+                                <span className="text-[15px] font-bold text-[#1d1d1f] group-hover:text-[#0066cc]">알라딘에서 보기</span>
+                                <ExternalLink size={16} className="text-gray-400 group-hover:text-[#0066cc]" />
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+
+============================================================
+FILE PATH: frontend/src/app/(main)/my-authors/translator/page.tsx
+============================================================
+// 파일 경로: src/app/(main)/my-authors/translator/page.tsx
+// 역할 및 기능: BoooknTalk의 '나의 작가 > 옮긴이' 라우트를 처리하고 화면 분할된 클라이언트 컴포넌트를 렌더링합니다.
+
+import React from 'react';
+import AuthorTranslatorClient from './AuthorTranslatorClient';
+
+// 함수 기능: 옮긴이 페이지 진입 시 좌우 분할된 AuthorTranslatorClient UI를 화면에 그립니다.
+export default function AuthorTranslatorPage() {
+    return <AuthorTranslatorClient />;
+}
+
+
+============================================================
+FILE PATH: frontend/src/app/(main)/my-authors/writer/AuthorWriterClient.tsx
+============================================================
+// 파일 경로: src/app/(main)/my-authors/writer/AuthorWriterClient.tsx
+// 역할 및 기능: 화면을 좌우로 분할하여 좌측에는 작가 목록을, 우측에는 선택된 작가의 연도별 발간 도서 타임라인을 보여주는 Master-Detail 컴포넌트입니다.
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { Home, ChevronRight, Users, Search, BookOpen, ExternalLink, Loader2, X, ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react';
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+
+// 임시 작가 데이터 타입
+interface AuthorListItem {
+    id: number;
+    name: string;
+    read_count: number;
+}
+
+// 외부 서점 모달 타입
+interface BookstoreModalData {
+    isOpen: boolean;
+    bookTitle: string;
+    isbn: string;
+}
+
+// 함수 기능: 좌측 리스트와 우측 타임라인 상태를 통합 관리하고 분할된 UI를 렌더링합니다.
+export default function AuthorWriterClient() {
+    // === [상태 관리] ===
+    const [authors, setAuthors] = useState<AuthorListItem[]>([]);
+    const [searchTerm, setSearchTerm] = useState("");
+    
+    const [selectedAuthor, setSelectedAuthor] = useState<string | null>(null);
+    const [timelineData, setTimelineData] = useState<any[]>([]);
+    const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
+    
+    const [modalData, setModalData] = useState<BookstoreModalData>({ isOpen: false, bookTitle: '', isbn: '' });
+
+    const [collapsedYears, setCollapsedYears] = useState<Set<string>>(new Set());
+    // ▼▼▼ [NEW] 필터 모드 상태 추가 ('ALL' 또는 'MY_BOOKS') ▼▼▼
+    const [filterMode, setFilterMode] = useState<'ALL' | 'MY_BOOKS'>('ALL');
+
+    // 함수 기능: 특정 연도를 클릭하면 접기/펼치기 상태를 토글합니다.
+    const toggleYear = (year: string) => {
+        setCollapsedYears(prev => {
+            const next = new Set(prev);
+            if (next.has(year)) next.delete(year);
+            else next.add(year);
+            return next;
+        });
+    };
+
+    // === [데이터 로딩] ===
+    // 1. 좌측 작가 목록 로드 (진짜 백엔드 API 호출)
+    useEffect(() => {
+        const fetchAuthors = async () => {
+            try {
+                // user_id=1의 데이터를 가져옵니다.
+                const response = await fetch('http://localhost:8000/api/authors/writer/list?user_id=1');
+                if (response.ok) {
+                    const data = await response.json();
+                    setAuthors(data);
+                }
+            } catch (error) {
+                console.error("작가 목록 로딩 실패:", error);
+            }
+        };
+        fetchAuthors();
+    }, []);
+
+    // 2. 우측 타임라인 로드 (작가가 선택될 때마다 API 호출)
+    useEffect(() => {
+        if (!selectedAuthor) return;
+
+        const fetchTimeline = async () => {
+            setIsLoadingTimeline(true);
+            setTimelineData([]); 
+            setCollapsedYears(new Set()); 
+            setFilterMode('ALL'); // 💡 [NEW] 작가가 바뀌면 필터도 '전체 보기'로 초기화!
+
+            try {
+                const response = await fetch(`http://localhost:8000/api/authors/writer/${encodeURIComponent(selectedAuthor)}/timeline`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setTimelineData(data);
+                } else {
+                    setTimelineData([]);
+                }
+            } catch (error) {
+                console.error("타임라인 로딩 실패:", error);
+                setTimelineData([]);
+            } finally {
+                setIsLoadingTimeline(false);
+            }
+        };
+        fetchTimeline();
+    }, [selectedAuthor]);
+
+    // === [이벤트 핸들러] ===
+    const filteredAuthors = authors.filter(author => author.name.includes(searchTerm));
+
+    const handleBookClick = (book: any) => {
+        if (book.is_in_square) {
+            // DB에 있는 책은 상세 페이지 이동 (현재는 alert로 대체)
+            alert(`내부 도서 상세 페이지로 이동: ${book.title}`);
+        } else {
+            setModalData({ isOpen: true, bookTitle: book.title, isbn: book.isbn });
+        }
+    };
+
+    return (
+        <div className="flex w-full h-full overflow-hidden bg-[#F5F5F7]">
+            
+            {/* ========================================== */}
+            {/* 좌측 패널 (Master): 작가 목록 (너비 320px 고정) */}
+            {/* ========================================== */}
+            <div className="w-[320px] flex-none bg-white border-r border-gray-200 flex flex-col h-full z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+                {/* 좌측 패널 헤더 */}
+                <div className="p-5 border-b border-gray-100 flex-none">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Users size={20} className="text-[#0066cc]" />
+                        <h2 className="text-[18px] font-black text-[#1d1d1f]">나의 작가들</h2>
+                    </div>
+                    <div className="relative w-full">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                        <Input 
+                            placeholder="작가 이름 검색" 
+                            className="pl-9 h-9 text-[13px] bg-gray-50 border-transparent focus-visible:bg-white focus-visible:ring-[#0066cc]"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                {/* 좌측 패널 리스트 영역 (독립 스크롤) */}
+                <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5 scrollbar-hide">
+                    {filteredAuthors.map((author) => (
+                        <button
+                            key={author.id}
+                            onClick={() => setSelectedAuthor(author.name)}
+                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left group
+                                ${selectedAuthor === author.name 
+                                    ? 'bg-[#0066cc] text-white shadow-md' 
+                                    : 'hover:bg-gray-50 text-[#1d1d1f]'}`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors
+                                    ${selectedAuthor === author.name ? 'bg-white/20' : 'bg-[#f0f5fa] group-hover:bg-[#e6f0fa]'}`}>
+                                    <Users size={18} className={selectedAuthor === author.name ? 'text-white' : 'text-[#0066cc]'} />
+                                </div>
+                                <span className={`text-[15px] font-bold ${selectedAuthor === author.name ? 'text-white' : 'text-[#1d1d1f]'}`}>
+                                    {author.name}
+                                </span>
+                            </div>
+                            <Badge variant="secondary" className={`text-[11px] font-bold px-2 py-0.5 
+                                ${selectedAuthor === author.name ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                                {author.read_count}권
+                            </Badge>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* ========================================== */}
+            {/* 우측 패널 (Detail): 타임라인 (유동적 너비) */}
+            {/* ========================================== */}
+            <div className="flex-1 flex flex-col h-full overflow-y-auto relative">
+                {!selectedAuthor ? (
+                    // 1. 작가 미선택 시 빈 화면
+                    <div className="flex-1 flex flex-col items-center justify-center text-center">
+                        <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                            <Users size={32} className="text-gray-300" />
+                        </div>
+                        <h3 className="text-[18px] font-black text-[#1d1d1f] mb-2">작가를 선택해주세요</h3>
+                        <p className="text-[14px] text-gray-400 font-medium">왼쪽 목록에서 작가를 선택하면 발자취를 볼 수 있습니다.</p>
+                    </div>
+                ) : (
+                    // 2. 작가 선택 시 타임라인 화면
+                    <div className="w-full flex flex-col pb-20">
+                        {/* 우측 상단 네비게이션 및 헤더 */}
+                        <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0">
+                            <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400 mb-4">
+                                <Link href="/" className="hover:text-[#0066cc]"><Home size={15} /></Link>
+                                <ChevronRight size={14} className="opacity-50" />
+                                <span>나의 작가</span>
+                                <ChevronRight size={14} className="opacity-50" />
+                                <span className="text-[#1d1d1f]">{selectedAuthor}</span>
+                            </div>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <h1 className="text-[26px] font-black text-[#1d1d1f]">
+                                        {selectedAuthor} 작가의 발자취
+                                    </h1>
+                                    {!isLoadingTimeline && timelineData.length > 0 && (
+                                        <Badge variant="secondary" className="bg-white border border-gray-200 text-[#0066cc] text-[13px] font-bold px-2.5 py-1">
+                                            총 {timelineData.reduce((acc, year) => acc + year.books.length, 0)}권 출간
+                                        </Badge>
+                                    )}
+                                </div>
+
+                                {/* ▼▼▼ [NEW] 직관적인 필터 토글 탭 ▼▼▼ */}
+                                {!isLoadingTimeline && timelineData.length > 0 && (
+                                    <div className="flex bg-gray-200/50 p-1 rounded-xl">
+                                        <button 
+                                            onClick={() => setFilterMode('ALL')}
+                                            className={`px-4 py-1.5 text-[13px] font-bold rounded-lg transition-all ${filterMode === 'ALL' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-gray-500 hover:text-[#1d1d1f]'}`}
+                                        >
+                                            전체 도서
+                                        </button>
+                                        <button 
+                                            onClick={() => setFilterMode('MY_BOOKS')}
+                                            className={`px-4 py-1.5 text-[13px] font-bold rounded-lg transition-all ${filterMode === 'MY_BOOKS' ? 'bg-[#0066cc] text-white shadow-sm' : 'text-gray-500 hover:text-[#1d1d1f]'}`}
+                                        >
+                                            내 서재만
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="p-[var(--spacing-1cm,32px)]">
+                            {isLoadingTimeline ? (
+                                // ... (로딩 UI 동일 유지) ...
+                                <div className="flex flex-col items-center justify-center py-24 gap-5">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2.5 h-2.5 bg-[#0066cc] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                    </div>
+                                    <p className="text-[13px] font-bold text-gray-400 animate-pulse">발자취를 따라가고 있습니다...</p>
+                                </div>
+                            ) : (
+                                <div className="w-full max-w-4xl"> 
+                                    <div className="relative border-l-2 border-[#0066cc]/20 ml-3 md:ml-6 space-y-12">
+                                        {/* ▼▼▼ [NEW] 원본 데이터를 훼손하지 않고 렌더링 직전에 동적 필터링 ▼▼▼ */}
+                                        {timelineData
+                                            .map(yearData => {
+                                                if (filterMode === 'ALL') return yearData;
+                                                // 내 서재 모드일 경우, is_in_square가 true인 도서만 걸러냄
+                                                return {
+                                                    ...yearData,
+                                                    books: yearData.books.filter((book: any) => book.is_in_square)
+                                                };
+                                            })
+                                            // 필터링 후 해당 연도에 표시할 책이 0권이라면 그 연도 자체를 통째로 숨김
+                                            .filter(yearData => yearData.books.length > 0)
+                                            .map((yearData, index) => {
+                                                const isCollapsed = collapsedYears.has(yearData.year);
+                                                
+                                                return (
+                                                    <div key={index} className="relative pl-8 md:pl-12">
+                                                        {/* ▼▼▼ [NEW] 타임라인 동그라미(O) 자체를 클릭 가능한 토글 버튼으로 개조 ▼▼▼ */}
+                                                        <div 
+                                                            onClick={() => toggleYear(yearData.year)}
+                                                            className={`absolute flex items-center justify-center w-7 h-7 rounded-full -left-[15px] top-0 shadow-sm z-10 cursor-pointer transition-all duration-200 hover:scale-110
+                                                                ${isCollapsed 
+                                                                    ? 'bg-white border-[3px] border-gray-300 text-gray-400 hover:border-[#0066cc] hover:text-[#0066cc]' 
+                                                                    : 'bg-[#0066cc] border-[3px] border-[#0066cc] text-white shadow-md'}`}
+                                                        >
+                                                            {isCollapsed ? <Plus size={14} strokeWidth={3} /> : <Minus size={14} strokeWidth={3} />}
+                                                        </div>
+                                                        
+                                                        {/* ▼▼▼ [수정] 연도 텍스트 영역 (여기에 있던 기존 클릭 이벤트와 화살표는 삭제하여 깔끔하게 유지) ▼▼▼ */}
+                                                        <div className="flex items-center gap-3 mb-6 -mt-1 w-fit select-none">
+                                                            <h2 className="text-[28px] font-black text-[#1d1d1f] leading-none tracking-tight">
+                                                                {yearData.year}
+                                                            </h2>
+                                                            <Badge variant="outline" className="text-[12px] font-bold text-gray-400 border-gray-200 px-2 py-0.5">
+                                                                {yearData.books.length}권
+                                                            </Badge>
+                                                        </div>
+                                                        <div className={`flex flex-col gap-4 transition-all duration-300 origin-top ${isCollapsed ? 'hidden' : 'block'}`}>
+                                                            {yearData.books.map((book: any) => (
+                                                                <div key={book.id} onClick={() => handleBookClick(book)} className={`group p-5 rounded-xl shadow-sm border transition-all cursor-pointer flex items-center justify-between hover:shadow-md ${book.is_in_square ? 'bg-[#e6f0fa]/50 border-[#0066cc]/10 hover:border-[#0066cc]/30' : 'bg-white border-gray-100 hover:border-[#0066cc]/30'}`}>
+                                                                    <div className="flex flex-col gap-1.5">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <h3 className="text-[16px] font-bold text-[#1d1d1f] group-hover:text-[#0066cc] transition-colors line-clamp-1">{book.title}</h3>
+                                                                            {!book.is_in_square && <Badge variant="outline" className="bg-gray-50 text-gray-400 border-gray-200 text-[10px] px-1.5 py-0">미등록</Badge>}
+                                                                        </div>
+                                                                        <p className="text-[13px] font-medium text-gray-400 flex items-center gap-1.5"><BookOpen size={12} /> 출간일: {book.publish_date}</p>
+                                                                    </div>
+                                                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-[#e6f0fa] transition-colors shrink-0">
+                                                                        {book.is_in_square ? <ChevronRight size={16} className="text-gray-400 group-hover:text-[#0066cc]" /> : <ExternalLink size={14} className="text-gray-400 group-hover:text-[#0066cc]" />}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* 외부 서점 모달 영역 (우측 하단에서 팝업) */}
+            {modalData.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1d1d1f]/40 backdrop-blur-sm transition-opacity">
+                    <div className="bg-white w-[400px] rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        {/* 모달 내용은 기존과 완벽 동일! */}
+                        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-[18px] font-black text-[#1d1d1f] mb-1">외부 서점에서 보기</h3>
+                                <p className="text-[13px] font-bold text-gray-400 line-clamp-1">"{modalData.bookTitle}"</p>
+                            </div>
+                            <button onClick={() => setModalData(prev => ({ ...prev, isOpen: false }))} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+                                <X size={20} className="text-gray-500" />
+                            </button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3 bg-gray-50/50">
+                            {/* 외부 링크들... */}
+                            <a href={`https://www.aladin.co.kr/search/wsearchresult.aspx?SearchTarget=All&SearchWord=${modalData.isbn}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-[#0066cc] hover:shadow-sm transition-all group">
+                                <span className="text-[15px] font-bold text-[#1d1d1f] group-hover:text-[#0066cc]">알라딘에서 보기</span>
+                                <ExternalLink size={16} className="text-gray-400 group-hover:text-[#0066cc]" />
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+
+============================================================
+FILE PATH: frontend/src/app/(main)/my-authors/writer/page.tsx
+============================================================
+// 파일 경로: src/app/(main)/my-authors/writer/page.tsx
+// 역할 및 기능: BoooknTalk의 '나의 작가 > 작가' 라우트를 처리하고 화면 분할된 클라이언트 컴포넌트를 렌더링합니다.
+
+import React from 'react';
+import AuthorWriterClient from './AuthorWriterClient';
+
+// 함수 기능: 작가 페이지 진입 시 좌우 분할된 AuthorWriterClient UI를 화면에 그립니다.
+export default function AuthorWriterPage() {
+    return <AuthorWriterClient />;
 }
 
 
@@ -12275,6 +13137,9 @@ export const formatDetailAuthor = (authorStr: string | null | undefined): string
 ============================================================
 FILE PATH: frontend/src/components/AddBookModal.tsx
 ============================================================
+// 파일 경로: frontend/src/components/AddBookModal.tsx
+// 역할 및 기능: 외부 API에서 도서를 검색하고, 검색된 도서를 BoooknTalk 마스터 API에 전송하여 도서 등록, 서재 저장, 통계 업데이트를 한 번에 처리하는 모달 컴포넌트입니다.
+
 'use client';
 
 import React, { useState } from 'react';
@@ -12287,15 +13152,20 @@ interface AddBookModalProps {
   userEmail: string;
 }
 
+/**
+ * 함수 기능: 도서 검색 및 등록을 위한 전체 모달 UI를 렌더링하고 상태(State)를 관리합니다.
+ */
 export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModalProps) {
   const [isbnInput, setIsbnInput] = useState('');
-  const [addonInput, setAddonInput] = useState(''); // 5자리 부가기호
+  const [addonInput, setAddonInput] = useState(''); 
   
   const [isLoading, setIsLoading] = useState(false);
   const [searchResult, setSearchResult] = useState<any>(null);
   const [error, setError] = useState('');
 
-  // 1. 책 검색
+  /**
+   * 함수 기능: 사용자가 입력한 ISBN 값의 유효성을 검사하고, 백엔드 API를 호출하여 도서 메타데이터를 검색 및 상태에 저장합니다.
+   */
   const handleSearch = async () => {
     const cleanIsbn = isbnInput.trim().replace(/-/g, '');
     
@@ -12314,7 +13184,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
     setSearchResult(null);
 
     try {
-      // 검색은 메인 ISBN으로만 진행
       const res = await fetch(`http://localhost:8000/api/books/search/${cleanIsbn}`);
       
       if (!res.ok) {
@@ -12330,7 +13199,9 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
     }
   };
 
-  // 2. 책 등록
+  /**
+   * 함수 기능: 단일 마스터 API(/api/books)를 호출하여 도서 메타데이터 저장, 서재 등록, 인사이트 통계 업데이트를 백엔드에 일괄 위임합니다.
+   */
   const handleRegister = async () => {
     if (!searchResult || !userEmail) {
       alert("로그인 정보가 없거나 도서 정보가 없습니다.");
@@ -12340,6 +13211,7 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
     try {
       setIsLoading(true);
       
+      // 시스템에 도서 등록 및 서재 추가를 한 번에 요청하는 페이로드 구성
       const payload = {
         user_email: userEmail,
         title: searchResult.title,
@@ -12354,7 +13226,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
         pageCount: searchResult.pageCount,
         categoryName: searchResult.categoryName,
         detailed_authors: searchResult.detailed_authors,
-        // [서지정보]
         originalTitle: searchResult.originalTitle,
         binding_type: searchResult.binding_type,
         kdc_code: searchResult.kdc_code,
@@ -12363,8 +13234,7 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
         price: searchResult.price
       };
 
-      console.log("🚀 백엔드로 전송하는 데이터:", payload);
-
+      // 단일 마스터 노드로 데이터 전송
       const res = await fetch("http://localhost:8000/api/books", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -12372,9 +13242,7 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
       });
 
       if (!res.ok) {
-        // 만약 여기서도 에러가 나면 응답이 JSON인지 확인하기 위해 text로 먼저 받습니다.
         const errorText = await res.text();
-        console.error("❌ 서버 에러 응답 원본:", errorText);
         try {
             const errorData = JSON.parse(errorText);
             throw new Error(errorData.detail || '도서 등록에 실패했습니다.');
@@ -12383,9 +13251,14 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
         }
       }
 
-      alert('도서가 성공적으로 등록되었습니다!');
+      // 불필요한 이중 API 호출 로직 제거 완료. 백엔드에서 서재 등록과 트리거 발동을 모두 처리합니다.
+
+      alert('도서가 성공적으로 내 서재에 담겼습니다!');
       onClose();
-      //window.location.reload(); 
+      
+      // 인사이트 화면의 최신화된 카운트를 즉시 반영하기 위해 리로드 실행
+      window.location.reload(); 
+      
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -12393,6 +13266,9 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
     }
   };
 
+  /**
+   * 함수 기능: 부가기호 입력 필드의 값을 숫자 5자리로만 제한하여 상태에 반영합니다.
+   */
   const handleAddonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/[^0-9]/g, '');
     if (val.length <= 5) setAddonInput(val);
@@ -12419,7 +13295,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
           <div className="flex flex-col gap-4 mb-6">
             <label className="text-xs font-bold text-gray-500 ml-1">ISBN 정보 입력</label>
             <div className="flex gap-2">
-              {/* ISBN 입력 */}
               <div className="relative flex-grow">
                 <input
                   type="text"
@@ -12432,7 +13307,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
                 <Search className="absolute left-3.5 top-3.5 text-gray-400" size={20} />
               </div>
 
-              {/* 5자리 부가기호 입력 */}
               <div className="w-28 flex-shrink-0">
                 <input
                   type="text"
@@ -12443,7 +13317,6 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
                 />
               </div>
 
-              {/* 검색 버튼 */}
               <button
                 onClick={handleSearch}
                 disabled={isLoading}
@@ -12453,16 +13326,13 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
               </button>
             </div>
 
-            {/* [복구됨] 2. ISBN/세트 관련 도움말 (파란색 박스) */}
             <div className="flex flex-col gap-3 bg-blue-50 p-4 rounded-xl text-blue-700 border border-blue-100">
-              {/* 첫 번째 줄 */}
               <div className="flex items-start gap-2.5">
                 <Info size={18} className="flex-shrink-0 mt-0.5" />
                 <p className="text-sm leading-snug">
                   ISBN-13 또는 ISBN-10을 입력해주세요.
                 </p>
               </div>
-              {/* 두 번째 줄 */}
               <div className="flex items-start gap-2.5">
                 <Info size={18} className="flex-shrink-0 mt-0.5" />
                 <p className="text-sm leading-snug">
@@ -12479,13 +13349,11 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
           )}
 
           {searchResult ? (
-            /* 검색 결과가 있을 때 */
             <div className="border border-gray-200 rounded-2xl p-4 flex gap-5 bg-white shadow-sm hover:shadow-md transition-shadow">
               <div className="relative w-28 h-40 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-100 shadow-inner">
-                {/* searchResult.cover를 searchResult.cover_image로 변경 (또는 백엔드 응답 필드 확인) */}
                 {(searchResult.cover || searchResult.cover_image) ? (
                   <Image
-                    src={searchResult.cover || searchResult.cover_image} // 둘 다 대응하도록 수정
+                    src={searchResult.cover || searchResult.cover_image}
                     alt={searchResult.title}
                     fill
                     className="object-cover"
@@ -12517,11 +13385,9 @@ export default function AddBookModal({ isOpen, onClose, userEmail }: AddBookModa
               </div>
             </div>
           ) : (
-            /* 검색 결과가 없을 때 (초기 상태) - 가이드 이미지 표시 */
             !isLoading && !error && (
               <div className="flex flex-col items-center justify-center pt-2 pb-6">
                 <div className="relative w-full aspect-[2/1] max-w-[400px]">
-                  {/* [수정 경로 적용] public 바로 아래에 파일이 있는 경우 */}
                   <Image 
                     src="/guide_isbn.png" 
                     alt="ISBN 가이드"
@@ -12737,6 +13603,88 @@ export { Tabs, TabsList, TabsTrigger, TabsContent }
 
 
 ============================================================
+FILE PATH: frontend/src/components/ui/card.tsx
+============================================================
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-xl border bg-card text-card-foreground shadow",
+      className
+    )}
+    {...props}
+  />
+))
+Card.displayName = "Card"
+
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("font-semibold leading-none tracking-tight", className)}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
+
+const CardDescription = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+CardDescription.displayName = "CardDescription"
+
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
+CardContent.displayName = "CardContent"
+
+const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+))
+CardFooter.displayName = "CardFooter"
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+
+
+
+============================================================
 FILE PATH: frontend/src/components/ui/progress.tsx
 ============================================================
 "use client"
@@ -12775,6 +13723,381 @@ const Progress = React.forwardRef<
 Progress.displayName = ProgressPrimitive.Root.displayName
 
 export { Progress }
+
+
+============================================================
+FILE PATH: frontend/src/components/ui/chart.tsx
+============================================================
+"use client"
+
+import * as React from "react"
+import * as RechartsPrimitive from "recharts"
+
+import { cn } from "@/lib/utils"
+
+// Format: { THEME_NAME: CSS_SELECTOR }
+const THEMES = { light: "", dark: ".dark" } as const
+
+export type ChartConfig = {
+  [k in string]: {
+    label?: React.ReactNode
+    icon?: React.ComponentType
+  } & (
+    | { color?: string; theme?: never }
+    | { color?: never; theme: Record<keyof typeof THEMES, string> }
+  )
+}
+
+type ChartContextProps = {
+  config: ChartConfig
+}
+
+const ChartContext = React.createContext<ChartContextProps | null>(null)
+
+function useChart() {
+  const context = React.useContext(ChartContext)
+
+  if (!context) {
+    throw new Error("useChart must be used within a <ChartContainer />")
+  }
+
+  return context
+}
+
+const ChartContainer = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<"div"> & {
+    config: ChartConfig
+    children: React.ComponentProps<
+      typeof RechartsPrimitive.ResponsiveContainer
+    >["children"]
+  }
+>(({ id, className, children, config, ...props }, ref) => {
+  const uniqueId = React.useId()
+  const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+
+  return (
+    <ChartContext.Provider value={{ config }}>
+      <div
+        data-chart={chartId}
+        ref={ref}
+        className={cn(
+          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
+          className
+        )}
+        {...props}
+      >
+        <ChartStyle id={chartId} config={config} />
+        <RechartsPrimitive.ResponsiveContainer>
+          {children}
+        </RechartsPrimitive.ResponsiveContainer>
+      </div>
+    </ChartContext.Provider>
+  )
+})
+ChartContainer.displayName = "Chart"
+
+const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+  const colorConfig = Object.entries(config).filter(
+    ([, config]) => config.theme || config.color
+  )
+
+  if (!colorConfig.length) {
+    return null
+  }
+
+  return (
+    <style
+      dangerouslySetInnerHTML={{
+        __html: Object.entries(THEMES)
+          .map(
+            ([theme, prefix]) => `
+${prefix} [data-chart=${id}] {
+${colorConfig
+  .map(([key, itemConfig]) => {
+    const color =
+      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
+      itemConfig.color
+    return color ? `  --color-${key}: ${color};` : null
+  })
+  .join("\n")}
+}
+`
+          )
+          .join("\n"),
+      }}
+    />
+  )
+}
+
+const ChartTooltip = RechartsPrimitive.Tooltip
+
+const ChartTooltipContent = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+    React.ComponentProps<"div"> & {
+      hideLabel?: boolean
+      hideIndicator?: boolean
+      indicator?: "line" | "dot" | "dashed"
+      nameKey?: string
+      labelKey?: string
+    }
+>(
+  (
+    {
+      active,
+      payload,
+      className,
+      indicator = "dot",
+      hideLabel = false,
+      hideIndicator = false,
+      label,
+      labelFormatter,
+      labelClassName,
+      formatter,
+      color,
+      nameKey,
+      labelKey,
+    },
+    ref
+  ) => {
+    const { config } = useChart()
+
+    const tooltipLabel = React.useMemo(() => {
+      if (hideLabel || !payload?.length) {
+        return null
+      }
+
+      const [item] = payload
+      const key = `${labelKey || item?.dataKey || item?.name || "value"}`
+      const itemConfig = getPayloadConfigFromPayload(config, item, key)
+      const value =
+        !labelKey && typeof label === "string"
+          ? config[label as keyof typeof config]?.label || label
+          : itemConfig?.label
+
+      if (labelFormatter) {
+        return (
+          <div className={cn("font-medium", labelClassName)}>
+            {labelFormatter(value, payload)}
+          </div>
+        )
+      }
+
+      if (!value) {
+        return null
+      }
+
+      return <div className={cn("font-medium", labelClassName)}>{value}</div>
+    }, [
+      label,
+      labelFormatter,
+      payload,
+      hideLabel,
+      labelClassName,
+      config,
+      labelKey,
+    ])
+
+    if (!active || !payload?.length) {
+      return null
+    }
+
+    const nestLabel = payload.length === 1 && indicator !== "dot"
+
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
+          className
+        )}
+      >
+        {!nestLabel ? tooltipLabel : null}
+        <div className="grid gap-1.5">
+          {payload
+            .filter((item) => item.type !== "none")
+            .map((item, index) => {
+              const key = `${nameKey || item.name || item.dataKey || "value"}`
+              const itemConfig = getPayloadConfigFromPayload(config, item, key)
+              const indicatorColor = color || item.payload.fill || item.color
+
+              return (
+                <div
+                  key={item.dataKey}
+                  className={cn(
+                    "flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground",
+                    indicator === "dot" && "items-center"
+                  )}
+                >
+                  {formatter && item?.value !== undefined && item.name ? (
+                    formatter(item.value, item.name, item, index, item.payload)
+                  ) : (
+                    <>
+                      {itemConfig?.icon ? (
+                        <itemConfig.icon />
+                      ) : (
+                        !hideIndicator && (
+                          <div
+                            className={cn(
+                              "shrink-0 rounded-[2px] border-[--color-border] bg-[--color-bg]",
+                              {
+                                "h-2.5 w-2.5": indicator === "dot",
+                                "w-1": indicator === "line",
+                                "w-0 border-[1.5px] border-dashed bg-transparent":
+                                  indicator === "dashed",
+                                "my-0.5": nestLabel && indicator === "dashed",
+                              }
+                            )}
+                            style={
+                              {
+                                "--color-bg": indicatorColor,
+                                "--color-border": indicatorColor,
+                              } as React.CSSProperties
+                            }
+                          />
+                        )
+                      )}
+                      <div
+                        className={cn(
+                          "flex flex-1 justify-between leading-none",
+                          nestLabel ? "items-end" : "items-center"
+                        )}
+                      >
+                        <div className="grid gap-1.5">
+                          {nestLabel ? tooltipLabel : null}
+                          <span className="text-muted-foreground">
+                            {itemConfig?.label || item.name}
+                          </span>
+                        </div>
+                        {item.value && (
+                          <span className="font-mono font-medium tabular-nums text-foreground">
+                            {item.value.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+        </div>
+      </div>
+    )
+  }
+)
+ChartTooltipContent.displayName = "ChartTooltip"
+
+const ChartLegend = RechartsPrimitive.Legend
+
+const ChartLegendContent = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<"div"> &
+    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
+      hideIcon?: boolean
+      nameKey?: string
+    }
+>(
+  (
+    { className, hideIcon = false, payload, verticalAlign = "bottom", nameKey },
+    ref
+  ) => {
+    const { config } = useChart()
+
+    if (!payload?.length) {
+      return null
+    }
+
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          "flex items-center justify-center gap-4",
+          verticalAlign === "top" ? "pb-3" : "pt-3",
+          className
+        )}
+      >
+        {payload
+          .filter((item) => item.type !== "none")
+          .map((item) => {
+            const key = `${nameKey || item.dataKey || "value"}`
+            const itemConfig = getPayloadConfigFromPayload(config, item, key)
+
+            return (
+              <div
+                key={item.value}
+                className={cn(
+                  "flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground"
+                )}
+              >
+                {itemConfig?.icon && !hideIcon ? (
+                  <itemConfig.icon />
+                ) : (
+                  <div
+                    className="h-2 w-2 shrink-0 rounded-[2px]"
+                    style={{
+                      backgroundColor: item.color,
+                    }}
+                  />
+                )}
+                {itemConfig?.label}
+              </div>
+            )
+          })}
+      </div>
+    )
+  }
+)
+ChartLegendContent.displayName = "ChartLegend"
+
+// Helper to extract item config from a payload.
+function getPayloadConfigFromPayload(
+  config: ChartConfig,
+  payload: unknown,
+  key: string
+) {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined
+  }
+
+  const payloadPayload =
+    "payload" in payload &&
+    typeof payload.payload === "object" &&
+    payload.payload !== null
+      ? payload.payload
+      : undefined
+
+  let configLabelKey: string = key
+
+  if (
+    key in payload &&
+    typeof payload[key as keyof typeof payload] === "string"
+  ) {
+    configLabelKey = payload[key as keyof typeof payload] as string
+  } else if (
+    payloadPayload &&
+    key in payloadPayload &&
+    typeof payloadPayload[key as keyof typeof payloadPayload] === "string"
+  ) {
+    configLabelKey = payloadPayload[
+      key as keyof typeof payloadPayload
+    ] as string
+  }
+
+  return configLabelKey in config
+    ? config[configLabelKey]
+    : config[key as keyof typeof config]
+}
+
+export {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  ChartStyle,
+}
+
 
 
 ============================================================
@@ -15182,12 +16505,13 @@ export default function RecordForm() {
 ============================================================
 FILE PATH: frontend/src/components/admin/AdminPanel.tsx
 ============================================================
+// 파일 경로: src/components/admin/AdminPanel.tsx
 'use client';
 
 import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { ShieldAlert, RefreshCw, Trash2, GitMerge, Loader2 } from 'lucide-react';
+import { ShieldAlert, RefreshCw, Trash2, GitMerge, Wand2, Sparkles } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -15201,12 +16525,43 @@ export default function AdminPanel() {
     const [targetId, setTargetId] = useState('');
     const [sourceIds, setSourceIds] = useState('');
 
-    // ▼▼▼ [핵심 방어벽] 오직 'boookntalk@gmail.com' 계정만 이 화면을 볼 수 있습니다! ▼▼▼
+    // [핵심 방어벽] 오직 관리자 계정만 이 화면을 볼 수 있습니다!
     if (session?.user?.email !== 'boookntalk@gmail.com') {
-        return null; // 일반 유저에게는 흔적조차 보이지 않습니다.
+        return null;
     }
 
-    // 1. 작가 데이터 정제 (다리미 엔진 가동)
+    // ==========================================
+    // ▼▼▼ [NEW] 공통 도트 로딩 애니메이션 컴포넌트 ▼▼▼
+    // ==========================================
+    const DotLoader = () => (
+        <div className="flex items-center justify-center gap-1.5 w-full">
+            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        </div>
+    );
+
+    // ==========================================
+    // [기존 1] 장르 데이터 일괄 세탁
+    // ==========================================
+    const handleSyncGenres = async () => {
+        if (!confirm("과거 도서의 장르 데이터를 북앤톡 8대 표준 장르로 일괄 세탁하시겠습니까?")) return;
+        setIsLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/admin/sync-genres`);
+            const data = await res.json();
+            if (res.ok) toast.success(data.message);
+            else throw new Error(data.detail);
+        } catch (error: any) {
+            toast.error(error.message || "장르 세탁 작업 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ==========================================
+    // [기존 2] 작가 데이터 전면 재정제
+    // ==========================================
     const handleSyncAuthors = async () => {
         if (!confirm("모든 작가 데이터를 재정제하시겠습니까? (시간이 다소 소요될 수 있습니다)")) return;
         setIsLoading(true);
@@ -15222,7 +16577,27 @@ export default function AdminPanel() {
         }
     };
 
-    // 2. 고아 데이터 대청소
+    // ==========================================
+    // ▼▼▼ [NEW 3] 꼬리표 클렌징 및 파편화 병합 (우리가 방금 만든 기능!) ▼▼▼
+    // ==========================================
+    const handleDeepCleanse = async () => {
+        if (!confirm("오염된 꼬리표를 제거하고 파편화된 작가를 병합하시겠습니까?")) return;
+        setIsLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/admin/cleanse-authors`, { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) toast.success(`수술 완료! ${data.message}`);
+            else throw new Error(data.message);
+        } catch (error: any) {
+            toast.error(error.message || "딥 클렌징 작업 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ==========================================
+    // [기존 4] 고아 데이터 대청소
+    // ==========================================
     const handleCleanup = async () => {
         if (!confirm("연결되지 않은 찌꺼기 작가 데이터를 영구 삭제하시겠습니까?")) return;
         setIsLoading(true);
@@ -15238,13 +16613,15 @@ export default function AdminPanel() {
         }
     };
 
-    // 3. 수동 강제 병합 (Merge)
+    // ==========================================
+    // [기존 5] 수동 강제 병합
+    // ==========================================
     const handleMerge = async () => {
         if (!targetId || !sourceIds) {
             toast.error("진짜 작가 ID와 가짜 작가 ID를 모두 입력해주세요.");
             return;
         }
-        if (!confirm(`${sourceIds}번 작가들을 ${targetId}번 작가로 강제 흡수하시겠습니까? (이 작업은 되돌릴 수 없습니다)`)) return;
+        if (!confirm(`${sourceIds}번 작가들을 ${targetId}번 작가로 강제 흡수하시겠습니까?`)) return;
         
         setIsLoading(true);
         try {
@@ -15254,9 +16631,7 @@ export default function AdminPanel() {
                 toast.success(data.message);
                 setTargetId('');
                 setSourceIds('');
-            } else {
-                throw new Error(data.detail);
-            }
+            } else throw new Error(data.detail);
         } catch (error: any) {
             toast.error(error.message || "병합 작업 중 오류가 발생했습니다.");
         } finally {
@@ -15275,23 +16650,50 @@ export default function AdminPanel() {
                 {/* 왼쪽: 일괄 처리 버튼들 */}
                 <div className="flex flex-col gap-4">
                     <h3 className="text-sm font-bold text-gray-700">데이터베이스 일괄 정비</h3>
+                    
+                    {/* 장르 세탁 */}
+                    <Button 
+                        onClick={handleSyncGenres} 
+                        disabled={isLoading}
+                        variant="outline" 
+                        className={`border-purple-200 text-purple-700 hover:bg-purple-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}
+                    >
+                        {isLoading ? <DotLoader /> : <><Wand2 className="mr-2 h-4 w-4" /> 장르 데이터 일괄 세탁 (Sync Genres)</>}
+                    </Button>
+
+                    {/* 기존 정제 */}
                     <Button 
                         onClick={handleSyncAuthors} 
                         disabled={isLoading}
                         variant="outline" 
-                        className="justify-start border-blue-200 text-blue-700 hover:bg-blue-50"
+                        className={`border-blue-200 text-blue-700 hover:bg-blue-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}
                     >
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                        1단계: 작가 데이터 전면 재정제 (Sync)
+                        {isLoading ? <DotLoader /> : <><RefreshCw className="mr-2 h-4 w-4" /> 작가 데이터 전면 재정제 (Sync Authors)</>}
                     </Button>
+
+                    {/* ▼▼▼ [수정] 인라인 스타일로 justify-start 충돌 완벽 무력화 ▼▼▼ */}
+                    <Button 
+                        onClick={handleDeepCleanse} 
+                        disabled={isLoading}
+                        variant="outline" 
+                        style={{ justifyContent: isLoading ? 'center' : 'flex-start' }}
+                        className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all w-full"
+                    >
+                        {isLoading ? (
+                            <DotLoader />
+                        ) : (
+                            <><Sparkles className="mr-2 h-4 w-4" /> 오염 데이터 딥 클렌징 (Cleanse & Merge)</>
+                        )}
+                    </Button>
+
+                    {/* 고아 청소 */}
                     <Button 
                         onClick={handleCleanup} 
                         disabled={isLoading}
                         variant="outline" 
-                        className="justify-start border-red-200 text-red-700 hover:bg-red-50"
+                        className={`border-red-200 text-red-700 hover:bg-red-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}
                     >
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                        2단계: 찌꺼기 데이터 영구 삭제 (Cleanup)
+                        {isLoading ? <DotLoader /> : <><Trash2 className="mr-2 h-4 w-4" /> 찌꺼기 데이터 영구 삭제 (Cleanup)</>}
                     </Button>
                 </div>
 
@@ -15310,6 +16712,7 @@ export default function AdminPanel() {
                                 value={targetId} 
                                 onChange={(e) => setTargetId(e.target.value)}
                                 className="h-9 text-sm"
+                                disabled={isLoading}
                             />
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -15319,15 +16722,15 @@ export default function AdminPanel() {
                                 value={sourceIds} 
                                 onChange={(e) => setSourceIds(e.target.value)}
                                 className="h-9 text-sm"
+                                disabled={isLoading}
                             />
                         </div>
                         <Button 
                             onClick={handleMerge} 
                             disabled={isLoading}
-                            className="w-full mt-2 bg-[#1d1d1f] hover:bg-[#333] text-white"
+                            className={`w-full mt-2 bg-[#1d1d1f] hover:bg-[#333] text-white transition-all ${isLoading ? 'justify-center' : 'justify-center'}`}
                         >
-                            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            강제 흡수 병합 실행
+                            {isLoading ? <DotLoader /> : "강제 흡수 병합 실행"}
                         </Button>
                     </div>
                 </div>
@@ -17191,6 +18594,9 @@ export default function LongReviewSection() {
 ============================================================
 FILE PATH: frontend/src/components/library/LibrarySidebar.tsx
 ============================================================
+// 파일 경로: src/components/layout/LibrarySidebar.tsx
+// 역할 및 기능: BoooknTalk 서비스의 좌측 네비게이션(LNB) 컴포넌트로, 사용자가 서재, 기록, 작가(및 옮긴이), 인사이트 등의 주요 기능으로 이동할 수 있도록 라우팅 메뉴를 제공합니다.
+
 'use client';
 
 import React from 'react';
@@ -17207,7 +18613,10 @@ import {
     Tags,
     Bookmark,
     PenTool,
-    PieChart
+    PieChart,
+    Users, 
+    Clock,
+    Languages // ▼ '옮긴이 타임라인' 하위 메뉴용 아이콘 추가
 } from 'lucide-react';
 import {
     Sidebar,
@@ -17239,6 +18648,15 @@ const navItems = [
         ]
     },
     {
+        title: "나의 작가", icon: Users,
+        subItems: [
+            // ▼ 우리가 합의한 URL(writer)과 아이콘 적용!
+            { title: '작가', href: '/my-authors/writer', icon: Clock },
+            // ▼ 옮긴이도 my-authors 하위의 translator로 통일하고 오타 수정!
+            { title: '옮긴이(번역)', href: '/my-authors/translator', icon: Languages },
+        ]
+    },
+    {
         title: "인사이트", icon: BarChart2,
         subItems: [
             { title: '서재 인사이트', href: '/my-records/insights', icon: PieChart },
@@ -17247,10 +18665,10 @@ const navItems = [
     { title: "사색 라운지", href: "/community", icon: Globe }
 ];
 
+// 함수 기능: 현재 URL 경로(pathname)와 메뉴의 href를 비교하여 해당 메뉴가 활성화 상태인지 판별합니다.
 export function LibrarySidebar() {
     const pathname = usePathname();
 
-    // ▼▼▼ [버그 해결] 라우팅 활성화 감지 로직 고도화 ▼▼▼
     const isActiveRoute = (href: string) => {
         if (!href) return false;
         if (href === '/' && pathname !== '/') return false;
@@ -17262,7 +18680,7 @@ export function LibrarySidebar() {
             }
         }
         
-        // 정확히 일치하거나, 해당 경로의 하위 상세 페이지(예: /library/123)일 때만 활성화
+        // 정확히 일치하거나, 해당 경로의 하위 상세 페이지일 때만 활성화
         return pathname === href || pathname.startsWith(`${href}/`);
     };
 
@@ -18586,32 +20004,51 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 
-# [1] 참여자(작가) 정보 테이블 (NEW)
+# ===================================================================
+# [1] 참여자(작가/옮긴이) 정보 마스터 테이블 (수정 완료)
+# ===================================================================
 class Contributor(Base):
     __tablename__ = "contributors"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
-    aladin_author_id = Column(Integer, unique=True, nullable=True) # [추가] 알라딘 작가 고유 ID
+    
+    # [수정] 알라딘에 종속되지 않는 범용 외부 식별자 구조
+    external_source = Column(String(50), nullable=True) # 예: 'NAVER', 'ALADIN', 'NLK'(국립중앙도서관)
+    external_id = Column(String(100), nullable=True, index=True) 
+    
     original_name = Column(String, nullable=True)
     description = Column(String, nullable=True)
 
+    # [수정] 외부 API 연동 시점 기록 (타임라인 캐싱 갱신용)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
+
     work_participations = relationship("WorkContributor", back_populates="contributor")
 
-# [2] 작품-참여자 연결 테이블 (NEW - 다대다 관계)
+    # 외부 소스와 ID 조합은 고유해야 함
+    __table_args__ = (
+        UniqueConstraint('external_source', 'external_id', name='uq_external_source_id'),
+    )
+
+# ===================================================================
+# [2] 작품-참여자 연결 테이블 (다대다 관계 유지)
+# ===================================================================
 class WorkContributor(Base):
     __tablename__ = "work_contributors"
 
     id = Column(Integer, primary_key=True, index=True)
-    work_id = Column(Integer, ForeignKey("works.id"))
-    contributor_id = Column(Integer, ForeignKey("contributors.id"))
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="CASCADE"))
+    contributor_id = Column(Integer, ForeignKey("contributors.id", ondelete="CASCADE"))
     
-    role = Column(String, nullable=False)  # Author, Translator, Illustrator 등
+    role = Column(String(50), nullable=False, index=True)  # 'AUTHOR' 또는 'TRANSLATOR' 등으로 엄격히 관리
     
-    # 관계 설정
     work = relationship("Work", back_populates="contributors")
     contributor = relationship("Contributor", back_populates="work_participations")
 
+    # ▼▼▼ [NEW] ISNI 컬럼 추가 ▼▼▼
+    # 실제 ISNI는 16자리 숫자(또는 X 포함)지만, 'BKT-TEMP-...' 같은 임시 코드를 넣기 위해 넉넉히 50으로 잡습니다.
+    # 동명이인 구별의 핵심 키가 되므로 index=True로 검색 속도를 높이고, 중복을 막기 위해 unique=True를 줍니다.
+    isni = Column(String(50), unique=True, index=True, nullable=True)
 
 # 1. 사용자 (Users) - OAuth 및 프로 버전 대응
 class User(Base):
@@ -18654,20 +20091,25 @@ class User(Base):
         overlaps="followers"        # 겹치는 부분을 SQLAlchemy에게 인지시킴
     )
 
-# [3] Work 테이블 수정 (관계 추가)
+# ===================================================================
+# [3] Work 테이블 (수정 완료)
+# ===================================================================
 class Work(Base):
     __tablename__ = "works"
     
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
-    author = Column(String) # (원본 문자열 유지)
+    
+    # ▼▼▼ [핵심 수정] 에러의 원인이었던 author_display를 author로 완벽히 원복했습니다. ▼▼▼
+    author = Column(String) 
+    
     description = Column(Text, nullable=True)
     category = Column(String, nullable=True)
     
-    # [추가] 서지정보 Level 2/3: 원서명 (번역서 식별 및 UI 표기용)
+    # 서지정보 Level 2/3: 원서명 (번역서 식별 및 UI 표기용)
     original_title = Column(String, nullable=True) 
     
-    # 참여자 목록 관계
+    # 참여자 목록 및 판본 관계 설정
     contributors = relationship("WorkContributor", back_populates="work")
     editions = relationship("Edition", back_populates="work")
 
@@ -18914,6 +20356,32 @@ class InsightAuthor(Base):
 
     __table_args__ = (
         UniqueConstraint('user_id', 'author_name', name='uq_user_author'),
+    )
+
+# ===================================================================
+# [4] 인사이트 통계: 작가 및 옮긴이 전용 (InsightAuthor 대체)
+# ===================================================================
+# 기능: 유저가 완독한 도서의 참여자(작가/옮긴이)별 권수 랭킹 데이터를 저장합니다. 동명이인 문제를 완벽 차단합니다.
+class InsightContributor(Base):
+    __tablename__ = "insight_contributors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # [핵심 수정] 문자열 이름이 아닌 실제 DB의 Contributor ID를 바라보게 설정
+    contributor_id = Column(Integer, ForeignKey("contributors.id", ondelete="CASCADE"), nullable=False)
+    
+    # 통계용 캐싱 이름 (Join 없이 빠른 화면 렌더링용)
+    contributor_name = Column(String(100), nullable=False) 
+    
+    # [핵심 수정] 작가 랭킹과 옮긴이 랭킹을 분리하기 위한 역할 컬럼
+    role = Column(String(50), nullable=False) # 'AUTHOR' / 'TRANSLATOR'
+    
+    read_count = Column(Integer, default=0)
+
+    # 한 유저의 통계 내에서 특정 참여자+역할 데이터는 유일해야 함
+    __table_args__ = (
+        UniqueConstraint('user_id', 'contributor_id', 'role', name='uq_user_contributor_role'),
     )
 
 
@@ -19333,11 +20801,12 @@ from utils import parse_author_string, download_and_update_cover
 from sqlalchemy import or_, func, desc
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
-from routers import home, memos, editions, library
+from routers import home, memos, editions, library, authors, insights, admin
 from dotenv import load_dotenv
 from collections import defaultdict
 from utils.author_parser import parse_author_string
-from routers import insights
+from services.insight_service import sync_insight_on_status_change
+from utils.genre_parser import map_to_standard_genre # ▼▼▼ [NEW] 공통 장르 필터 임포트 ▼▼▼
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 
@@ -19475,6 +20944,8 @@ app.include_router(memos.router)
 app.include_router(editions.router)
 app.include_router(library.router)
 app.include_router(insights.router)
+app.include_router(authors.router)
+app.include_router(admin.router)
 
 # ▼▼▼ [필수 확인] CORS 미들웨어 설정 ▼▼▼
 app.add_middleware(
@@ -19496,59 +20967,59 @@ if not os.path.exists(UPLOAD_DIR):
 # 2. 정적 파일 마운트 (이 코드가 있어야 http://localhost:8000/static/... 접근 가능)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ==========================================
-# [BoooknTalk 장르 정제기] 
-# 역할: KDC 코드 및 외부 API 텍스트를 기획자 표준 8개 대분류로 세탁
-# ==========================================
-def map_to_standard_genre(kdc_code: str, naver_category: str = "") -> str:
-    # 1. 국립중앙도서관 KDC 코드 기반 1차 매핑 (가장 정확함)
-    if kdc_code:
-        kdc_prefix = str(kdc_code).strip()[:1] # 앞자리 100번대만 추출
-        kdc_full = str(kdc_code).strip()
+# # ==========================================
+# # [BoooknTalk 장르 정제기] 
+# # 역할: KDC 코드 및 외부 API 텍스트를 기획자 표준 8개 대분류로 세탁
+# # ==========================================
+# def map_to_standard_genre(kdc_code: str, naver_category: str = "") -> str:
+#     # 1. 국립중앙도서관 KDC 코드 기반 1차 매핑 (가장 정확함)
+#     if kdc_code:
+#         kdc_prefix = str(kdc_code).strip()[:1] # 앞자리 100번대만 추출
+#         kdc_full = str(kdc_code).strip()
         
-        # 문학/소설 (800대)
-        if kdc_prefix == '8': 
-            # 814, 824 등 에세이/수필 계열 분리
-            if kdc_full.startswith(('814', '824', '834', '844', '804')): 
-                return "에세이 / 논픽션"
-            return "문학 / 소설"
+#         # 문학/소설 (800대)
+#         if kdc_prefix == '8': 
+#             # 814, 824 등 에세이/수필 계열 분리
+#             if kdc_full.startswith(('814', '824', '834', '844', '804')): 
+#                 return "에세이 / 논픽션"
+#             return "문학 / 소설"
         
-        # 인문/사회/철학 (100대 철학, 200대 종교, 300대 사회, 900대 역사)
-        elif kdc_prefix in ['1', '2', '9']: return "인문 / 사회 / 철학"
-        elif kdc_prefix == '3':
-            # 320대 경제학 분리
-            if kdc_full.startswith('32'): return "경제 / 경영"
-            # 370대 교육학, 360대 법학 등
-            if kdc_full.startswith(('37', '36')): return "학술 / 전문서"
-            return "인문 / 사회 / 철학"
+#         # 인문/사회/철학 (100대 철학, 200대 종교, 300대 사회, 900대 역사)
+#         elif kdc_prefix in ['1', '2', '9']: return "인문 / 사회 / 철학"
+#         elif kdc_prefix == '3':
+#             # 320대 경제학 분리
+#             if kdc_full.startswith('32'): return "경제 / 경영"
+#             # 370대 교육학, 360대 법학 등
+#             if kdc_full.startswith(('37', '36')): return "학술 / 전문서"
+#             return "인문 / 사회 / 철학"
             
-        # 순수과학(400), 기술과학(500)
-        elif kdc_prefix in ['4', '5']: return "과학 / IT / 공학"
+#         # 순수과학(400), 기술과학(500)
+#         elif kdc_prefix in ['4', '5']: return "과학 / IT / 공학"
         
-        # 예술/취미/스포츠 (600대)
-        elif kdc_prefix == '6': return "실용 / 취미 / 예술"
+#         # 예술/취미/스포츠 (600대)
+#         elif kdc_prefix == '6': return "실용 / 취미 / 예술"
         
-        # 언어 (700대)
-        elif kdc_prefix == '7': return "학술 / 전문서"
+#         # 언어 (700대)
+#         elif kdc_prefix == '7': return "학술 / 전문서"
         
-        # 총류 (000대) - 백과사전 등
-        elif kdc_prefix == '0': return "기타"
+#         # 총류 (000대) - 백과사전 등
+#         elif kdc_prefix == '0': return "기타"
 
-    # 2. KDC 코드가 없을 경우, 네이버 카테고리 텍스트로 2차 매핑 (Fallback)
-    if naver_category:
-        cat_str = naver_category.lower()
-        if any(x in cat_str for x in ['소설', '시', '희곡', '문학']): return "문학 / 소설"
-        if any(x in cat_str for x in ['에세이', '수필', '산문', '전기', '르포']): return "에세이 / 논픽션"
-        if any(x in cat_str for x in ['인문', '철학', '역사', '사회', '정치']): return "인문 / 사회 / 철학"
-        if any(x in cat_str for x in ['경제', '경영', '재테크', '투자']): return "경제 / 경영"
-        if any(x in cat_str for x in ['과학', 'it', '컴퓨터', '공학', '의학']): return "과학 / IT / 공학"
-        if any(x in cat_str for x in ['실용', '취미', '예술', '여행', '요리', '건강']): return "실용 / 취미 / 예술"
-        if any(x in cat_str for x in ['아동', '유아', '청소년', '그림책']): return "아동 / 청소년"
-        if any(x in cat_str for x in ['만화', '웹툰', '그래픽노블']): return "만화 / 그래픽노블"
-        if any(x in cat_str for x in ['학습', '교재', '전공', '수험서', '사전']): return "학술 / 전문서"
+#     # 2. KDC 코드가 없을 경우, 네이버 카테고리 텍스트로 2차 매핑 (Fallback)
+#     if naver_category:
+#         cat_str = naver_category.lower()
+#         if any(x in cat_str for x in ['소설', '시', '희곡', '문학']): return "문학 / 소설"
+#         if any(x in cat_str for x in ['에세이', '수필', '산문', '전기', '르포']): return "에세이 / 논픽션"
+#         if any(x in cat_str for x in ['인문', '철학', '역사', '사회', '정치']): return "인문 / 사회 / 철학"
+#         if any(x in cat_str for x in ['경제', '경영', '재테크', '투자']): return "경제 / 경영"
+#         if any(x in cat_str for x in ['과학', 'it', '컴퓨터', '공학', '의학']): return "과학 / IT / 공학"
+#         if any(x in cat_str for x in ['실용', '취미', '예술', '여행', '요리', '건강']): return "실용 / 취미 / 예술"
+#         if any(x in cat_str for x in ['아동', '유아', '청소년', '그림책']): return "아동 / 청소년"
+#         if any(x in cat_str for x in ['만화', '웹툰', '그래픽노블']): return "만화 / 그래픽노블"
+#         if any(x in cat_str for x in ['학습', '교재', '전공', '수험서', '사전']): return "학술 / 전문서"
 
-    # 모든 조건에 걸리지 않으면 안전하게 '기타' 처리
-    return "기타"
+#     # 모든 조건에 걸리지 않으면 안전하게 '기타' 처리
+#     return "기타"
 
 # -------------------------------------------------------------------
 # [4] 기본 및 인증 API (Auth Endpoints)
@@ -19870,8 +21341,17 @@ async def get_book_public_detail(isbn: str, db: Session = Depends(get_db)):
 # [6] 서재 관리 API (Library Management)
 # -------------------------------------------------------------------
 
+# -------------------------------------------------------------------
+# [6] 서재 관리 API (Library Management) - 도서 등록 마스터 노드
+# -------------------------------------------------------------------
+
 @app.post("/api/books")
 async def register_book(request: RegisterBookRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    기능: 외부 API에서 검색된 도서를 BoooknTalk DB(Work, Edition)에 저장하고, 
+          동시에 유저의 서재(Record)에 'WISH(읽고 싶은 책)' 상태로 등록하며,
+          실시간 인사이트 통계를 업데이트합니다.
+    """
     # 1. 사용자 조회
     user = db.query(models.User).filter(models.User.email == request.user_email).first()
     if not user:
@@ -19885,7 +21365,7 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
         is_bnt_generated = True
 
     # ---------------------------------------------------------
-    # [3. Work (작품) 확인 및 생성]
+    # [3. Work (작품 메타데이터) 확인 및 생성]
     # ---------------------------------------------------------
     work = db.query(models.Work).filter(
         models.Work.title == request.title, 
@@ -19898,15 +21378,14 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             author=request.author, 
             description=request.description,
             category=request.categoryName,
-            original_title=request.originalTitle # [NEW] 원서명 저장
+            original_title=request.originalTitle 
         )
         db.add(work)
         db.commit()
         db.refresh(work)
         
-        # 3-2. 작가 정보 및 알라딘 ID 연동
+        # 3-2. 작가 정보 및 알라딘 ID 연동 (기존 로직 유지)
         try:
-            # A. 상세 정보(authorId 포함)가 있는 경우 우선 처리
             if hasattr(request, 'detailed_authors') and request.detailed_authors:
                 for a_info in request.detailed_authors:
                     a_name = a_info.get('authorName')
@@ -19938,14 +21417,11 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
                         link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=a_role)
                         db.add(link)
                         db.commit()
-
-            # B. 상세 정보가 없는 경우 기존 문자열 파싱 (Fallback)
             else:
                 parsed_authors = parse_author_string(request.author)
                 for p_auth in parsed_authors:
                     contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
                     if not contributor:
-                        # ▼▼▼ [수정됨] name과 original_name을 모두 챙겨서 저장! ▼▼▼
                         contributor = models.Contributor(
                             name=p_auth['name'], 
                             original_name=p_auth.get('original_name')
@@ -19953,7 +21429,6 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
                         db.add(contributor)
                         db.commit()
                         db.refresh(contributor)
-                    # ▼▼▼ [NEW] 이미 존재하는 작가인데 원어 이름이 비어있다면? 채워줍니다! ▼▼▼
                     elif p_auth.get('original_name') and not contributor.original_name:
                         contributor.original_name = p_auth.get('original_name')
                         db.commit()
@@ -19968,11 +21443,10 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
                         link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
                         db.add(link)
                         db.commit()
-                    
         except Exception as e:
             print(f"⚠️ 작가 정보 저장 중 오류 발생 (무시됨): {e}")
     else:
-        # [NEW] 기존 데이터와 비교하여 더 나은 정보가 들어오면 업데이트
+        # 기존 데이터 대비 더 나은 정보 업데이트
         work_updated = False
         if request.description and request.description != work.description:
             work.description = request.description
@@ -19988,11 +21462,10 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             db.refresh(work)
 
     # ---------------------------------------------------------
-    # [4. Edition (판본) 생성]
+    # [4. Edition (판본) 생성 및 업데이트]
     # ---------------------------------------------------------
     edition = db.query(models.Edition).filter(models.Edition.isbn == final_isbn).first()
 
-    # 날짜 파싱 공통 로직
     parsed_pub_date = None
     if request.pubDate:
         clean_date = request.pubDate.replace(".", "").replace("-", "").strip()
@@ -20005,17 +21478,6 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             pass
 
     if not edition:
-        parsed_pub_date = None
-        if request.pubDate:
-            clean_date = request.pubDate.replace(".", "").replace("-", "").strip()
-            try:
-                if len(clean_date) >= 8:
-                    parsed_pub_date = datetime.strptime(clean_date[:8], "%Y%m%d")
-                elif len(clean_date) == 4:
-                    parsed_pub_date = datetime.strptime(clean_date, "%Y")
-            except Exception as e:
-                print(f"Date parsing error: {e}")
-        
         edition = models.Edition(
             isbn=final_isbn,           
             isbn10=request.isbn10,
@@ -20031,17 +21493,13 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             language=request.language,
             size_mm=request.size_mm,
             price=request.price,
-            
-            # ▼▼▼ [NEW] BoooknTalk 최초 발견자(등록자) 영구 박제 ▼▼▼
             created_by_id=user.id
         )
         db.add(edition)
         db.commit()
         db.refresh(edition)
     else:
-        # [NEW] 기존 판본 데이터에 빈칸이 있거나 값이 다르면 업데이트 (created_by_id는 건드리지 않음)
         ed_updated = False
-        
         if request.isbn10 and not edition.isbn10:
             edition.isbn10 = request.isbn10
             ed_updated = True
@@ -20072,7 +21530,7 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
             db.refresh(edition)
 
     # ---------------------------------------------------------
-    # [5. Record (서재) 생성]
+    # [5. Record (서재) 등록 및 통계 실시간 업데이트]
     # ---------------------------------------------------------
     record = db.query(models.Record).filter(
         models.Record.user_id == user.id, 
@@ -20089,17 +21547,28 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
         rating=0.0
     )
     db.add(new_record)
-    db.commit()
+    db.commit() # 서재 등록 완료!
+
+    # ▼▼▼ [NEW] 공통 트리거 발동! (신규 등록 = None -> WISH) ▼▼▼
+    sync_insight_on_status_change(
+        db=db,
+        user_id=user.id,
+        old_status=None,          
+        new_status=new_record.status, # "WISH"
+        finish_date=new_record.finish_date,
+        genre_name=work.category if work else "기타",
+        author_name=work.author if work else "알 수 없음"
+    )
+    db.commit() # 통계 테이블 변경사항 최종 저장!
 
     # ▼▼▼ [핵심 2] 백그라운드 이미지 다운로드 지시 ▼▼▼
-    # 외부 URL(http)이고, 아직 로컬 주소(localhost)가 아닐 때만 실행
     if request.cover and request.cover.startswith("http") and "localhost" not in request.cover:
         print(f"🚀 [Background] 이미지 다운로드 대기열 등록: Edition ID {edition.id}")
         background_tasks.add_task(
             download_and_update_cover, 
-            edition.id,         # 저장된 판본 ID
-            request.cover,      # 네이버/도서관 이미지 URL
-            SessionLocal        # 백그라운드용 독립 DB 세션 팩토리
+            edition.id,         
+            request.cover,      
+            SessionLocal        
         )
 
     return {
@@ -20193,52 +21662,89 @@ async def get_my_library(user_email: str, db: Session = Depends(get_db)):
         
     return results
 
+# ===================================================================
+# [핵심] 서재 기록(상태, 별점, 코멘트, 태그 등) 수정 마스터 API
+# 프론트엔드(BookDetailForm.tsx)에서 "저장" 버튼을 누를 때 호출됩니다.
+# ==========================================
 @app.patch("/api/my-library/{library_id}")
 async def update_library_entry(library_id: int, update_data: LibraryUpdate, db: Session = Depends(get_db)):
     """
-    서재 기록 수정 (상태, 별점, 코멘트, 태그, 매체 등)
+    서재 기록 수정 (상태 변경 및 데이터 동기화)
+    - 역할: 도서의 상태(WISH, READING, COMPLETED)를 변경하거나 평점, 독서록 등을 업데이트합니다.
+    - 추가 기능: 상태 변경 시 '인사이트 통계' 트리거를 발동시켜 전체 통계 수치를 실시간으로 증감시킵니다.
     """
+    # 1. DB에서 수정할 서재 기록(Record)을 가져옵니다.
     record = db.query(models.Record).filter(models.Record.id == library_id).first()
-    
     if not record:
         raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
 
+    # ▼▼▼ [NEW] 트리거 발동을 위해 '변경 전 상태'를 미리 백업해둡니다. ▼▼▼
+    old_status = record.status 
+    
+    # 2. 프론트엔드에서 보낸 데이터 중 값이 있는 것만 추출합니다.
     update_dict = update_data.dict(exclude_unset=True)
     
-    # 1. 태그 데이터는 별도 테이블에 저장해야 하므로 빼냅니다.
+    # 3. 태그 데이터는 별도 관계(RecordTag) 테이블에 저장해야 하므로 딕셔너리에서 잠시 빼냅니다.
     tags_data = update_dict.pop('tags', None)
 
-    # 2. 일반 컬럼(current_page, reading_format 등) 업데이트
+    # 4. 프론트엔드에서 넘어온 일반 컬럼(status, rating, current_page 등)을 DB 객체에 덮어씌웁니다.
     for key, value in update_dict.items():
         setattr(record, key, value)
 
-    # 3. 태그 관계 저장 로직 (Many-to-Many)
+    # 5. 태그(Tag) 관계 저장 로직 (Many-to-Many 처리)
     if tags_data is not None:
-        # 기존 연결된 태그 삭제 후 재등록 (가장 깔끔한 동기화 방식)
+        # 기존에 연결된 낡은 태그들을 모두 깔끔하게 지웁니다.
         db.query(models.RecordTag).filter(models.RecordTag.record_id == library_id).delete()
         for tag_name in tags_data:
             tag_name = tag_name.strip()
             if not tag_name: continue
             
-            # Tags 테이블에 이미 있는 태그인지 확인
+            # Tags 마스터 테이블에 이미 있는 태그인지 확인하고, 없으면 새로 등록합니다.
             tag = db.query(models.Tag).filter(models.Tag.name == tag_name).first()
             if not tag:
                 tag = models.Tag(name=tag_name)
                 db.add(tag)
-                db.commit() # ID 발급을 위해 즉시 커밋
+                db.commit() # 새 태그의 고유 ID 발급을 위해 즉시 커밋
                 db.refresh(tag)
             
-            # Record와 Tag 연결
+            # Record(서재)와 Tag(태그)를 연결해주는 브릿지 데이터를 생성합니다.
             db.add(models.RecordTag(record_id=library_id, tag_id=tag.id))
 
+    # 6. DB 트랜잭션 처리 (인사이트 통계 업데이트 포함)
     try:
+        # ▼▼▼ [핵심] 통계 트리거 발동! (변경 전 상태 -> 변경 후 상태) ▼▼▼
+        if old_status != record.status:
+            work = record.edition.work if record.edition else None
+            
+            # ▼▼▼ [에러 원인 완벽 해결] 문자열 날짜를 파이썬 datetime 객체로 변환! ▼▼▼
+            parsed_finish_date = None
+            if record.finish_date:
+                if isinstance(record.finish_date, str):
+                    # "2026-03-22" 같은 프론트엔드 문자열을 날짜 객체로 파싱
+                    parsed_finish_date = datetime.strptime(record.finish_date.split('T')[0], "%Y-%m-%d")
+                else:
+                    parsed_finish_date = record.finish_date
+            
+            sync_insight_on_status_change(
+                db=db,
+                user_id=record.user_id,
+                old_status=old_status,          
+                new_status=record.status,       
+                finish_date=parsed_finish_date, # 변환된 완벽한 날짜 객체 투입!
+                genre_name=work.category if work else "기타",
+                author_name=work.author if work else "알 수 없음"
+            )
+
+        # 7. 변경된 서재 기록과 통계 데이터를 최종적으로 DB에 확정(Commit)합니다.
         db.commit()
         db.refresh(record)
         return {"message": "Updated successfully", "data": record.id}
+        
     except Exception as e:
         db.rollback()
+        # [NEW] 터미널에서 어떤 에러인지 정확히 볼 수 있도록 팩트 로깅 추가
+        print(f"❌ [상태 변경 에러 상세 원인]: {str(e)}") 
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/api/users/{user_email}/records")
 async def read_user_records(
@@ -21189,59 +22695,80 @@ async def delete_short_review(record_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "message": "한줄평이 삭제되었습니다."}
 
 # ===================================================================
-# [NEW] 마이페이지 (통계 대시보드) API
+# [수정] 마이페이지 (통계 대시보드) API - 연도별 필터링 기능 추가
 # ===================================================================
 
 @app.get("/api/mypage/stats/{user_email}")
-async def get_mypage_stats(user_email: str, db: Session = Depends(get_db)):
+async def get_mypage_stats(
+    user_email: str, 
+    year: Optional[int] = Query(None, description="특정 연도 필터링 (없으면 전체)"), # ▼▼▼ [NEW] 연도 파라미터 추가
+    db: Session = Depends(get_db)
+):
     """
-    유저의 프로필, 요약 통계, 월별 독서량 추이, 선호 장르, 태그 등을 한 번에 반환합니다.
+    유저의 프로필, 요약 통계, 장르/태그 분석을 반환합니다. 
+    year 파라미터가 있으면 해당 연도 데이터만 필터링합니다.
     """
     user = db.query(models.User).filter(models.User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
 
-    # 1. 프로필 정보
+    # 1. 프로필 정보 (연도와 무관하게 고정)
     profile = {
         "nickname": user.nickname or user.email.split('@')[0],
         "bio": user.bio or "아직 작성된 한 줄 소개가 없습니다.",
         "profile_image": user.profile_image or ""
     }
 
-    # 2. 독서 기록 전체 가져오기 (Work, Edition 조인)
+    # 2. 독서 기록 전체 가져오기
     records = db.query(models.Record).options(
         joinedload(models.Record.edition).joinedload(models.Edition.work)
     ).filter(models.Record.user_id == user.id).all()
 
-    # 요약 통계 계산
-    finished_books = [r for r in records if r.status == 'FINISHED']
+    # ▼▼▼ [핵심 로직] 연도(year) 값이 넘어왔을 경우 파이썬 메모리에서 정밀 필터링 ▼▼▼
+    if year:
+        filtered_records = []
+        for r in records:
+            # 완독한 책은 '완독일(finish_date)' 기준, 읽는 중/읽고 싶은 책은 '서재에 담은 날(added_at)' 기준으로 해당 연도인지 판별합니다.
+            if r.status in ['FINISHED', 'COMPLETED'] and r.finish_date and r.finish_date.year == year:
+                filtered_records.append(r)
+            elif r.status not in ['FINISHED', 'COMPLETED'] and r.added_at and r.added_at.year == year:
+                filtered_records.append(r)
+        
+        # 필터링된 데이터로 덮어씌우기
+        records = filtered_records
+
+    # 3. 요약 통계 계산 (필터링된 records 기준)
+    finished_books = [r for r in records if r.status in ['FINISHED', 'COMPLETED']]
     reading_books = [r for r in records if r.status == 'READING']
+    
+    # ▼▼▼ [복구 1] 읽고 싶은 책 카운트 변수 추가 ▼▼▼
+    wish_books = [r for r in records if r.status == 'WISH']
     
     rated_books = [r for r in records if r.rating is not None and r.rating > 0]
     avg_rating = sum(r.rating for r in rated_books) / len(rated_books) if rated_books else 0.0
     
     total_pages = sum(r.current_page for r in records if r.current_page)
 
-    # 3. 올해 월별 독서량 추이 (완독 기준)
-    current_year = datetime.now().year
+    # 4. 올해 월별 독서량 추이 (이 부분은 기존 '독서 흐름'을 위해 현재 연도로 고정하거나 프론트 요청 연도 사용)
+    target_year = year if year else datetime.now().year
     monthly_trend = {month: 0 for month in range(1, 13)}
     
     for r in finished_books:
-        if r.finish_date and r.finish_date.year == current_year:
+        if r.finish_date and r.finish_date.year == target_year:
             monthly_trend[r.finish_date.month] += 1
             
     trend_data = [{"month": f"{m}월", "count": monthly_trend[m]} for m in range(1, 13)]
 
-    # 4. 장르(카테고리) 취향 분석
+    # 5. 장르(카테고리) 취향 분석
     genre_counts = {}
     for r in records:
         if r.edition and r.edition.work and r.edition.work.category:
-            cat = r.edition.work.category.split('>')[0].strip() # 대분류만 추출 (예: 국내도서 > 소설 -> 국내도서)
+            cat = r.edition.work.category.split('>')[0].strip()
             genre_counts[cat] = genre_counts.get(cat, 0) + 1
             
     top_genres = [{"genre": k, "count": v} for k, v in sorted(genre_counts.items(), key=lambda item: item[1], reverse=True)[:5]]
 
-    # 5. 최다 사용 태그 (Word Cloud용)
+    # 6. 최다 사용 태그 (Word Cloud용)
     user_record_ids = [r.id for r in records]
     tag_counts = {}
     if user_record_ids:
@@ -21253,18 +22780,36 @@ async def get_mypage_stats(user_email: str, db: Session = Depends(get_db)):
             tag_counts[tag_name] = tag_counts.get(tag_name, 0) + 1
             
     top_tags = [{"text": k, "count": v} for k, v in sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)[:10]]
+    
+    # ▼▼▼ [완벽 복구 & 업그레이드] 기록의 무게 계산 ▼▼▼
+    # records 배열은 이미 기획자님이 선택한 연도(year)에 맞게 정밀 필터링된 상태입니다!
+    # 따라서 해당 연도에 작성된 한줄평과 긴줄평 갯수만 정확하게 카운팅합니다.
+    short_review_count = sum(1 for r in records if getattr(r, 'short_review', None) and str(r.short_review).strip() != "")
+    long_review_count = sum(1 for r in records if getattr(r, 'long_review', None) and str(r.long_review).strip() != "")
+
+    # 독서노트는 가장 안전하게 기존 InsightSummary 테이블의 전체 누적 데이터를 참조합니다.
+    insight_summary = db.query(models.InsightSummary).filter(models.InsightSummary.user_id == user.id).first()
+    memo_count = insight_summary.total_memos if insight_summary else 0
 
     return {
         "profile": profile,
         "summary": {
             "total_finished": len(finished_books),
             "total_reading": len(reading_books),
+            "total_wish": len(wish_books), # 아까 복구했던 읽고 싶은 책
             "avg_rating": round(avg_rating, 1),
             "total_pages": total_pages
         },
         "trend_data": trend_data,
         "top_genres": top_genres,
-        "top_tags": top_tags
+        "top_tags": top_tags,
+        
+        # ▼▼▼ [핵심] 프론트엔드가 애타게 기다리던 기록의 무게 데이터 전송! ▼▼▼
+        "records_weight": {
+            "memo_count": memo_count,
+            "short_review_count": short_review_count,
+            "long_review_count": long_review_count
+        }
     }
 
 # ===================================================================
@@ -21888,6 +23433,39 @@ async def merge_specific_contributors(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==========================================
+# [관리자 전용] 과거 도서 장르 일괄 세탁(마이그레이션) API
+# ==========================================
+@app.get("/api/admin/sync-genres")
+async def sync_existing_genres(db: Session = Depends(get_db)):
+    works = db.query(models.Work).all()
+    updated_count = 0
+
+    for work in works:
+        old_cat = work.category or ""
+        
+        # 숫자로만 되어있으면 KDC 힌트로, 아니면 네이버 문자열 힌트로 넘김
+        kdc_hint = old_cat if old_cat.replace('.', '').isdigit() else ""
+        naver_hint = old_cat if not kdc_hint else ""
+
+        # 방금 분리한 공통 모듈의 정제기 통과!
+        new_cat = map_to_standard_genre(kdc_code=kdc_hint, naver_category=naver_hint)
+
+        # 기존 장르와 다를 때만 업데이트
+        if work.category != new_cat:
+            work.category = new_cat
+            updated_count += 1
+
+    try:
+        db.commit()
+        return {
+            "status": "success", 
+            "message": f"장르 대청소 완벽 종료! 총 {updated_count}개 작품의 장르가 북앤톡 8대 표준 장르로 세탁되었습니다."
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ===================================================================
 # [NEW] 나의 긴줄평 전체 목록 조회 전용 API (도돌이표 종결자!)
 # ===================================================================
@@ -21945,32 +23523,50 @@ async def get_user_long_reviews(user_email: str, db: Session = Depends(get_db)):
 ============================================================
 FILE PATH: backend/routers/library.py
 ============================================================
-#backend/routers/library.py
+# 파일 경로: backend/routers/library.py
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from database import get_db
-import models
 from typing import List
 
-# 기존 라우터가 있다면 그 아래에 추가, 없다면 새로 생성
+# ▼▼▼ [에러 해결 1] 누락되었던 datetime 및 Pydantic 모듈 추가 ▼▼▼
+from datetime import datetime
+from pydantic import BaseModel
+
+from database import get_db
+import models
+
+# ▼▼▼ [공통 코드] 인사이트 실시간 동기화 서비스 Import ▼▼▼
+from services.insight_service import sync_insight_on_status_change
+
+# ==========================================
+# ▼▼▼ [에러 해결 2] 누락되었던 Request 스키마 정의 ▼▼▼
+# (프론트엔드에서 API 호출 시 body로 넘어오는 데이터 구조입니다)
+# ==========================================
+class RecordCreateRequest(BaseModel):
+    user_id: int
+    edition_id: int
+    status: str
+
+class StatusUpdateRequest(BaseModel):
+    user_id: int
+    new_status: str
+
+# 라우터 세팅
 router = APIRouter(prefix="/api/library", tags=["library"]) 
 
-# [NEW] 특정 사용자의 서재(프로필 + 책 목록) 조회 API
+
+# [기존 유지] 특정 사용자의 서재(프로필 + 책 목록) 조회 API
 @router.get("/users/{target_user_id}")
 def get_user_library_public(target_user_id: int, db: Session = Depends(get_db)):
-    # 1. 대상 유저 존재 여부 확인
     target_user = db.query(models.User).filter(models.User.id == target_user_id).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 2. 해당 유저의 서재 기록 조회 (최신순 정렬)
-    # 추후 '비공개' 필드가 생긴다면 여기서 필터링해야 함 (현재는 모두 공개 가정)
     records = db.query(models.Record).filter(
         models.Record.user_id == target_user_id
     ).order_by(models.Record.added_at.desc()).all()
 
-    # 3. 데이터 가공 (책 표지, 제목 등 상세 정보 결합)
     books = []
     for record in records:
         edition = db.query(models.Edition).filter(models.Edition.id == record.edition_id).first()
@@ -21980,9 +23576,9 @@ def get_user_library_public(target_user_id: int, db: Session = Depends(get_db)):
         
         books.append({
             "record_id": record.id,
-            "work_title": work.title if work else edition.title, # Work가 없으면 Edition 제목 사용
+            "work_title": work.title if work else edition.title, 
             "cover_image": edition.cover_image,
-            "status": record.status, # READING, FINISHED, WISH
+            "status": record.status, 
             "rating": record.rating,
             "added_at": record.added_at.isoformat() if record.added_at else None
         })
@@ -22001,6 +23597,95 @@ def get_user_library_public(target_user_id: int, db: Session = Depends(get_db)):
         },
         "books": books
     }
+    
+
+# ▼▼▼ [에러 해결 3] 도서 추가 (추측성 코드 제거 및 스키마 적용 완료) ▼▼▼
+@router.post("/")
+def add_to_library(request: RecordCreateRequest, db: Session = Depends(get_db)):
+    
+    new_record = models.Record(
+        user_id=request.user_id,
+        edition_id=request.edition_id,
+        status=request.status,
+    )
+    db.add(new_record)
+    db.flush()
+
+    work = db.query(models.Work).join(models.Edition).filter(models.Edition.id == request.edition_id).first()
+    
+    sync_insight_on_status_change(
+        db=db,
+        user_id=request.user_id, 
+        old_status=None,          
+        new_status=new_record.status, 
+        finish_date=new_record.finish_date,
+        genre_name=work.category if work else "기타",
+        author_name=work.author if work else "알 수 없음"
+    )
+
+    db.commit()
+    db.refresh(new_record)
+    return new_record
+
+
+# ▼▼▼ [에러 해결 4] 상태 변경 (추측성 코드 제거 및 스키마 적용 완료) ▼▼▼
+@router.patch("/{record_id}/status")
+def update_record_status(record_id: int, request: StatusUpdateRequest, db: Session = Depends(get_db)):
+    record = db.query(models.Record).filter(models.Record.id == record_id, models.Record.user_id == request.user_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+
+    old_status = record.status
+    record.status = request.new_status
+    
+    if request.new_status == "COMPLETED" and old_status != "COMPLETED":
+        record.finish_date = datetime.utcnow() # 완독 시간 자동 기록
+
+    work = record.edition.work if record.edition else None
+
+    sync_insight_on_status_change(
+        db=db,
+        user_id=request.user_id,
+        old_status=old_status,        
+        new_status=record.status,     
+        finish_date=record.finish_date,
+        genre_name=work.category if work else "기타",
+        author_name=work.author if work else "알 수 없음"
+    )
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+# ▼▼▼ [에러 해결] 파라미터에서 user_id를 제거하고 내부에서 추출하도록 변경 ▼▼▼
+@router.delete("/{record_id}")
+def delete_record(record_id: int, db: Session = Depends(get_db)):
+    # 1. record_id만으로 일단 기록을 찾습니다.
+    record = db.query(models.Record).filter(models.Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+
+    # 2. 찾은 기록에서 이 책의 주인(user_id)과 기존 상태를 추출합니다.
+    target_user_id = record.user_id 
+    old_status = record.status
+    work = record.edition.work if record.edition else None
+
+    # ▼▼▼ [공통 트리거 발동] 도서 삭제 차감 (-1) ▼▼▼
+    # 추출한 target_user_id를 통계 동기화 엔진에 넘겨줍니다.
+    sync_insight_on_status_change(
+        db=db,
+        user_id=target_user_id,
+        old_status=old_status,
+        new_status=None,          # 새로운 상태 없음 (삭제됨)
+        finish_date=record.finish_date,
+        genre_name=work.category if work else "기타",
+        author_name=work.author if work else "알 수 없음"
+    )
+
+    db.delete(record)
+    db.commit()
+    return {"message": "정상적으로 삭제되었습니다."}
 
 
 ============================================================
@@ -22406,6 +24091,22 @@ def get_readers_choice(db: Session = Depends(get_db)):
 
 
 ============================================================
+FILE PATH: backend/routers/admin.py
+============================================================
+# 파일 경로: backend/routers/admin.py
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from database import get_db
+from services.admin_service import run_cleansing_and_merge
+
+router = APIRouter(prefix="/api/admin", tags=["Admin"])
+
+@router.post("/cleanse-authors")
+async def cleanse_authors_api(db: Session = Depends(get_db)):
+    return await run_cleansing_and_merge(db)
+
+
+============================================================
 FILE PATH: backend/routers/editions.py
 ============================================================
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
@@ -22497,6 +24198,50 @@ async def create_edition(
         "cover_image": new_edition.cover_image,
         "isbn": new_edition.isbn
     }
+
+
+============================================================
+FILE PATH: backend/routers/authors.py
+============================================================
+# 파일 경로: backend/routers/authors.py
+# 역할 및 기능: 작가 및 번역가 타임라인 데이터를 프론트엔드로 전달하는 API 엔드포인트입니다. DB 세션을 주입받아 서비스로 넘깁니다.
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from database import get_db # 친구 프로젝트의 DB 세션 의존성 주입 함수
+from services.author_service import get_author_timeline, get_user_contributors
+
+router = APIRouter(prefix="/api/authors", tags=["Authors"])
+
+@router.get("/writer/{author_name}/timeline")
+async def get_writer_timeline(author_name: str, db: Session = Depends(get_db)):
+    """
+    기능: DB와 외부 API를 결합하여 특정 작가의 연도별 출간 도서를 반환합니다.
+    """
+    data = await get_author_timeline(author_name, role="writer", db=db)
+    return data
+
+@router.get("/translator/{translator_name}/timeline")
+async def get_translator_timeline(translator_name: str, db: Session = Depends(get_db)):
+    """
+    기능: DB와 외부 API를 결합하여 특정 번역가의 연도별 출간 도서를 반환합니다.
+    """
+    data = await get_author_timeline(translator_name, role="translator", db=db)
+    return data
+
+# ▼ [NEW] 작가 목록 API
+@router.get("/writer/list")
+async def get_my_writers(user_id: int = 1, db: Session = Depends(get_db)):
+    """기능: 내 서재의 작가 목록을 반환합니다."""
+    data = await get_user_contributors(user_id, role="writer", db=db)
+    return data
+
+# ▼ [NEW] 번역가 목록 API
+@router.get("/translator/list")
+async def get_my_translators(user_id: int = 1, db: Session = Depends(get_db)):
+    """기능: 내 서재의 번역가 목록을 반환합니다."""
+    data = await get_user_contributors(user_id, role="translator", db=db)
+    return data
 
 
 ============================================================
@@ -22678,6 +24423,10 @@ def get_insight_summary(email: str, db: Session = Depends(get_db)):
 
 
 # 기능: 선택한 연도(또는 '전체')에 따라 거시적(연도별) 또는 미시적(월별) 독서 흐름 데이터를 다이나믹하게 집계하여 응답합니다.
+# 파일 경로: backend/routers/insights.py
+
+# 기능: 선택한 연도(또는 '전체')에 따라 거시적(연도별) 또는 미시적(월별) 독서 흐름 데이터를 다이나믹하게 집계하여 응답합니다.
+# [업그레이드] 완독(FINISHED)은 다 읽은 날(finish_date) 기준, 읽는 중(READING)은 서재에 담은 날(added_at) 기준으로 분리하여 이중 카운팅합니다.
 @router.get("/user/{email}/yearly-flow")
 def get_yearly_flow(
     email: str, 
@@ -22690,42 +24439,70 @@ def get_yearly_flow(
 
     user_id = user.id
 
+    # 1. 유저의 모든 서재 기록을 가져옵니다. (메모리 상에서 두 가지 기준일로 정밀 타격하기 위함)
+    records = db.query(models.Record).filter(models.Record.user_id == user_id).all()
+
     # [상태 A] 전체 기간 (All-time) 선택 시 -> 연도별 그룹핑
     if year.lower() == "all":
-        yearly_data = db.query(
-            models.InsightMonthly.year,
-            func.sum(models.InsightMonthly.read_count).label("total_count")
-        ).filter(models.InsightMonthly.user_id == user_id).group_by(models.InsightMonthly.year).order_by(models.InsightMonthly.year.asc()).all()
+        flow_dict = {} # 연도별 데이터를 담을 딕셔너리
+        total_read = 0
 
-        total_read = sum([row.total_count for row in yearly_data])
-        
+        for r in records:
+            # 1-1. 완독한 책은 'finish_date' 기준으로 연도 카운팅
+            if r.status in ['FINISHED', 'COMPLETED'] and r.finish_date:
+                y = r.finish_date.year
+                if y not in flow_dict: 
+                    flow_dict[y] = {"finished_count": 0, "reading_count": 0}
+                flow_dict[y]["finished_count"] += 1
+                total_read += 1
+                
+            # 1-2. 읽는 중인 책은 'added_at' 기준으로 연도 카운팅
+            elif r.status == 'READING' and r.added_at:
+                y = r.added_at.year
+                if y not in flow_dict: 
+                    flow_dict[y] = {"finished_count": 0, "reading_count": 0}
+                flow_dict[y]["reading_count"] += 1
+
+        # 연도 오름차순(과거->최신)으로 정렬하여 프론트엔드 배열 포맷으로 변환
+        flow_data = []
+        for y in sorted(flow_dict.keys()):
+            flow_data.append({
+                "name": f"{y}년",
+                "finished_count": flow_dict[y]["finished_count"],
+                "reading_count": flow_dict[y]["reading_count"]
+            })
+
         return {
             "type": "yearly",
             "total_read_in_period": total_read,
-            "flow_data": [{"name": f"{row.year}년", "count": row.total_count} for row in yearly_data]
+            "flow_data": flow_data
         }
 
     # [상태 B] 특정 연도 (예: 2026) 선택 시 -> 월별 그룹핑
     else:
         target_year = int(year)
-        monthly_data = db.query(
-            models.InsightMonthly.month,
-            models.InsightMonthly.read_count
-        ).filter(
-            models.InsightMonthly.user_id == user_id,
-            models.InsightMonthly.year == target_year
-        ).all()
+        
+        # 1월부터 12월까지 기본 뼈대(0건)를 미리 만들어 둡니다.
+        flow_dict = {m: {"finished_count": 0, "reading_count": 0} for m in range(1, 13)}
+        total_read = 0
 
-        # DB에서 가져온 데이터를 딕셔너리로 변환
-        month_dict = {row.month: row.read_count for row in monthly_data}
-        total_read = sum(month_dict.values())
+        for r in records:
+            # 2-1. 완독한 책 중 '해당 연도'에 다 읽은 책을 월별로 꽂아 넣습니다.
+            if r.status in ['FINISHED', 'COMPLETED'] and r.finish_date and r.finish_date.year == target_year:
+                flow_dict[r.finish_date.month]["finished_count"] += 1
+                total_read += 1
+                
+            # 2-2. 읽는 중인 책 중 '해당 연도'에 서재에 담은 책을 월별로 꽂아 넣습니다.
+            elif r.status == 'READING' and r.added_at and r.added_at.year == target_year:
+                flow_dict[r.added_at.month]["reading_count"] += 1
 
-        # 프론트엔드 차트가 예쁘게 그려지도록, 데이터가 없는 월도 0으로 채워서 1월부터 12월까지 완벽한 배열 생성
+        # 프론트엔드 차트가 예쁘게 그려지도록 배열 생성
         flow_data = []
         for m in range(1, 13):
             flow_data.append({
                 "name": f"{m}월",
-                "count": month_dict.get(m, 0)
+                "finished_count": flow_dict[m]["finished_count"],
+                "reading_count": flow_dict[m]["reading_count"]
             })
 
         return {
@@ -22829,6 +24606,24 @@ def parse_author_string(author_str: str):
         
     return contributors
 
+# 파일 경로: backend/utils/author_parser.py
+import re
+
+def cleanse_author_name(raw_name: str) -> str:
+    if not raw_name:
+        return ""
+    stopwords = [r'장편소설', r'소설', r'지음', r'저', r'옮김', r'번역', r'그림', r'엮음', r'지은이', r'글']
+    cleaned = raw_name
+    for word in stopwords:
+        cleaned = re.sub(rf'\s*{word}\s*', '', cleaned)
+    return cleaned.strip()
+
+def get_merge_mapping():
+    return {
+        "J.R.R. Tolkien": "J.R.R. 톨킨",
+        "J. R. R. 톨킨": "J.R.R. 톨킨",
+    }
+
 
 ============================================================
 FILE PATH: backend/utils/__init__.py
@@ -22907,31 +24702,109 @@ async def download_and_update_cover(edition_id: int, image_url: str, db_session_
 
 
 ============================================================
+FILE PATH: backend/utils/isni_generator.py
+============================================================
+# 파일 경로: backend/utils/isni_generator.py
+# 역할 및 기능: ISNI가 없는 작가를 식별하기 위해 BoooknTalk 전용 임시 ISNI 코드를 생성합니다.
+
+import uuid
+from datetime import datetime
+
+# 함수 기능: 'BKT-TEMP-연월일시-UUID' 형태의 절대 중복되지 않는 임시 ISNI 코드를 반환합니다.
+def generate_temp_isni() -> str:
+    """
+    예시 출력: BKT-TEMP-20260325-a1b2c3d4
+    """
+    # 날짜를 넣어두면 이 임시 코드가 언제 발급되었는지 추적하기 쉽습니다.
+    date_str = datetime.now().strftime("%Y%m%d")
+    # UUID 앞 8자리만 잘라서 써도 충돌 확률은 0에 가깝습니다.
+    short_uuid = str(uuid.uuid4()).split('-')[0]
+    
+    return f"BKT-TEMP-{date_str}-{short_uuid}"
+
+
+============================================================
+FILE PATH: backend/utils/genre_parser.py
+============================================================
+# 파일 경로: backend/utils/genre_parser.py
+# 역할 및 기능: 외부 API(국립중앙도서관 KDC, 네이버 카테고리 등)에서 유입되는 파편화된 장르 데이터를 BoooknTalk만의 8대 표준 장르로 필터링하고 매핑하는 공통 유틸리티입니다.
+
+import re
+
+# ==========================================
+# [상수] BoooknTalk 8대 표준 장르 정의
+# (오타 방지 및 중앙 관리를 위해 상수로 선언합니다)
+# ==========================================
+GENRE_LITERATURE = "문학 / 소설"
+GENRE_ESSAY = "에세이 / 논픽션"
+GENRE_HUMANITIES = "인문 / 사회 / 철학"
+GENRE_BUSINESS = "경제 / 경영"
+GENRE_SCIENCE = "과학 / IT / 공학"
+GENRE_PRACTICAL = "실용 / 취미 / 예술"
+GENRE_KIDS_COMIC = "아동 / 만화"
+GENRE_ACADEMIC = "학술 / 전문서"
+GENRE_ETC = "기타"
+
+def map_to_standard_genre(kdc_code: str, naver_category: str = "") -> str:
+    """
+    기능: KDC 분류 기호나 텍스트 카테고리를 분석하여 BoooknTalk 표준 장르 문자열을 반환합니다.
+    """
+    kdc_str = str(kdc_code).strip() if kdc_code else ""
+    cat_str = str(naver_category).lower() if naver_category else ""
+
+    # 1. KDC 코드가 숫자로 들어온 경우 우선 판별 (가장 정확도가 높음)
+    if kdc_str and any(c.isdigit() for c in kdc_str):
+        pure_num = "".join(filter(str.isdigit, kdc_str))
+        if len(pure_num) >= 1:
+            prefix = pure_num[0]
+            
+            if prefix == '8':
+                if pure_num.startswith(('814', '824', '834', '844', '804')):
+                    return GENRE_ESSAY
+                return GENRE_LITERATURE
+            elif prefix in ['1', '2', '9']: return GENRE_HUMANITIES
+            elif prefix == '3':
+                if pure_num.startswith('32'): return GENRE_BUSINESS
+                return GENRE_HUMANITIES
+            elif prefix in ['4', '5']: return GENRE_SCIENCE
+            elif prefix == '6': return GENRE_PRACTICAL
+            elif prefix == '7': return GENRE_ACADEMIC
+            elif prefix == '0': return GENRE_ETC
+
+    # 2. 숫자가 없거나 판별 불가할 경우 텍스트 키워드 기반 판별
+    if cat_str:
+        if any(x in cat_str for x in ['소설', '시', '희곡', '문학']): return GENRE_LITERATURE
+        if any(x in cat_str for x in ['에세이', '수필', '산문', '논픽션']): return GENRE_ESSAY
+        if any(x in cat_str for x in ['인문', '철학', '역사', '사회', '종교', '정치']): return GENRE_HUMANITIES
+        if any(x in cat_str for x in ['경제', '경영', '재테크', '투자', '비즈니스']): return GENRE_BUSINESS
+        if any(x in cat_str for x in ['과학', 'it', '컴퓨터', '공학', '의학', '기술']): return GENRE_SCIENCE
+        if any(x in cat_str for x in ['실용', '취미', '예술', '여행', '요리', '건강', '자기계발']): return GENRE_PRACTICAL
+        if any(x in cat_str for x in ['아동', '유아', '청소년', '그림책', '만화', '웹툰', '그래픽노블']): return GENRE_KIDS_COMIC
+        if any(x in cat_str for x in ['학습', '교재', '전공', '수험서', '사전', '어학']): return GENRE_ACADEMIC
+
+    # KDC도 없고 키워드도 안 맞으면 기존 카테고리명 유지 (단, 숫자만 달랑 있으면 '기타' 처리)
+    return GENRE_ETC if kdc_str.isdigit() else (cat_str or GENRE_ETC)
+
+
+============================================================
 FILE PATH: backend/services/insight_service.py
 ============================================================
 # 파일 경로: backend/services/insight_service.py
-# 역할 및 기능: 유저의 도서 상태 변경(완독, 읽는 중 등) 이벤트 발생 시, 무거운 JOIN 없이 인사이트 통계 테이블의 카운트만 가볍게(+1/-1) 동기화하는 서비스 로직입니다. (옵션 A 룰 및 작가 정제기 적용 완료)
 
 import re
 from sqlalchemy.orm import Session
 from datetime import datetime
 import models
 
-# ▼▼▼ 파이썬용 메인 작가 파싱 함수 (프론트엔드 포맷터 완벽 이식) ▼▼▼
 def get_primary_author(author_str: str) -> str:
-    if not author_str:
-        return "작자 미상"
-    
+    if not author_str: return "작자 미상"
     parts = re.split(r'[,;]', author_str)
     first_author = parts[0].strip()
-    
     first_author = re.sub(r'^(지은이|저자|글|옮긴이|역자|그림)\s*[:|：]\s*', '', first_author)
     first_author = re.sub(r'\s*\([^)]+\)$', '', first_author)
     first_author = re.sub(r'(지음|저|옮김|역|그림)$', '', first_author)
-    
     return first_author.strip()
 
-# 기능: 유저의 도서 상태(status)가 변경될 때, 요약, 월별, 장르, 작가 통계 테이블을 찾아 카운트를 정밀하게 증감시킵니다.
 def sync_insight_on_status_change(
     db: Session, 
     user_id: int, 
@@ -22941,88 +24814,326 @@ def sync_insight_on_status_change(
     genre_name: str = "기타", 
     author_name: str = "알 수 없음"
 ):
-    # ==========================================
+    # ▼▼▼ [해결 1] 대소문자 무시 & 공백 제거 (프론트에서 'wish'로 넘어와도 'WISH'로 완벽 매핑)
+    old_s = old_status.strip().upper() if old_status else None
+    new_s = new_status.strip().upper() if new_status else None
+
+    print(f"🚀 [인사이트 트리거 발동] User {user_id} | 상태 변경: {old_s} ➡️ {new_s}")
+
     # 1. 요약 테이블 (InsightSummary) 업데이트
-    # ==========================================
     summary = db.query(models.InsightSummary).filter(models.InsightSummary.user_id == user_id).first()
     if not summary:
-        summary = models.InsightSummary(user_id=user_id)
+        summary = models.InsightSummary(
+            user_id=user_id, total_read_books=0, total_reading_books=0, total_wish_books=0,
+            total_memos=0, total_short_reviews=0, total_long_reviews=0
+        )
         db.add(summary)
-        db.flush() # ID 확보를 위해 임시 반영
+        db.flush()
 
-    # 과거 상태 차감 (-1)
-    if old_status == "WISH":
+    # ▼▼▼ [해결 2] 기존 DB에 값이 None일 경우를 대비한 안전 장치
+    summary.total_wish_books = summary.total_wish_books or 0
+    summary.total_reading_books = summary.total_reading_books or 0
+    summary.total_read_books = summary.total_read_books or 0
+
+    # 과거 상태 차감
+    if old_s == "WISH":
         summary.total_wish_books = max(0, summary.total_wish_books - 1)
-    elif old_status == "READING":
+    elif old_s == "READING":
         summary.total_reading_books = max(0, summary.total_reading_books - 1)
-    elif old_status in ["COMPLETED", "FINISHED", "READ"]: # 기존 FINISHED/READ 호환 유지
+    elif old_s in ["COMPLETED", "FINISHED", "READ"]:
         summary.total_read_books = max(0, summary.total_read_books - 1)
 
-    # 새로운 상태 증가 (+1)
-    if new_status == "WISH":
+    # 새로운 상태 증가
+    if new_s == "WISH":
         summary.total_wish_books += 1
-    elif new_status == "READING":
+    elif new_s == "READING":
         summary.total_reading_books += 1
-    elif new_status in ["COMPLETED", "FINISHED", "READ"]:
+    elif new_s in ["COMPLETED", "FINISHED", "READ"]:
         summary.total_read_books += 1
 
+    # 터미널에서 즉시 확인 가능한 팩트 로그!
+    print(f"📊 [트리거 계산 결과] WISH: {summary.total_wish_books}, READING: {summary.total_reading_books}, COMPLETED: {summary.total_read_books}")
+
     # ==========================================
-    # 2. [옵션 A] 장르 및 작가 통계 업데이트 (WISH, READING, COMPLETED 모두 포함)
+    # 2. 장르 및 작가 통계 업데이트 (옵션 A)
     # ==========================================
     valid_preference_statuses = ["COMPLETED", "FINISHED", "READ", "READING", "WISH"]
     
-    was_in_preference = old_status in valid_preference_statuses
-    is_in_preference = new_status in valid_preference_statuses
+    was_in_preference = old_s in valid_preference_statuses
+    is_in_preference = new_s in valid_preference_statuses
 
-    # 상태가 바뀌었지만, 여전히 취향 그룹 내에 있다면(예: WISH -> READING) 
-    # 카운트는 동일한 1표이므로 DB를 건드리지 않습니다. (완벽한 성능 최적화!)
     if was_in_preference != is_in_preference:
         count_change = 1 if is_in_preference else -1
         
-        # 작가명 세탁 가동!
         primary_author = get_primary_author(author_name)
         genre_to_save = genre_name if genre_name else "기타"
 
-        # 장르 통계 가감
+        # 장르 
         genre = db.query(models.InsightGenre).filter_by(user_id=user_id, genre_name=genre_to_save).first()
         if not genre:
             genre = models.InsightGenre(user_id=user_id, genre_name=genre_to_save, read_count=0)
             db.add(genre)
-        genre.read_count = max(0, genre.read_count + count_change)
+        genre.read_count = max(0, (genre.read_count or 0) + count_change)
 
-        # 작가 통계 가감
+        # 작가
         author = db.query(models.InsightAuthor).filter_by(user_id=user_id, author_name=primary_author).first()
         if not author:
             author = models.InsightAuthor(user_id=user_id, author_name=primary_author, read_count=0)
             db.add(author)
-        author.read_count = max(0, author.read_count + count_change)
+        author.read_count = max(0, (author.read_count or 0) + count_change)
 
     # ==========================================
-    # 3. 월별 독서 흐름 (오직 '완독' 상태일 때만)
+    # 3. 월별 독서 흐름 (완독일 때만)
     # ==========================================
-    was_completed = old_status in ["COMPLETED", "FINISHED", "READ"]
-    is_completed = new_status in ["COMPLETED", "FINISHED", "READ"]
+    was_completed = old_s in ["COMPLETED", "FINISHED", "READ"]
+    is_completed = new_s in ["COMPLETED", "FINISHED", "READ"]
 
-    # 새롭게 완독한 경우 (+1)
-    if not was_completed and is_completed:
-        if finish_date:
-            year, month = finish_date.year, finish_date.month
-            monthly = db.query(models.InsightMonthly).filter_by(user_id=user_id, year=year, month=month).first()
-            if not monthly:
-                monthly = models.InsightMonthly(user_id=user_id, year=year, month=month, read_count=1)
-                db.add(monthly)
+    if not was_completed and is_completed and finish_date:
+        monthly = db.query(models.InsightMonthly).filter_by(user_id=user_id, year=finish_date.year, month=finish_date.month).first()
+        if not monthly:
+            monthly = models.InsightMonthly(user_id=user_id, year=finish_date.year, month=finish_date.month, read_count=1)
+            db.add(monthly)
+        else:
+            monthly.read_count = (monthly.read_count or 0) + 1
+
+    elif was_completed and not is_completed and finish_date:
+        monthly = db.query(models.InsightMonthly).filter_by(user_id=user_id, year=finish_date.year, month=finish_date.month).first()
+        if monthly:
+            monthly.read_count = max(0, (monthly.read_count or 0) - 1)
+
+
+============================================================
+FILE PATH: backend/services/author_service.py
+============================================================
+# 파일 경로: backend/services/author_service.py
+# 역할 및 기능: BoooknTalk DB에 등록된 작가/번역가의 도서 데이터를 우선 조회하고, DB에 없는 미등록 도서만 알라딘 API에서 가져와 타임라인 형태로 병합합니다.
+
+import httpx
+import os
+from collections import defaultdict
+from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+from models import Contributor, WorkContributor, Work, Edition, Record
+from sqlalchemy import func
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(BASE_DIR, ".env")
+load_dotenv(env_path)
+
+# 함수 기능: 내부 DB(광장)를 우선 훑고, 미등록 도서만 알라딘 도서 검색 API(ItemSearch)를 통해 가져와 연도별로 병합하여 반환합니다.
+async def get_author_timeline(name: str, role: str, db: Session):
+    timeline_dict = defaultdict(list)
+    db_isbns = set()
+
+    # =========================================================
+    # [STEP 1] BoooknTalk DB(광장) 우선 조회
+    # =========================================================
+    db_role = 'author' if role == "writer" else 'translator'
+
+    db_results = db.query(Edition.isbn, Edition.publish_date, Work.title, Work.id.label('work_id')) \
+        .select_from(Edition) \
+        .join(Work, Edition.work_id == Work.id) \
+        .join(WorkContributor, WorkContributor.work_id == Work.id) \
+        .join(Contributor, WorkContributor.contributor_id == Contributor.id) \
+        .filter(
+            Contributor.name == name, 
+            func.lower(WorkContributor.role) == db_role  # 💡 핵심: DB 값을 소문자로 변환 후 비교!
+        ).all()
+
+    print(f"🟢 [DB 조회 완료] '{name}'의 광장 등록 도서 {len(db_results)}건 발견!")
+
+    for row in db_results:
+        isbn, pub_date, title, work_id = row
+        if not isbn: continue
+        
+        clean_isbn = isbn.split(" ")[-1] if " " in isbn else isbn
+        db_isbns.add(clean_isbn)
+
+        year = str(pub_date.year) if pub_date else "알 수 없음"
+        date_str = pub_date.strftime("%Y-%m-%d") if pub_date else "알 수 없음"
+
+        timeline_dict[year].append({
+            "id": work_id, 
+            "title": title,
+            "publish_date": date_str,
+            "is_in_square": True, 
+            "isbn": clean_isbn
+        })
+
+    # =========================================================
+    # [STEP 2] 알라딘 API 조회 (미등록 도서 채우기)
+    # =========================================================
+    aladin_url = "http://www.aladin.co.kr/ttb/api/ItemSearch.aspx"
+    aladin_key = os.getenv("ALADIN_TTB_KEY", "")
+
+    params = {
+        "ttbkey": aladin_key,
+        "Query": name,
+        "QueryType": "Author", # 작가/번역가 이름으로 직접 검색
+        "MaxResults": 50,
+        "start": 1,
+        "SearchTarget": "Book",
+        "output": "js", # JSON 형식으로 받기
+        "Version": "20131101",
+        "Sort": "PublishTime" # 최신 출간일 순
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(aladin_url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                items = data.get("item", [])
+                
+                print(f"🟢 [API 조회 완료] 알라딘에서 '{name}'의 도서 {len(items)}건 가져옴!")
+
+                for idx, item in enumerate(items):
+                    api_isbn = item.get("isbn13", "")
+                    author_str = item.get("author", "")
+                    
+                    # 역할에 따른 필터링 (알라딘은 지은이, 옮긴이가 한 줄로 들어옴)
+                    if role == "writer" and "지은이" not in author_str and "저자" not in author_str:
+                        # 완벽한 필터링을 위해 지은이가 아니면 패스 (옵션)
+                        pass 
+                    if role == "translator" and "옮긴이" not in author_str and "역자" not in author_str:
+                        pass
+
+                    if api_isbn and api_isbn not in db_isbns:
+                        # 알라딘 pubDate 포맷은 "YYYY-MM-DD"
+                        pubdate = item.get("pubDate", "")
+                        year = pubdate.split("-")[0] if "-" in pubdate else "알 수 없음"
+                        
+                        timeline_dict[year].append({
+                            "id": f"api_{api_isbn}", 
+                            "title": item.get("title", ""),
+                            "publish_date": pubdate,
+                            "is_in_square": False, 
+                            "isbn": api_isbn
+                        })
             else:
-                monthly.read_count += 1
+                print(f"🔴 [API 에러]: 알라딘 API가 {response.status_code}를 반환했습니다.")
+        except Exception as e:
+            print(f"🔴 [통신 에러]: 알라딘 연결 실패. ({e})")
 
-    # 기존 완독을 취소한 경우 (-1)
-    elif was_completed and not is_completed:
-        if finish_date:
-            year, month = finish_date.year, finish_date.month
-            monthly = db.query(models.InsightMonthly).filter_by(user_id=user_id, year=year, month=month).first()
-            if monthly:
-                monthly.read_count = max(0, monthly.read_count - 1)
+    # =========================================================
+    # [STEP 3] 데이터 병합 및 연도별 정렬
+    # =========================================================
+    result = [
+        {"year": year, "books": books}
+        for year, books in sorted(timeline_dict.items(), key=lambda x: x[0], reverse=True)
+    ]
 
-    # db.commit()은 이 함수를 호출하는 라우터의 메인 트랜잭션에서 한 번에 처리하도록 남겨둡니다.
+    return result
+
+# ▼ [NEW] 내 서재에 등록된 작가/번역가 목록과 완독 권수 추출 함수
+async def get_user_contributors(user_id: int, role: str, db: Session):
+    """
+    기능: 특정 유저의 서재(Record)를 뒤져서, 등록된 책들의 작가나 번역가 목록을 완독 권수와 함께 반환합니다.
+    """
+    # ▼ [수정] 무조건 소문자로 기준을 잡습니다.
+    db_role = 'author' if role == "writer" else 'translator'
+
+    results = db.query(
+        Contributor.id,
+        Contributor.name,
+        func.count(Record.id).label('read_count')
+    ).select_from(Record) \
+     .join(Edition, Record.edition_id == Edition.id) \
+     .join(Work, Edition.work_id == Work.id) \
+     .join(WorkContributor, Work.id == WorkContributor.work_id) \
+     .join(Contributor, WorkContributor.contributor_id == Contributor.id) \
+     .filter(
+         Record.user_id == user_id, 
+         func.lower(WorkContributor.role) == db_role  # 💡 핵심: DB 값을 소문자로 변환 후 비교!
+     ) \
+     .group_by(Contributor.id, Contributor.name) \
+     .order_by(func.count(Record.id).desc()) \
+     .all()
+
+    # 프론트엔드 리스트 UI 규격에 맞게 변환
+    author_list = [
+        {
+            "id": row.id, 
+            "name": row.name, 
+            "read_count": row.read_count
+        }
+        for row in results
+    ]
+
+    print(f"🟢 [DB 조회 완료] 유저 {user_id}의 서재에서 {role} {len(author_list)}명 발견!")
+    return author_list
+
+
+============================================================
+FILE PATH: backend/services/admin_service.py
+============================================================
+# 파일 경로: backend/services/admin_service.py
+from sqlalchemy.orm import Session
+from models import Contributor, WorkContributor
+
+# ▼ [수정] 정규식 대신 정확도 100%의 끝단어(endswith) 매칭 슬라이서로 변경!
+def cleanse_author_name(raw_name: str) -> str:
+    if not raw_name:
+        return ""
+    
+    cleaned = raw_name
+    # 띄어쓰기가 포함된 명확한 꼬리표만 타겟팅하여 '김소설' 같은 정상 이름 파괴 방지
+    stopwords_with_space = [' 장편소설', ' 소설', ' 지음', ' 저', ' 옮김', ' 번역', ' 그림', ' 엮음', ' 지은이', ' 글']
+    
+    for word in stopwords_with_space:
+        if cleaned.endswith(word):
+            # 꼬리표 길이만큼 정확하게 싹둑 자르기
+            cleaned = cleaned[:len(cleaned)-len(word)].strip()
+            
+    return cleaned
+
+def get_merge_mapping():
+    return {
+        "J.R.R. Tolkien": "J.R.R. 톨킨",
+        "J. R. R. 톨킨": "J.R.R. 톨킨",
+    }
+
+async def run_cleansing_and_merge(db: Session):
+    try:
+        print("🧹 [백엔드 로그] 딥 클렌징 수술을 시작합니다...")
+        contributors = db.query(Contributor).all()
+        merge_map = get_merge_mapping()
+        
+        cleansed_count = 0
+        merged_count = 0
+
+        for contributor in contributors:
+            original_name = contributor.name
+            cleaned_name = cleanse_author_name(original_name)
+            final_name = merge_map.get(cleaned_name, cleaned_name)
+
+            if original_name != final_name:
+                target_contributor = db.query(Contributor).filter(Contributor.name == final_name).first()
+
+                if target_contributor and target_contributor.id != contributor.id:
+                    print(f"🔗 [병합] '{original_name}' -> '{final_name}'")
+                    work_links = db.query(WorkContributor).filter(WorkContributor.contributor_id == contributor.id).all()
+                    for link in work_links:
+                        link.contributor_id = target_contributor.id
+                    
+                    if not target_contributor.original_name and original_name != cleaned_name:
+                        target_contributor.original_name = original_name
+                    
+                    db.delete(contributor)
+                    merged_count += 1
+                else:
+                    print(f"✨ [정제] '{original_name}' -> '{final_name}'")
+                    contributor.name = final_name
+                    cleansed_count += 1
+        
+        db.commit()
+        print(f"✅ [백엔드 로그] 수술 완료! 정제 {cleansed_count}건, 병합 {merged_count}건")
+        return {"status": "success", "message": f"작업 완료! 꼬리표 정제 {cleansed_count}건, 파편화 병합 {merged_count}건 성공!"}
+
+    except Exception as e:
+        db.rollback()
+        print(f"🔴 [백엔드 에러] {str(e)}")
+        return {"status": "error", "message": f"수술 중 에러: {str(e)}"}
 
 
 ============================================================

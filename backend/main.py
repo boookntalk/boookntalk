@@ -12,13 +12,13 @@ from utils import parse_author_string, download_and_update_cover
 from sqlalchemy import or_, func, desc
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
-from routers import home, memos, editions, library
+from routers import home, memos, editions, library, authors, insights, admin
 from dotenv import load_dotenv
 from collections import defaultdict
 from utils.author_parser import parse_author_string
-from routers import insights
 from services.insight_service import sync_insight_on_status_change
 from utils.genre_parser import map_to_standard_genre # ▼▼▼ [NEW] 공통 장르 필터 임포트 ▼▼▼
+from services.author_service import get_or_create_contributor
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 
@@ -156,6 +156,8 @@ app.include_router(memos.router)
 app.include_router(editions.router)
 app.include_router(library.router)
 app.include_router(insights.router)
+app.include_router(authors.router)
+app.include_router(admin.router)
 
 # ▼▼▼ [필수 확인] CORS 미들웨어 설정 ▼▼▼
 app.add_middleware(
@@ -594,65 +596,34 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
         db.commit()
         db.refresh(work)
         
-        # 3-2. 작가 정보 및 알라딘 ID 연동 (기존 로직 유지)
+        # 3-2. 작가 정보 연동 (BoooknTalk ISNI 엔진 적용)
         try:
-            if hasattr(request, 'detailed_authors') and request.detailed_authors:
-                for a_info in request.detailed_authors:
-                    a_name = a_info.get('authorName')
-                    a_id = a_info.get('authorId')
-                    a_role = "Author"
-
-                    contributor = db.query(models.Contributor).filter(
-                        or_(
-                            models.Contributor.aladin_author_id == a_id,
-                            models.Contributor.name == a_name
-                        )
-                    ).first()
-
-                    if not contributor:
-                        contributor = models.Contributor(name=a_name, aladin_author_id=a_id)
-                        db.add(contributor)
-                        db.commit()
-                        db.refresh(contributor)
-                    elif a_id and not contributor.aladin_author_id:
-                        contributor.aladin_author_id = a_id
-                        db.commit()
-
-                    link_exists = db.query(models.WorkContributor).filter(
-                        models.WorkContributor.work_id == work.id,
-                        models.WorkContributor.contributor_id == contributor.id
-                    ).first()
-
-                    if not link_exists:
-                        link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=a_role)
-                        db.add(link)
-                        db.commit()
-            else:
-                parsed_authors = parse_author_string(request.author)
-                for p_auth in parsed_authors:
-                    contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
-                    if not contributor:
-                        contributor = models.Contributor(
-                            name=p_auth['name'], 
-                            original_name=p_auth.get('original_name')
-                        )
-                        db.add(contributor)
-                        db.commit()
-                        db.refresh(contributor)
-                    elif p_auth.get('original_name') and not contributor.original_name:
-                        contributor.original_name = p_auth.get('original_name')
-                        db.commit()
+            # 알라딘 전용 로직(detailed_authors)을 완전히 제거하고, 
+            # 자체 개발한 parse_author_string 엔진으로 저자 텍스트를 정밀 분해합니다.
+            parsed_authors = parse_author_string(request.author)
+            
+            for p_auth in parsed_authors:
+                # 💡 [핵심] 우리가 만든 완벽한 ISNI 엔진을 호출하여 작가를 찾거나 신규 등록(BKT-TEMP 발급)합니다!
+                # 추후 프론트엔드에서 국립중앙도서관의 진짜 ISNI를 넘겨주면 None 자리에 넣으면 됩니다.
+                contributor = get_or_create_contributor(db=db, name=p_auth['name'], provided_isni=None)
+                
+                # 정제된 원어 이름(original_name)이 있다면 안전하게 업데이트
+                if p_auth.get('original_name') and not contributor.original_name:
+                    contributor.original_name = p_auth.get('original_name')
+                    db.commit()
+                
+                # 작품(Work)과 참여자(Contributor)를 역할(role)에 맞게 연결
+                link_exists = db.query(models.WorkContributor).filter(
+                    models.WorkContributor.work_id == work.id,
+                    models.WorkContributor.contributor_id == contributor.id,
+                    models.WorkContributor.role == p_auth['role']
+                ).first()
+                
+                if not link_exists:
+                    link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
+                    db.add(link)
+                    db.commit()
                     
-                    link_exists = db.query(models.WorkContributor).filter(
-                        models.WorkContributor.work_id == work.id,
-                        models.WorkContributor.contributor_id == contributor.id,
-                        models.WorkContributor.role == p_auth['role']
-                    ).first()
-                    
-                    if not link_exists:
-                        link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
-                        db.add(link)
-                        db.commit()
         except Exception as e:
             print(f"⚠️ 작가 정보 저장 중 오류 발생 (무시됨): {e}")
     else:

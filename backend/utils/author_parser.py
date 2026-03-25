@@ -88,3 +88,21 @@ def parse_author_string(author_str: str):
         contributors.append({'name': t_n, 'original_name': t_orig, 'role': 'Author'})
         
     return contributors
+
+# 파일 경로: backend/utils/author_parser.py
+import re
+
+def cleanse_author_name(raw_name: str) -> str:
+    if not raw_name:
+        return ""
+    stopwords = [r'장편소설', r'소설', r'지음', r'저', r'옮김', r'번역', r'그림', r'엮음', r'지은이', r'글']
+    cleaned = raw_name
+    for word in stopwords:
+        cleaned = re.sub(rf'\s*{word}\s*', '', cleaned)
+    return cleaned.strip()
+
+def get_merge_mapping():
+    return {
+        "J.R.R. Tolkien": "J.R.R. 톨킨",
+        "J. R. R. 톨킨": "J.R.R. 톨킨",
+    }

@@ -1,10 +1,10 @@
-// 파일 경로: src/app/(main)/my-authors/timeline/page.tsx
-// 역할 및 기능: BoooknTalk의 '나의 작가 > 작가 타임라인' URL 라우트를 활성화하고 클라이언트 컴포넌트를 연결하는 서버 컴포넌트
+// 파일 경로: src/app/(main)/my-authors/writer/page.tsx
+// 역할 및 기능: BoooknTalk의 '나의 작가 > 작가' 라우트를 처리하고 화면 분할된 클라이언트 컴포넌트를 렌더링합니다.
 
 import React from 'react';
-import AuthorTimelineClient from './AuthorTimelineClient';
+import AuthorWriterClient from './AuthorWriterClient';
 
-// 함수 기능: /my-authors/timeline 경로에 접근 시 AuthorTimelineClient UI를 화면에 렌더링합니다.
-export default function AuthorTimelinePage() {
-    return <AuthorTimelineClient />;
+// 함수 기능: 작가 페이지 진입 시 좌우 분할된 AuthorWriterClient UI를 화면에 그립니다.
+export default function AuthorWriterPage() {
+    return <AuthorWriterClient />;
 }

@@ -1,11 +1,10 @@
-// 파일 경로: src/component/admin/AdminPanel.tsx
+// 파일 경로: src/components/admin/AdminPanel.tsx
 'use client';
 
 import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-// ▼▼▼ [추가] 장르 세탁용 마법 지팡이(Wand2) 아이콘 임포트 ▼▼▼
-import { ShieldAlert, RefreshCw, Trash2, GitMerge, Loader2, Wand2 } from 'lucide-react';
+import { ShieldAlert, RefreshCw, Trash2, GitMerge, Wand2, Sparkles } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -19,23 +18,33 @@ export default function AdminPanel() {
     const [targetId, setTargetId] = useState('');
     const [sourceIds, setSourceIds] = useState('');
 
-    // [핵심 방어벽] 오직 'boookntalk@gmail.com' 계정만 이 화면을 볼 수 있습니다!
+    // [핵심 방어벽] 오직 관리자 계정만 이 화면을 볼 수 있습니다!
     if (session?.user?.email !== 'boookntalk@gmail.com') {
-        return null; // 일반 유저에게는 흔적조차 보이지 않습니다.
+        return null;
     }
 
-    // ▼▼▼ [NEW] 장르 데이터 일괄 세탁 엔진 가동 ▼▼▼
+    // ==========================================
+    // ▼▼▼ [NEW] 공통 도트 로딩 애니메이션 컴포넌트 ▼▼▼
+    // ==========================================
+    const DotLoader = () => (
+        <div className="flex items-center justify-center gap-1.5 w-full">
+            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        </div>
+    );
+
+    // ==========================================
+    // [기존 1] 장르 데이터 일괄 세탁
+    // ==========================================
     const handleSyncGenres = async () => {
         if (!confirm("과거 도서의 장르 데이터를 북앤톡 8대 표준 장르로 일괄 세탁하시겠습니까?")) return;
         setIsLoading(true);
         try {
             const res = await fetch(`${API_URL}/api/admin/sync-genres`);
             const data = await res.json();
-            if (res.ok) {
-                toast.success(data.message);
-            } else {
-                throw new Error(data.detail);
-            }
+            if (res.ok) toast.success(data.message);
+            else throw new Error(data.detail);
         } catch (error: any) {
             toast.error(error.message || "장르 세탁 작업 중 오류가 발생했습니다.");
         } finally {
@@ -43,7 +52,9 @@ export default function AdminPanel() {
         }
     };
 
-    // 1. 작가 데이터 정제 (다리미 엔진 가동)
+    // ==========================================
+    // [기존 2] 작가 데이터 전면 재정제
+    // ==========================================
     const handleSyncAuthors = async () => {
         if (!confirm("모든 작가 데이터를 재정제하시겠습니까? (시간이 다소 소요될 수 있습니다)")) return;
         setIsLoading(true);
@@ -59,7 +70,27 @@ export default function AdminPanel() {
         }
     };
 
-    // 2. 고아 데이터 대청소
+    // ==========================================
+    // ▼▼▼ [NEW 3] 꼬리표 클렌징 및 파편화 병합 (우리가 방금 만든 기능!) ▼▼▼
+    // ==========================================
+    const handleDeepCleanse = async () => {
+        if (!confirm("오염된 꼬리표를 제거하고 파편화된 작가를 병합하시겠습니까?")) return;
+        setIsLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/admin/cleanse-authors`, { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) toast.success(`수술 완료! ${data.message}`);
+            else throw new Error(data.message);
+        } catch (error: any) {
+            toast.error(error.message || "딥 클렌징 작업 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ==========================================
+    // [기존 4] 고아 데이터 대청소
+    // ==========================================
     const handleCleanup = async () => {
         if (!confirm("연결되지 않은 찌꺼기 작가 데이터를 영구 삭제하시겠습니까?")) return;
         setIsLoading(true);
@@ -75,13 +106,15 @@ export default function AdminPanel() {
         }
     };
 
-    // 3. 수동 강제 병합 (Merge)
+    // ==========================================
+    // [기존 5] 수동 강제 병합
+    // ==========================================
     const handleMerge = async () => {
         if (!targetId || !sourceIds) {
             toast.error("진짜 작가 ID와 가짜 작가 ID를 모두 입력해주세요.");
             return;
         }
-        if (!confirm(`${sourceIds}번 작가들을 ${targetId}번 작가로 강제 흡수하시겠습니까? (이 작업은 되돌릴 수 없습니다)`)) return;
+        if (!confirm(`${sourceIds}번 작가들을 ${targetId}번 작가로 강제 흡수하시겠습니까?`)) return;
         
         setIsLoading(true);
         try {
@@ -91,9 +124,7 @@ export default function AdminPanel() {
                 toast.success(data.message);
                 setTargetId('');
                 setSourceIds('');
-            } else {
-                throw new Error(data.detail);
-            }
+            } else throw new Error(data.detail);
         } catch (error: any) {
             toast.error(error.message || "병합 작업 중 오류가 발생했습니다.");
         } finally {
@@ -113,34 +144,49 @@ export default function AdminPanel() {
                 <div className="flex flex-col gap-4">
                     <h3 className="text-sm font-bold text-gray-700">데이터베이스 일괄 정비</h3>
                     
-                    {/* ▼▼▼ [NEW] 장르 세탁 버튼 추가 ▼▼▼ */}
+                    {/* 장르 세탁 */}
                     <Button 
                         onClick={handleSyncGenres} 
                         disabled={isLoading}
                         variant="outline" 
-                        className="justify-start border-purple-200 text-purple-700 hover:bg-purple-50"
+                        className={`border-purple-200 text-purple-700 hover:bg-purple-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}
                     >
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                        장르 데이터 일괄 세탁 (Sync Genres)
+                        {isLoading ? <DotLoader /> : <><Wand2 className="mr-2 h-4 w-4" /> 장르 데이터 일괄 세탁 (Sync Genres)</>}
                     </Button>
 
+                    {/* 기존 정제 */}
                     <Button 
                         onClick={handleSyncAuthors} 
                         disabled={isLoading}
                         variant="outline" 
-                        className="justify-start border-blue-200 text-blue-700 hover:bg-blue-50"
+                        className={`border-blue-200 text-blue-700 hover:bg-blue-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}
                     >
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                        작가 데이터 전면 재정제 (Sync Authors)
+                        {isLoading ? <DotLoader /> : <><RefreshCw className="mr-2 h-4 w-4" /> 작가 데이터 전면 재정제 (Sync Authors)</>}
                     </Button>
+
+                    {/* ▼▼▼ [수정] 인라인 스타일로 justify-start 충돌 완벽 무력화 ▼▼▼ */}
+                    <Button 
+                        onClick={handleDeepCleanse} 
+                        disabled={isLoading}
+                        variant="outline" 
+                        style={{ justifyContent: isLoading ? 'center' : 'flex-start' }}
+                        className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all w-full"
+                    >
+                        {isLoading ? (
+                            <DotLoader />
+                        ) : (
+                            <><Sparkles className="mr-2 h-4 w-4" /> 오염 데이터 딥 클렌징 (Cleanse & Merge)</>
+                        )}
+                    </Button>
+
+                    {/* 고아 청소 */}
                     <Button 
                         onClick={handleCleanup} 
                         disabled={isLoading}
                         variant="outline" 
-                        className="justify-start border-red-200 text-red-700 hover:bg-red-50"
+                        className={`border-red-200 text-red-700 hover:bg-red-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}
                     >
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                        찌꺼기 데이터 영구 삭제 (Cleanup)
+                        {isLoading ? <DotLoader /> : <><Trash2 className="mr-2 h-4 w-4" /> 찌꺼기 데이터 영구 삭제 (Cleanup)</>}
                     </Button>
                 </div>
 
@@ -159,6 +205,7 @@ export default function AdminPanel() {
                                 value={targetId} 
                                 onChange={(e) => setTargetId(e.target.value)}
                                 className="h-9 text-sm"
+                                disabled={isLoading}
                             />
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -168,15 +215,15 @@ export default function AdminPanel() {
                                 value={sourceIds} 
                                 onChange={(e) => setSourceIds(e.target.value)}
                                 className="h-9 text-sm"
+                                disabled={isLoading}
                             />
                         </div>
                         <Button 
                             onClick={handleMerge} 
                             disabled={isLoading}
-                            className="w-full mt-2 bg-[#1d1d1f] hover:bg-[#333] text-white"
+                            className={`w-full mt-2 bg-[#1d1d1f] hover:bg-[#333] text-white transition-all ${isLoading ? 'justify-center' : 'justify-center'}`}
                         >
-                            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            강제 흡수 병합 실행
+                            {isLoading ? <DotLoader /> : "강제 흡수 병합 실행"}
                         </Button>
                     </div>
                 </div>
