@@ -89,6 +89,8 @@ class RegisterBookRequest(BaseModel):
     language: Optional[str] = "한국어"
     size_mm: Optional[str] = None
     price: Optional[int] = None
+    # ▼▼▼ [NEW] 프론트엔드에서 보내는 상태값을 받을 수 있도록 길을 열어줌 ▼▼▼
+    status: Optional[str] = "WISH"
 
 # [추가] 상세 페이지용 응답 스키마
 class RecordDetailResponse(BaseModel):
@@ -724,7 +726,7 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
     new_record = models.Record(
         user_id=user.id,
         edition_id=edition.id,
-        status="WISH",
+        status=request.status,
         rating=0.0
     )
     db.add(new_record)
@@ -734,7 +736,7 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
     sync_insight_on_status_change(
         db=db,
         user_id=user.id,
-        old_status=None,          
+        old_status=None,      
         new_status=new_record.status, # "WISH"
         finish_date=new_record.finish_date,
         genre_name=work.category if work else "기타",
@@ -954,6 +956,9 @@ async def read_user_records(
         pass
     elif status == "REVIEW":
         query = query.filter(models.Record.short_review != None, models.Record.short_review != "")
+    elif status == "COMPLETED":
+        # 💡 [NEW 핵심 패치] 완독 상태 요청 시 COMPLETED와 FINISHED를 모두 묶어서 찾아줍니다!
+        query = query.filter(models.Record.status.in_(["COMPLETED", "FINISHED"]))
     else:
         query = query.filter(models.Record.status == status)
 
@@ -1924,6 +1929,9 @@ async def get_mypage_stats(
     
     # ▼▼▼ [복구 1] 읽고 싶은 책 카운트 변수 추가 ▼▼▼
     wish_books = [r for r in records if r.status == 'WISH']
+
+    # ▼▼▼ [NEW] 읽기 전 도서 배열 추출! ▼▼▼
+    unread_books = [r for r in records if r.status == 'UNREAD']
     
     rated_books = [r for r in records if r.rating is not None and r.rating > 0]
     avg_rating = sum(r.rating for r in rated_books) / len(rated_books) if rated_books else 0.0
@@ -1978,6 +1986,8 @@ async def get_mypage_stats(
             "total_finished": len(finished_books),
             "total_reading": len(reading_books),
             "total_wish": len(wish_books), # 아까 복구했던 읽고 싶은 책
+            # ▼▼▼ [NEW] 읽기 전 도서 권수 프론트로 전송! ▼▼▼
+            "total_unread": len(unread_books),
             "avg_rating": round(avg_rating, 1),
             "total_pages": total_pages
         },

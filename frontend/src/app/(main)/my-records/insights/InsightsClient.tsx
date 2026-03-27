@@ -175,7 +175,9 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                         <h2 className="text-[16px] font-bold text-[#1d1d1f] mb-4">
                             서재의 지형 <span className="text-[12px] text-gray-400 font-medium ml-2">{selectedYear === 'all' ? '(전체 누적)' : `(${selectedYear}년 기준)`}</span>
                         </h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        
+                        {/* ▼▼▼ [수정] 카드가 5개가 되므로 lg:grid-cols-5 로 확장! ▼▼▼ */}
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                             
                             <InsightCard className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
@@ -194,6 +196,17 @@ export default function InsightsClient({ userEmail }: InsightsClientProps) {
                                 <div>
                                     <p className="text-[13px] font-bold text-gray-400 mb-1">읽고 있는 책</p>
                                     <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{summary?.total_reading || 0}<span className="text-[14px] font-bold text-gray-400 ml-1">권</span></p>
+                                </div>
+                            </InsightCard>
+
+                            {/* ▼▼▼ [NEW] '읽기 전' 도서 카드 신규 추가 (서재 화면 뱃지와 동일한 Violet 계열) ▼▼▼ */}
+                            <InsightCard className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full bg-violet-50 flex items-center justify-center shrink-0">
+                                    <BookOpen size={24} className="text-violet-500" />
+                                </div>
+                                <div>
+                                    <p className="text-[13px] font-bold text-gray-400 mb-1">읽기 전</p>
+                                    <p className="text-[24px] font-black text-[#1d1d1f] leading-none">{summary?.total_unread || 0}<span className="text-[14px] font-bold text-gray-400 ml-1">권</span></p>
                                 </div>
                             </InsightCard>
 

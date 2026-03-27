@@ -20,6 +20,7 @@ class Contributor(Base):
     external_id = Column(String(100), nullable=True, index=True) 
     
     original_name = Column(String, nullable=True)
+    isni = Column(String, unique=True, nullable=True)
     description = Column(String, nullable=True)
 
     # [수정] 외부 API 연동 시점 기록 (타임라인 캐싱 갱신용)
@@ -50,7 +51,6 @@ class WorkContributor(Base):
     # ▼▼▼ [NEW] ISNI 컬럼 추가 ▼▼▼
     # 실제 ISNI는 16자리 숫자(또는 X 포함)지만, 'BKT-TEMP-...' 같은 임시 코드를 넣기 위해 넉넉히 50으로 잡습니다.
     # 동명이인 구별의 핵심 키가 되므로 index=True로 검색 속도를 높이고, 중복을 막기 위해 unique=True를 줍니다.
-    isni = Column(String(50), unique=True, index=True, nullable=True)
 
 # 1. 사용자 (Users) - OAuth 및 프로 버전 대응
 class User(Base):

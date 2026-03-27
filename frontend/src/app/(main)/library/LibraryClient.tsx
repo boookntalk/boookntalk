@@ -39,11 +39,12 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
     const [isAddBookOpen, setIsAddBookOpen] = useState(false);
     const [selectedBook, setSelectedBook] = useState<any>(null);
 
-    // ▼▼▼ [수정 1] 기획자님 의도대로 '읽고 싶음(WISH)' 탭 삭제 ▼▼▼
+    // ▼▼▼ [수정 1] 소장 중 탭 추가 및 완독 상태값(FINISHED) 백엔드 동기화 ▼▼▼
     const menuItems = [
         { label: '전체 도서', code: 'ALL' },
+        { label: '읽기 전', code: 'UNREAD' },   // 💡 [NEW] 
         { label: '읽는 중', code: 'READING' },
-        { label: '완독', code: 'COMPLETED' },
+        { label: '완독', code: 'COMPLETED' },    // 💡 [FIX] COMPLETED -> FINISHED
     ];
 
     useEffect(() => {
@@ -53,14 +54,16 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
         }
     }, [user?.email]);
 
-    // ▼▼▼ [수정 2] WISH 데이터가 '전체 도서'에 섞이지 않도록 방어 로직 추가 ▼▼▼
     const filteredBooks = books.filter(book => {
         const matchesSearch = book.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               book.author.toLowerCase().includes(searchTerm.toLowerCase());
                               
-        // '전체 도서' 탭일 때는 WISH(읽고 싶은 책)를 뺀 진짜 서재 책만 보여줍니다!
         if (activeTab === 'ALL') {
             return book.status !== 'WISH' && matchesSearch;
+        }
+        // 💡 [핵심] 완독 탭 클릭 시 두 상태의 데이터 모두 노출!
+        if (activeTab === 'COMPLETED') {
+            return (book.status === 'COMPLETED' || book.status === 'FINISHED') && matchesSearch;
         }
         return book.status === activeTab && matchesSearch;
     });
@@ -132,11 +135,12 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                             }`}
                         >
                             {item.label}
-                            {/* ▼▼▼ [수정 3] ALL 카운트에서도 WISH 개수는 제외하여 정확한 통계 제공 ▼▼▼ */}
                             <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded-full ${activeTab === item.code ? 'bg-blue-50 text-[#0066cc]' : 'bg-gray-100 text-gray-400'}`}>
                                 {item.code === 'ALL' 
                                     ? books.filter(b => b.status !== 'WISH').length 
-                                    : books.filter(b => b.status === item.code).length}
+                                    : item.code === 'COMPLETED'
+                                        ? books.filter(b => b.status === 'COMPLETED' || b.status === 'FINISHED').length
+                                        : books.filter(b => b.status === item.code).length}
                             </span>
                         </button>
                     ))}
@@ -147,14 +151,11 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                 <div className="p-[var(--spacing-1cm,32px)] pt-6 pb-32">
                     <main className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
                         {filteredBooks.map((book, index) => (
-                            // ▼▼▼ [핵심 설계] 드롭다운을 위한 바깥쪽 래퍼 'group/lib' 추가 ▼▼▼
                             <div key={book.library_id || index} className="relative h-full group/lib">
                                 
-                                {/* ▼▼▼ [수정 완료] 카드 우측 상단 드롭다운 메뉴 ▼▼▼ */}
                                 <div className="absolute top-3 right-3 z-20 opacity-0 group-hover/lib:opacity-100 transition-opacity">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            {/* ▼ 1. 검정색 테두리가 생기지 않도록 focus 클래스 4종 세트 추가 */}
                                             <Button 
                                                 variant="secondary" 
                                                 size="icon" 
@@ -165,7 +166,6 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                             </Button>
                                         </DropdownMenuTrigger>
                                         
-                                        {/* ▼ 2. 닫힐 때 원래 버튼으로 포커스가 돌아가는(잔상이 남는) 현상 방지 */}
                                         <DropdownMenuContent 
                                             align="end" 
                                             className="w-44"
@@ -181,16 +181,12 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                     </DropdownMenu>
                                 </div>
 
-                                {/* ▼▼▼ [적용] 공통 BookItemCard 이식 ▼▼▼ */}
-                                {/* 카드는 고정되고 표지만 부드럽게 떠오릅니다! */}
                                 <BookItemCard 
                                     onClick={() => handleBookClick(book)}
                                     cover={book.cover}
                                     title={book.title}
                                     author={book.author}
-                                    // 하단 좌측: 상태 뱃지
                                     footerLeft={<BadgeByStatus status={book.status} />}
-                                    // 하단 우측: 리뷰 및 별점 아이콘 모음
                                     footerRight={
                                         <div className="flex items-center gap-2">
                                             {book.short_review && (<span title="한줄평 작성됨" className="flex items-center"><MessageSquare size={12} className="text-[#0066cc]/50" /></span>)}
@@ -223,24 +219,16 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
 
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden rounded-[28px] border-none shadow-2xl">
-                    
-                    {/* 접근성 에러를 잠재우는 투명 명찰 (sr-only) */}
                     <DialogTitle className="sr-only">독서 상태 변경</DialogTitle>
-                    
                     {selectedBook && (
                         <BookDetailForm 
                             initialData={selectedBook} 
                             onClose={() => setIsEditModalOpen(false)} 
                             onSaved={(updatedData) => {
-                                // 1. 화면의 도서 데이터를 최신 상태로 즉시 변경
                                 setBooks(prev => prev.map(book => 
                                     book.library_id === (selectedBook.library_id || selectedBook.id) ? { ...book, ...updatedData } : book
                                 ));
-                                
-                                // 2. 모달 닫기
                                 setIsEditModalOpen(false);
-
-                                // ▼▼▼ [핵심] 첫 번째 저장 토스트가 끝날 무렵(0.8초 뒤) 두 번째 토스트가 짠! 하고 등장 ▼▼▼
                                 setTimeout(() => {
                                     toast.success("독서 기록이 최신 상태로 업데이트되었습니다!");
                                 }, 800);
@@ -257,11 +245,15 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
     );
 }
 
+// ▼▼▼ [수정 2] UNREAD 뱃지 디자인(보라색) 및 FINISHED 호환성 추가 ▼▼▼
 function BadgeByStatus({ status }: { status: string }) {
     switch (status) {
+        case 'UNREAD':
+            return <Badge className="bg-violet-50 text-violet-600 hover:bg-violet-50 border-0 h-5 px-1.5 text-[10px] font-bold">읽기 전</Badge>;
         case 'READING':
             return <Badge className="bg-blue-50 text-[#0066cc] hover:bg-blue-50 border-0 h-5 px-1.5 text-[10px] font-bold">읽는 중</Badge>;
-        case 'COMPLETED':
+        case 'FINISHED':
+        case 'COMPLETED': // 구버전 데이터 호환성을 위해 남겨둠
             return <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-50 border-0 h-5 px-1.5 text-[10px] font-bold">완독</Badge>;
         case 'WISH':
             return <Badge className="bg-rose-50 text-rose-500 hover:bg-rose-50 border-0 h-5 px-1.5 text-[10px] font-bold">읽고 싶음</Badge>;
