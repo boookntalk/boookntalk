@@ -60,7 +60,8 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True) 
     nickname = Column(String(50), unique=True, index=True, nullable=True) 
     bio = Column(String(200), nullable=True) 
-    profile_image = Column(String, nullable=True) 
+    profile_image = Column(String, nullable=True)
+    role = Column(String(20), default="USER", nullable=False)
     
     is_premium = Column(Boolean, default=False) 
     subscription_end_date = Column(DateTime(timezone=True), nullable=True)
@@ -385,3 +386,12 @@ class InsightContributor(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'contributor_id', 'role', name='uq_user_contributor_role'),
     )
+    
+class GenreTrainingData(Base):
+    __tablename__ = "genre_training_data"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # 네이버나 알라딘에서 던져준 원본 텍스트 (예: "국내도서>IT/컴퓨터>머신러닝")
+    raw_keyword = Column(String, unique=True, index=True, nullable=False)
+    # 관리자가 교정한 8대 표준 장르 (예: "과학 / IT / 공학")
+    standard_genre = Column(String, nullable=False)
