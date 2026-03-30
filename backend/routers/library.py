@@ -1,5 +1,6 @@
 # 파일 경로: backend/routers/library.py
 
+from utils.global_category_mapper import get_category_hierarchy
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -161,3 +162,4 @@ def delete_record(record_id: int, db: Session = Depends(get_db)):
     db.delete(record)
     db.commit()
     return {"message": "정상적으로 삭제되었습니다."}
+

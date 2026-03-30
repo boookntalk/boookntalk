@@ -19,6 +19,8 @@ from utils.author_parser import parse_author_string
 from services.insight_service import sync_insight_on_status_change
 from utils.genre_parser import map_to_standard_genre # ▼▼▼ [NEW] 공통 장르 필터 임포트 ▼▼▼
 from services.author_service import get_or_create_contributor
+from utils.global_category_mapper import get_category_hierarchy # ▼▼▼ [NEW] 글로벌 장르 파서 임포트 ▼▼▼
+
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 import subprocess
@@ -1177,6 +1179,18 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
     # ▲▲▲ 계산 로직 끝 ▲▲▲
 
     final_description = getattr(current_edition, 'description', None) or getattr(work, 'description', "")
+
+    # ▼▼▼ [NEW] 하이브리드 3-Depth 장르 파서 가동 ▼▼▼
+    raw_kdc = getattr(current_edition, 'kdc_code', None)
+    raw_ddc = getattr(current_edition, 'ddc_code', None)
+    
+    # KDC나 DDC 코드가 DB에 있다면 우리가 만든 3-Depth 번역기를 돌립니다!
+    if raw_kdc or raw_ddc:
+        final_category = get_category_hierarchy(kdc_code=raw_kdc, ddc_code=raw_ddc)
+    else:
+        # 코드가 없으면 기존 DB에 있는 2-Depth ("문학 / 소설") 데이터를 그대로 살립니다.
+        final_category = getattr(work, 'category', "기타 / 미분류")
+    # ▲▲▲ 수술 완료 ▲▲▲
     
     return {
         "record": {
@@ -1188,20 +1202,18 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "short_review": record.short_review,
             "current_page": record.current_page,
             "reading_format": record.reading_format,
-            "tags": tag_list,
+            "tags": tag_list, # 👈 이건 유저가 개인적으로 단 '서재 태그' (기존 유지)
             "is_short_review_public": record.is_short_review_public
         },
         "work": {
             "id": work.id,
             "title": work.title,
             "author": work.author,
-            "category": work.category,
+            "category": final_category, 
             "original_title": getattr(work, 'original_title', None),
             "description": getattr(work, 'description', ""),
-            
-            # ▼▼▼ [NEW] 응답 데이터에 통계 추가 ▼▼▼
             "average_rating": average_rating,
-            "rating_count": rating_count
+            "rating_count": rating_count,
         },
         "current_edition": {
             "id": current_edition.id,

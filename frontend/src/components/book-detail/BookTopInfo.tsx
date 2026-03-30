@@ -53,11 +53,15 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
     const progressPercent = Math.min(Math.round((currentPage / totalPage) * 100), 100);
     const currentStatus = (record?.status || '').toLowerCase();
     
-    // ▼▼▼ 카테고리 계층 및 마이크로 태그 데이터 전처리 ▼▼▼
-    // 임시로 '/' 기준으로 배열화 (추후 백엔드에서 배열로 넘겨주면 바로 대체 가능)
-    const categoryHierarchy = work?.category ? work.category.split('/').map((c: string) => c.trim()) : ['문학', '영미문학', '소설'];
-    // AI가 추출한 책 고유의 마이크로 태그 (백엔드 연동 전 임시 데이터)
-    const displayTags = work?.tags || record?.tags || ['법정스릴러', '로맨스', '범죄'];
+    // 1. 카테고리 (백엔드에서 값이 안 넘어오면 깔끔하게 '미분류' 하나만 띄움)
+    const categoryHierarchy = work?.category 
+        ? work.category.split('/').map((c: string) => c.trim()) 
+        : ['미분류'];
+
+    // 2. AI 마이크로 태그 (값이 아예 없거나 빈 배열이면, 가짜 데이터를 띄우지 않고 아예 안 보이게 처리!)
+    const displayTags = (work?.tags && work.tags.length > 0) 
+        ? work.tags 
+        : [];
 
     const statusIndex = currentStatus === 'finished' ? 2 : currentStatus === 'reading' ? 1 : 0;
 
@@ -147,20 +151,6 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
                                                     </span>
                                                     {idx < categoryHierarchy.length - 1 && <span className="mx-1.5 text-gray-300">›</span>}
                                                 </React.Fragment>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* 3. AI 마이크로 태그 (구분선 + 태그) */}
-                                {displayTags && displayTags.length > 0 && (
-                                    <>
-                                        <span className="text-gray-300">|</span>
-                                        <div className="flex items-center gap-1.5">
-                                            {displayTags.map((tag: string, idx: number) => (
-                                                <span key={idx} className="px-2 py-0.5 bg-blue-50 text-[#0066cc] text-[11px] font-black rounded-md flex items-center shadow-sm">
-                                                    <Hash size={10} className="mr-0.5 opacity-70" /> {tag}
-                                                </span>
                                             ))}
                                         </div>
                                     </>

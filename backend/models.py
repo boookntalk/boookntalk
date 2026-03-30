@@ -134,6 +134,12 @@ class Edition(Base):
     # --- [추가] 서지정보 Level 2 & 3 대응 물리적/메타 데이터 ---
     binding_type = Column(String, nullable=True) # 제본 형태 (예: 양장본, 반양장본, 전자책)
     kdc_code = Column(String, nullable=True)     # 도서 분류 기호 (KDC)
+
+    # ▼▼▼ [NEW] 글로벌 서비스를 위한 도서관 절대 좌표 ▼▼▼
+    ddc_code = Column(String, nullable=True)     # 듀이 십진분류 (영미권/글로벌 기준)
+    udc_code = Column(String, nullable=True)     # 국제 십진분류 (유럽/글로벌 기준)
+    # ▲▲▲ 추가 완료 ▲▲▲
+
     language = Column(String, default="한국어")  # 출간 언어
     size_mm = Column(String, nullable=True)      # 물리적 크기 (예: 152x223mm)
     price = Column(Integer, nullable=True)       # 정가
