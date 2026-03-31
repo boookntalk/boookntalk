@@ -570,7 +570,7 @@ export default function Home() {
                             <h2 className="text-[22px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
                                 <Layers className="text-[#0066cc]" size={20} /> BnTalkers의 긴줄평
                             </h2>
-                            <p className="text-[14px] text-gray-500 mt-1 font-medium">BnTalkers가 정성껏 남긴 깊이 있는 긴줄평</p>
+                            <p className="text-[14px] text-gray-500 mt-1 font-medium">BnTalkers가 정성껏 남긴 깊이 있는 리뷰</p>
                         </div>
                     </div>
                     
@@ -677,17 +677,30 @@ export default function Home() {
 
                                     <div className="relative z-10 flex flex-col h-full justify-between">
                                         <div>
-                                            {feed.type === 'sentence' ? (
-                                                <Quote size={14} className="text-[#0066cc] mb-2 opacity-90" />
-                                            ) : (
-                                                <div className="flex text-[#FFCC00] mb-2">
-                                                    {[...Array(Math.floor(feed.rating || 5))].map((_, i) => (
-                                                        <Star key={i} size={11} fill="currentColor" />
-                                                    ))}
-                                                </div>
-                                            )}
+                                            {/* [NEW] 직관적인 타입 구분 뱃지 및 별점 영역 */}
+                                            <div className="flex items-center justify-between mb-2.5">
+                                                {feed.type === 'sentence' ? (
+                                                    <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest bg-[#eaf4fd] text-[#0066cc] border border-[#0066cc]/10">
+                                                        <Quote size={10} /> 독서노트
+                                                    </div>
+                                                ) : (
+                                                    <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest bg-amber-50 text-amber-600 border border-amber-200/50">
+                                                        <MessageCircle size={10} /> 한줄평
+                                                    </div>
+                                                )}
+                                                
+                                                {/* 한줄평일 경우에만 우측에 별점을 우아하게 배치 */}
+                                                {feed.type !== 'sentence' && (
+                                                    <div className="flex text-[#FFCC00]">
+                                                        {[...Array(Math.floor(feed.rating || 5))].map((_, i) => (
+                                                            <Star key={i} size={10} fill="currentColor" />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                             
-                                            <p className={`text-[13px] md:text-[14px] leading-[1.5] break-keep tracking-tight line-clamp-3 ${
+                                            {/* [수정] 3줄 말줄임 (line-clamp-3) & 폰트 크기 최적화 */}
+                                            <p className={`text-[13px] md:text-[14px] leading-[1.6] break-keep tracking-tight line-clamp-3 ${
                                                 feed.type === 'sentence' 
                                                 ? 'font-serif font-bold text-[#1d1d1f] drop-shadow-sm' 
                                                 : 'font-medium text-gray-800'
