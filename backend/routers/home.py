@@ -195,74 +195,56 @@ def get_new_arrivals(days: int = 3, db: Session = Depends(get_db)):
 
 @router.get("/today-sentences")
 def get_today_sentences(user_email: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    고도화된 오늘의 문장(독서노트) API:
+    1. 40자 이상의 깊이 있는 공개 메모만 선별
+    2. User 테이블을 JOIN하여 작성자 닉네임(user) 추출 추가 👈 [NEW]
+    3. Memo 테이블에서 페이지 번호(page) 추출 추가 👈 [NEW]
+    4. 최대 3개까지만 랜덤 노출
+    """
     sentences = []
-    limit = 3
-
-    current_user = None
-    if user_email:
-        current_user = db.query(models.User).filter(models.User.email == user_email).first()
-
-    # 1. 로그인 유저 맞춤 데이터
-    if current_user:
-        wish_edition_ids = db.query(models.Record.edition_id).filter(
-            models.Record.user_id == current_user.id,
-            models.Record.status == 'WISH'
-        )
-
-        personalized_memos = db.query(models.Memo, models.Edition, models.Work)\
-            .join(models.Record, models.Memo.record_id == models.Record.id)\
-            .join(models.Edition, models.Record.edition_id == models.Edition.id)\
-            .join(models.Work, models.Edition.work_id == models.Work.id)\
-            .filter(
-                models.Record.edition_id.in_(wish_edition_ids), 
-                models.Memo.is_public == True,
-                models.Memo.user_id != current_user.id
-            )\
-            .order_by(func.random())\
-            .limit(2).all()
-            
-        sentences.extend(personalized_memos)
-
-    # 2. 나머지 빈자리 채우기
-    remaining_limit = limit - len(sentences)
-    if remaining_limit > 0:
-        exclude_ids = [m[0].id for m in sentences] if sentences else []
-        
-        popular_memos = db.query(models.Memo, models.Edition, models.Work)\
-            .join(models.Record, models.Memo.record_id == models.Record.id)\
-            .join(models.Edition, models.Record.edition_id == models.Edition.id)\
-            .join(models.Work, models.Edition.work_id == models.Work.id)\
-            .filter(
-                models.Memo.is_public == True,
-                ~models.Memo.id.in_(exclude_ids)
-            )\
-            .order_by(desc(models.Memo.created_at)) \
-            .limit(remaining_limit).all()
-            
-        sentences.extend(popular_memos)
-
-    results = []
-    themes = ['classic', 'aurora', 'glass']
     
-    for idx, (memo, edition, work) in enumerate(sentences):
-        results.append({
-            "id": memo.id,
-            "theme": themes[idx % len(themes)],
-            "text": f'"{memo.sentence}"',
-            "book": work.title,
-            "author": work.author,
-            "cover": edition.cover_image or ""
-        })
+    # [1] 고품질 문장 쿼리 (User 테이블 추가 JOIN)
+    # 쿼리에 models.User를 추가하여 유저 정보까지 한 번에 가져옵니다.
+    query = db.query(models.Memo, models.Edition, models.Work, models.User)\
+        .join(models.Record, models.Memo.record_id == models.Record.id)\
+        .join(models.User, models.Record.user_id == models.User.id)\
+        .join(models.Edition, models.Record.edition_id == models.Edition.id)\
+        .join(models.Work, models.Edition.work_id == models.Work.id)\
+        .filter(models.Memo.is_public == True, func.char_length(models.Memo.sentence) >= 40)\
+        .order_by(func.random())\
+        .limit(3).all()
 
-    # DB가 아예 텅 비었을 때의 기본값
-    if not results:
-        return [{
-            "id": 0, "theme": "classic", 
-            "text": '"사색이 없는 독서는 소화되지 않은 음식을 먹는 것과 같다."', 
-            "book": "BoooknTalk", "author": "에디터", "cover": ""
+    if query:
+        for memo, edition, work, user in query:
+            # 닉네임이 없으면 이메일 앞자리, 그것도 없으면 'BnTalker'로 예외 처리
+            user_name = user.nickname if user and user.nickname else (user.email.split('@')[0] if user else "BnTalker")
+            
+            sentences.append({
+                "id": memo.id,
+                "work_id": work.id, 
+                "text": memo.sentence,
+                "book": work.title,
+                "author": work.author,
+                "cover": edition.cover_image or "",
+                "user": user_name,               # 👈 [NEW] 프론트엔드로 닉네임 전달
+                "page": getattr(memo, 'page', getattr(models.Record, 'page', None)) # 👈 [NEW] 페이지 번호 전달 (Memo나 Record 모델 중 있는 곳에서 안전하게 추출)
+            })
+
+    # [2] 스마트 폴백: 데이터가 없을 때의 기본값에도 user와 page 규격 맞춤
+    if not sentences:
+        sentences = [{
+            "id": "intro_1",
+            "work_id": None,
+            "text": "사색이 없는 독서는 소화되지 않은 음식을 먹는 것과 같습니다. BoooknTalk에서 당신만의 깊은 문장을 기록하고 공유해보세요.",
+            "book": "BoooknTalk 사용 가이드",
+            "author": "에디터",
+            "cover": "",
+            "user": "BnTalk 최고관리자", # 폴백용 닉네임
+            "page": 1                   # 폴백용 페이지
         }]
 
-    return results
+    return sentences
 
 @router.get("/editor-pick")
 def get_editor_pick(db: Session = Depends(get_db)):
@@ -347,51 +329,85 @@ def get_cover_flow_books(db: Session = Depends(get_db)):
 @router.get("/readers-choice")
 def get_readers_choice(db: Session = Depends(get_db)):
     """
-    메인 화면 Section 1 우측 상단 (독자의 한줄평)
-    가장 최근에 픽(Pick) 되었거나 가장 최근에 리뷰가 달린 책 1권을 선정하고,
-    해당 책에 달린 모든 '공개된 한줄평' 리스트를 함께 묶어서 반환합니다.
+    메인 화면 Section 1 우측 상단 (독자의 한줄평) - [다중 도서 포커스 적용]
+    가장 최근에 달린 고퀄리티(4점 이상) 한줄평 5개를 책 구분 없이 가져옵니다.
     """
-    # 1. 대상 책 선정 (과거 데이터의 NULL 값까지 포용하도록 isnot(False) 사용)
-    target_record = db.query(models.Record)\
-        .filter(
-            models.Record.is_short_review_public.isnot(False), # True 이거나 비어있는(NULL) 데이터 모두 허용
-            models.Record.short_review.isnot(None),
-            models.Record.short_review != ""
-        )\
-        .order_by(desc(models.Record.is_editor_pick), desc(models.Record.added_at))\
-        .first()
-
-    if not target_record:
-        return None
-
-    target_edition = target_record.edition
-    target_work = target_edition.work
-
-    # 2. 해당 책(Work)에 달린 모든 공개 한줄평 가져오기
-    reviews = db.query(models.Record)\
+    reviews = db.query(models.Record, models.Edition, models.Work, models.User)\
         .join(models.Edition, models.Record.edition_id == models.Edition.id)\
+        .join(models.Work, models.Edition.work_id == models.Work.id)\
+        .outerjoin(models.User, models.Record.user_id == models.User.id)\
         .filter(
-            models.Edition.work_id == target_work.id,
-            models.Record.is_short_review_public.isnot(False), # 여기도 동일하게 적용
-            models.Record.short_review.isnot(None),
-            models.Record.short_review != ""
-        ).order_by(desc(models.Record.added_at)).all()
+            models.Record.is_short_review_public == True,
+            models.Record.short_review != None,
+            models.Record.short_review != "",
+            models.Record.rating >= 4.0 # 고퀄리티 보장 필터
+        )\
+        .order_by(desc(models.Record.added_at))\
+        .limit(5).all()
 
-    # 3. 프론트엔드로 보낼 리뷰 배열 조립
-    review_list = []
-    for r in reviews:
-        user_name = r.user.nickname or r.user.email.split('@')[0] if r.user else "익명"
-        review_list.append({
-            "id": r.id,
-            "text": r.short_review,
+    results = []
+    for record, edition, work, user in reviews:
+        user_name = user.nickname if user and user.nickname else (user.email.split('@')[0] if user else "익명")
+        results.append({
+            "id": record.id,
+            "isbn": edition.isbn,
+            "work_id": work.id, # 👈 광장 이동을 위한 식별자
+            "title": work.title,
+            "author": work.author,
+            "cover": edition.cover_image or "",
+            "text": record.short_review,
             "user": user_name,
-            "rating": r.rating
+            "rating": record.rating
         })
+        
+    return results if results else None
 
-    return {
-        "isbn": target_edition.isbn,
-        "title": target_work.title,
-        "author": target_work.author,
-        "cover": target_edition.cover_image,
-        "reviews": review_list
-    }
+@router.get("/best-long-reviews")
+def get_best_long_reviews(limit: int = 2, db: Session = Depends(get_db)):
+    """
+    메인 화면 매거진 섹션용: 'BoooknTalkers의 깊은 사색'
+    - 조건: 긴줄평(LongReview) 존재, 100자 이상, Record 평점 4점 이상, 최신순
+    """
+    # [수정됨] models.LongReview 테이블을 명시적으로 JOIN 합니다.
+    reviews = db.query(models.Record, models.Edition, models.Work, models.User, models.LongReview)\
+        .join(models.Edition, models.Record.edition_id == models.Edition.id)\
+        .join(models.Work, models.Edition.work_id == models.Work.id)\
+        .join(models.LongReview, models.Record.id == models.LongReview.record_id) \
+        .outerjoin(models.User, models.Record.user_id == models.User.id)\
+        .filter(
+            func.char_length(models.LongReview.content) >= 100, # 👈 LongReview 테이블의 content 길이를 체크
+            models.Record.rating >= 4.0
+        )\
+        .order_by(desc(models.LongReview.updated_at))\
+        .limit(limit).all()
+
+    results = []
+    # 쿼리에서 가져온 LongReview 객체를 풀어서 사용합니다.
+    for record, edition, work, user, long_review in reviews:
+        user_name = user.nickname if user and user.nickname else (user.email.split('@')[0] if user else "익명")
+        results.append({
+            "id": record.id,
+            "work_id": work.id,
+            "title": work.title,
+            "author": work.author,
+            "cover": edition.cover_image or "",
+            "text": long_review.content, # 👈 LongReview 객체에서 텍스트 추출
+            "user": user_name,
+            "rating": record.rating,
+            "created_at": long_review.updated_at.isoformat() if long_review.updated_at else ""
+        })
+        
+    if not results:
+        results = [{
+            "id": "fallback_long_1",
+            "work_id": None,
+            "title": "데미안",
+            "author": "헤르만 헤세",
+            "cover": "",
+            "text": "새는 알을 깨고 나온다. 알은 곧 세계다. 태어나려고 하는 자는 하나의 세계를 파괴하지 않으면 안 된다. 이 책을 읽고 나의 세계가 완전히 무너지고 새로 태어나는 경험을 했습니다. 진정한 나를 찾아가는 여정에 대한 깊은 통찰이 담겨 있습니다.",
+            "user": "BoooknTalk 에디터",
+            "rating": 5.0,
+            "created_at": ""
+        }]
+        
+    return results
