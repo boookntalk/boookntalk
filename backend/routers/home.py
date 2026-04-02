@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc
-from typing import Optional
+from typing import Optional, List
 from database import get_db
-from sqlalchemy import asc
+from sqlalchemy import asc, func, desc
 from datetime import datetime, timedelta  # ▼ 날짜 계산을 위해 추가된 모듈
 import models
 
@@ -410,4 +410,60 @@ def get_best_long_reviews(limit: int = 2, db: Session = Depends(get_db)):
             "created_at": ""
         }]
         
+    return results
+
+@router.get("/trending-tags")
+def get_trending_tags(days: int = 3, limit: int = 12, db: Session = Depends(get_db)):
+    # 1. 기준 시간 설정 (현재 시간으로부터 3일 전)
+    target_date = datetime.now() - timedelta(days=days)
+    
+    # 2. RecordTag(한줄평 태그)에서 최근 사용된 태그 집계
+    record_tags_query = db.query(
+        models.RecordTag.tag_id.label('tag_id'), # 👈 [핵심 수정] 명시적 라벨 추가!
+        func.count(models.RecordTag.tag_id).label('usage_count')
+    ).filter(
+        models.RecordTag.created_at >= target_date
+    ).group_by(models.RecordTag.tag_id)
+
+    # 3. MemoTag(독서노트 태그)에서 최근 사용된 태그 집계
+    memo_tags_query = db.query(
+        models.MemoTag.tag_id.label('tag_id'), # 👈 [핵심 수정] 명시적 라벨 추가!
+        func.count(models.MemoTag.tag_id).label('usage_count')
+    ).filter(
+        models.MemoTag.created_at >= target_date
+    ).group_by(models.MemoTag.tag_id)
+
+    # 4. 두 쿼리를 UNION ALL로 합치고, 태그 ID별로 최종 합산을 수행
+    combined_subquery = record_tags_query.union_all(memo_tags_query).subquery()
+    
+    final_query = db.query(
+        models.Tag.name,
+        func.sum(combined_subquery.c.usage_count).label('total_count')
+    ).join(
+        models.Tag, models.Tag.id == combined_subquery.c.tag_id
+    ).group_by(
+        models.Tag.name
+    ).order_by(
+        desc('total_count')
+    ).limit(limit).all()
+
+    # 5. 프론트엔드에서 사용하기 편한 형태로 포맷팅
+    results = []
+    for tag_name, total_count in final_query:
+        results.append({
+            "text": f"#{tag_name}",
+            "count": int(total_count)
+        })
+
+    # 6. 스마트 폴백: 만약 3일간 태그 데이터가 부족하다면, BoooknTalk 기본 태그를 내려줍니다.
+    if not results:
+        results = [
+            {"text": "#인생책", "count": 100},
+            {"text": "#깊은여운", "count": 90},
+            {"text": "#위로가필요할때", "count": 80},
+            {"text": "#통찰력", "count": 70},
+            {"text": "#주말밤에", "count": 60},
+            {"text": "#생각의전환", "count": 50}
+        ]
+
     return results

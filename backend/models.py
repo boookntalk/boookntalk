@@ -209,16 +209,69 @@ class Memo(Base):
     user = relationship("User", back_populates="memos")
     record = relationship("Record", back_populates="memos")
 
-# 6. [New] 태그 및 감정 (프로 버전을 위한 신규 모델)
+# ===================================================================
+# 6. 태그 생태계 (Tag Ecosystem) - 실시간 트렌드 및 독서 DNA 분석용
+# ===================================================================
 class Tag(Base):
     __tablename__ = "tags"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(50), unique=True)
+    name = Column(String(50), unique=True, index=True, nullable=False) # 빠른 검색을 위해 index=True 필수
+    
+    # [NEW] 실시간 급상승 트렌드 분석을 위한 생성 시간 기록
+    created_at = Column(DateTime(timezone=True), server_default=func.now()) 
 
+    # 관계 설정
+    record_tags = relationship("RecordTag", back_populates="tag")
+    memo_tags = relationship("MemoTag", back_populates="tag")
+
+# 6-1. 한줄평(Record) - 태그 매핑
 class RecordTag(Base):
     __tablename__ = "record_tags"
-    record_id = Column(Integer, ForeignKey("user_library.id"), primary_key=True)
-    tag_id = Column(Integer, ForeignKey("tags.id"), primary_key=True)
+    record_id = Column(Integer, ForeignKey("user_library.id", ondelete="CASCADE"), primary_key=True)
+    tag_id = Column(Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+    
+    # [수정] 유저 탈퇴 시 데이터 보존! (ondelete="SET NULL" 및 nullable=True 적용)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tag = relationship("Tag", back_populates="record_tags")
+    record = relationship("Record")
+    user = relationship("User")
+
+# 6-2. 독서노트(Memo) - 태그 매핑
+class MemoTag(Base):
+    __tablename__ = "memo_tags"
+    memo_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
+    tag_id = Column(Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+    
+    # [수정] 유저 탈퇴 시 데이터 보존! (ondelete="SET NULL" 및 nullable=True 적용)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tag = relationship("Tag", back_populates="memo_tags")
+    memo = relationship("Memo")
+    user = relationship("User")
+
+# ===================================================================
+# [인사이트 및 통계 전용 영역] 테이블 리스트 가장 하단에 아래 테이블 추가!
+# ===================================================================
+
+# 기능: 유저의 '독서 DNA (워드 클라우드)' 시각화를 위한 태그 빈도수 역정규화 테이블. (나의 서재 대응)
+class InsightTag(Base):
+    __tablename__ = "insight_tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # [핵심] Tag 테이블을 Join하지 않고 바로 화면에 렌더링하기 위한 텍스트 캐싱
+    tag_name = Column(String(50), nullable=False) 
+    
+    use_count = Column(Integer, default=0) # 해당 유저가 이 태그를 사용한 총 횟수
+
+    # 동일 유저가 동일 태그에 대해 여러 로우를 생성하지 못하도록 고유 제약조건
+    __table_args__ = (
+        UniqueConstraint('user_id', 'tag_name', name='uq_user_tag'),
+    )
 
 # ▼▼▼ [NEW] 관리자용 닉네임 변경 이력 테이블 ▼▼▼
 class NicknameHistory(Base):

@@ -41,6 +41,8 @@ export default function Home() {
     // 컴포넌트 내부 상태 추가 (피드별 좋아요 상태 관리)
     const [likedFeeds, setLikedFeeds] = useState<Record<string, boolean>>({});
 
+    const [trendingTags, setTrendingTags] = useState<any[]>([]);
+
     const dragStartX = useRef<number | null>(null);
     const isDragging = useRef<boolean>(false);
     const isInitialized = useRef<boolean>(false);
@@ -251,14 +253,16 @@ export default function Home() {
             try {
                 const emailQuery = session?.user?.email ? `?user_email=${encodeURIComponent(session.user.email)}` : '';
                 
-                const [statsRes, ugcRes, arrivalsRes, sentencesRes, rcRes, coverFlowRes, longReviewsRes] = await Promise.all([
+                // trending-tags API 추가 호출!
+                const [statsRes, ugcRes, arrivalsRes, sentencesRes, rcRes, coverFlowRes, longReviewsRes, tagsRes] = await Promise.all([
                     fetch('http://localhost:8000/api/home/stats'),
                     fetch('http://localhost:8000/api/home/recent-ugc?limit=6'),
                     fetch('http://localhost:8000/api/home/new-arrivals?days=3'),
                     fetch(`http://localhost:8000/api/home/today-sentences${emailQuery}`),
                     fetch('http://localhost:8000/api/home/readers-choice'),
                     fetch('http://localhost:8000/api/home/cover-flow-books'),
-                    fetch('http://localhost:8000/api/home/best-long-reviews')
+                    fetch('http://localhost:8000/api/home/best-long-reviews'),
+                    fetch('http://localhost:8000/api/home/trending-tags?limit=8') // 👈 [NEW] 태그 API 추가!
                 ]);
 
                 const newData = {
@@ -269,6 +273,7 @@ export default function Home() {
                     readersChoice: rcRes.ok ? await rcRes.json() : null,
                     coverFlowBooks: coverFlowRes.ok ? await coverFlowRes.json() : [],
                     bestLongReviews: longReviewsRes.ok ? await longReviewsRes.json() : [],
+                    trendingTags: tagsRes.ok ? await tagsRes.json() : [], // 👈 [NEW] 상태 저장
                     sessionEmail: session?.user?.email || null
                 };
 
@@ -279,6 +284,7 @@ export default function Home() {
                 setReadersChoice(newData.readersChoice);
                 setCoverFlowBooks(newData.coverFlowBooks);
                 setBestLongReviews(newData.bestLongReviews);
+                setTrendingTags(newData.trendingTags); // 👈 [NEW] 상태 업데이트
                 
                 memoryCache = newData;
             } catch (error) {
@@ -290,16 +296,21 @@ export default function Home() {
         fetchHomeData();
     }, [session]);
 
-    const wordCloudTags = [
-        { text: '#인생책', style: 'text-[26px] font-black text-[#0066cc]' },
-        { text: '#깊은여운', style: 'text-[18px] font-bold text-gray-700' },
-        { text: '#위로가필요할때', style: 'text-[15px] font-medium text-teal-600' },
-        { text: '#통찰력', style: 'text-[22px] font-extrabold text-[#1d1d1f]' },
-        { text: '#주말밤에', style: 'text-[14px] font-semibold text-gray-400' },
-        { text: '#앉은자리에서완독', style: 'text-[17px] font-bold text-indigo-500' },
-        { text: '#생각의전환', style: 'text-[20px] font-black text-rose-500' },
-        { text: '#철학적인', style: 'text-[16px] font-medium text-amber-600' }
-    ];
+    // [2단계] 기존 하드코딩된 wordCloudTags 배열은 삭제하고 아래 로직을 추가!
+    // 기능: 태그의 순위(index)에 따라 폰트 크기와 색상을 다르게 렌더링하여 동적 워드 클라우드 생성
+    const getTagStyle = (index: number) => {
+        const styles = [
+            'text-[26px] font-black text-[#0066cc]',      // 1위: 가장 크고 메인 컬러
+            'text-[22px] font-extrabold text-[#1d1d1f]',  // 2위: 크고 진한 검정
+            'text-[20px] font-black text-rose-500',       // 3위: 포인트 컬러
+            'text-[18px] font-bold text-gray-700',        // 4위
+            'text-[17px] font-bold text-indigo-500',      // 5위
+            'text-[16px] font-medium text-amber-600',     // 6위
+            'text-[15px] font-medium text-teal-600',      // 7위
+            'text-[14px] font-semibold text-gray-400'     // 8위
+        ];
+        return styles[index % styles.length];
+    };
 
     const indexChars = ['All', 'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#'];
 
@@ -408,7 +419,7 @@ export default function Home() {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-[var(--spacing-1cm,32px)] items-stretch h-auto lg:min-h-[190px]">
                         
                         {/* 좌측: 오늘의 독서노트 (8비율) */}
-                        <div className="lg:col-span-8 relative rounded-[24px] overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.06)] group bg-[#1A2332] flex flex-col">
+                        <div className="lg:col-span-8 relative rounded-lg overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.06)] group bg-[#1A2332] flex flex-col">
                             {heroSentences.length > 0 ? (
                                 <>
                                     <div className="flex w-full h-full transition-transform duration-700 ease-in-out flex-1" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
@@ -492,7 +503,7 @@ export default function Home() {
 
                         {/* 우측: 독자의 한줄평 (4비율) */}
                         <div className="lg:col-span-4 flex flex-col h-full min-h-[190px]">
-                            <div className="flex-1 bg-[#FDFBF7] rounded-[24px] p-5 md:p-6 border border-[#EAE6DF] shadow-[0_4px_20px_rgba(0,0,0,0.04)] flex flex-col relative overflow-hidden group">
+                            <div className="flex-1 bg-[#FDFBF7] rounded-lg p-5 md:p-6 border border-[#EAE6DF] shadow-[0_4px_20px_rgba(0,0,0,0.04)] flex flex-col relative overflow-hidden group">
                                 <div className="absolute top-[-20px] right-[-20px] w-32 h-32 bg-[#D4AF37]/5 rounded-full blur-3xl group-hover:bg-[#D4AF37]/15 transition-colors duration-500 z-0"></div>
                                 <div className="relative z-10 flex flex-col h-full">
                                     <div className="flex items-center justify-between mb-3 shrink-0">
@@ -579,7 +590,7 @@ export default function Home() {
                             <div 
                                 key={review.id || idx} 
                                 onClick={() => handleSentenceClick(review)} 
-                                className="group cursor-pointer bg-white rounded-[24px] p-6 border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all duration-500 flex gap-5"
+                                className="group cursor-pointer bg-white rounded-lg p-6 border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all duration-500 flex gap-5"
                             >
                                 <div className="w-[100px] shrink-0">
                                     <div className="relative aspect-[1/1.45] rounded-lg overflow-hidden shadow-sm group-hover:-translate-y-1 transition-transform duration-300 border border-gray-100 bg-gray-50 flex items-center justify-center">
@@ -656,122 +667,113 @@ export default function Home() {
                                 <div 
                                     key={feed.id} 
                                     onClick={() => handleSentenceClick(feed)}
-                                    className="w-full aspect-square rounded-[20px] p-5 border border-gray-200/60 shadow-[0_4px_12px_rgba(0,0,0,0.04)] hover:shadow-xl hover:-translate-y-1 transition-all duration-500 cursor-pointer flex flex-col justify-between relative overflow-hidden group bg-white"
+                                    // [디자인 1] aspect-square -> aspect-[4/5] (세로로 약간 긴 직사각형)
+                                    // [디자인 2] 배경 이미지 제거 및 순백색(bg-white) 바탕 적용
+                                    className="w-full aspect-[4/5] rounded-lg p-5 border border-gray-200/80 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-500 cursor-pointer flex flex-col bg-white group"
                                 >
-                                    <div className="absolute inset-0 z-0 bg-gray-50">
-                                        {feed.cover ? (
-                                            <>
-                                                <Image 
-                                                    src={feed.cover} 
-                                                    alt="Background Cover"
-                                                    fill
-                                                    className="object-cover transition-transform duration-700 group-hover:scale-110 blur-[2px]" 
-                                                    unoptimized 
-                                                />
-                                                <div className="absolute inset-0 bg-white/85 backdrop-blur-[1px] transition-colors duration-500 group-hover:bg-white/70" />
-                                            </>
+                                    {/* 1. 상단: 직관적인 타입 뱃지 & 별점 */}
+                                    <div className="flex items-center justify-between mb-3 shrink-0">
+                                        {feed.type === 'sentence' ? (
+                                            <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest bg-[#eaf4fd] text-[#0066cc] border border-[#0066cc]/10">
+                                                <Quote size={10} /> 독서노트
+                                            </div>
                                         ) : (
-                                            <div className="w-full h-full bg-[#f5f5f7]" />
+                                            <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest bg-amber-50 text-amber-600 border border-amber-200/50">
+                                                <MessageCircle size={10} /> 한줄평
+                                            </div>
+                                        )}
+                                        
+                                        {feed.type !== 'sentence' && (
+                                            <div className="flex text-[#FFCC00]">
+                                                {[...Array(Math.floor(feed.rating || 5))].map((_, i) => (
+                                                    <Star key={i} size={10} fill="currentColor" />
+                                                ))}
+                                            </div>
                                         )}
                                     </div>
 
-                                    <div className="relative z-10 flex flex-col h-full justify-between">
-                                        <div>
-                                            {/* [NEW] 직관적인 타입 구분 뱃지 및 별점 영역 */}
-                                            <div className="flex items-center justify-between mb-2.5">
-                                                {feed.type === 'sentence' ? (
-                                                    <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest bg-[#eaf4fd] text-[#0066cc] border border-[#0066cc]/10">
-                                                        <Quote size={10} /> 독서노트
-                                                    </div>
-                                                ) : (
-                                                    <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black tracking-widest bg-amber-50 text-amber-600 border border-amber-200/50">
-                                                        <MessageCircle size={10} /> 한줄평
-                                                    </div>
-                                                )}
-                                                
-                                                {/* 한줄평일 경우에만 우측에 별점을 우아하게 배치 */}
-                                                {feed.type !== 'sentence' && (
-                                                    <div className="flex text-[#FFCC00]">
-                                                        {[...Array(Math.floor(feed.rating || 5))].map((_, i) => (
-                                                            <Star key={i} size={10} fill="currentColor" />
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            
-                                            {/* [수정] 3줄 말줄임 (line-clamp-3) & 폰트 크기 최적화 */}
-                                            <p className={`text-[13px] md:text-[14px] leading-[1.6] break-keep tracking-tight line-clamp-3 ${
-                                                feed.type === 'sentence' 
-                                                ? 'font-serif font-bold text-[#1d1d1f] drop-shadow-sm' 
-                                                : 'font-medium text-gray-800'
-                                            }`}>
-                                                {feed.text}
-                                            </p>
-                                        </div>
+                                    {/* 2. 중단: 본문 텍스트 (가독성 1000% 상승) */}
+                                    <div className="flex-1 overflow-hidden relative">
+                                        <p className={`text-[13px] md:text-[14px] leading-[1.65] break-keep tracking-tight line-clamp-5 ${
+                                            feed.type === 'sentence' 
+                                            ? 'font-serif font-medium text-[#1A2332]' 
+                                            : 'font-medium text-gray-700'
+                                        }`}>
+                                            {feed.text}
+                                        </p>
+                                    </div>
 
-                                        <div className="mt-1 pt-2 border-t border-black/10">
-                                            <div className="flex flex-col gap-0.5 mb-1.5">
-                                                <span className="font-extrabold text-[#1d1d1f] text-[11px] md:text-[12px] line-clamp-1">
-                                                    {feed.book}
-                                                </span>
-                                                <span className="text-gray-500 text-[10px] md:text-[11px]">
-                                                    by {feed.user}
-                                                </span>
+                                    {/* 3. 하단: 미니 책 표지 + 도서 정보 + 공감 버튼 */}
+                                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between shrink-0 gap-2">
+                                        <div className="flex items-center gap-2.5 overflow-hidden flex-1">
+                                            {/* [디자인 3] 책 표지를 하단 썸네일로 깔끔하게 배치 */}
+                                            <div className="w-[30px] h-[44px] shrink-0 relative rounded-[4px] overflow-hidden border border-black/5 bg-gray-50 shadow-sm group-hover:shadow transition-shadow">
+                                                {feed.cover ? (
+                                                    <Image src={feed.cover} alt="Cover" fill className="object-cover" unoptimized />
+                                                ) : (
+                                                    <BookOpen size={14} className="m-auto h-full text-gray-300" />
+                                                )}
                                             </div>
-                                            
-                                            <div className="flex justify-end">
-                                                <button 
-                                                    onClick={(e) => handleLikeClick(e, feed.id)}
-                                                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full transition-all duration-300 border shadow-sm ${
-                                                        likedFeeds[feed.id] 
-                                                        ? 'bg-rose-50 border-rose-100 text-rose-500' 
-                                                        : 'bg-white/60 border-white/40 text-gray-400 hover:bg-white hover:text-[#0066cc]'
-                                                    }`}
-                                                >
-                                                    <Star 
-                                                        size={10} 
-                                                        fill={likedFeeds[feed.id] ? "currentColor" : "none"} 
-                                                        className={likedFeeds[feed.id] ? 'animate-in zoom-in duration-300' : ''}
-                                                    />
-                                                    <span className="text-[10px] font-bold">공감</span>
-                                                </button>
+                                            <div className="flex flex-col overflow-hidden">
+                                                <span className="font-extrabold text-[#1d1d1f] text-[11px] md:text-[12px] truncate">{feed.book}</span>
+                                                <span className="text-gray-400 text-[10px] md:text-[11px] truncate">by {feed.user}</span>
                                             </div>
                                         </div>
+                                        
+                                        {/* 공감 버튼 */}
+                                        <button 
+                                            onClick={(e) => handleLikeClick(e, feed.id)}
+                                            className={`flex shrink-0 items-center gap-1 px-2 py-1 rounded-full transition-all duration-300 border shadow-sm ${
+                                                likedFeeds[feed.id] 
+                                                ? 'bg-rose-50 border-rose-100 text-rose-500' 
+                                                : 'bg-white border-gray-200 text-gray-400 hover:border-[#0066cc] hover:text-[#0066cc]'
+                                            }`}
+                                        >
+                                            <Star size={10} fill={likedFeeds[feed.id] ? "currentColor" : "none"} className={likedFeeds[feed.id] ? 'animate-in zoom-in duration-300' : ''} />
+                                            <span className="text-[10px] font-bold">공감</span>
+                                        </button>
                                     </div>
                                 </div>
                             ))}
-
-                            {ugcFeeds.length === 0 && (
-                                <div className="col-span-full text-gray-400 w-full text-center py-10 font-medium h-[200px] flex items-center justify-center bg-white rounded-xl border border-dashed border-gray-200">
-                                    아직 공개된 기록이 없습니다.
-                                </div>
-                            )}
                         </div>
                     )}
                 </Container>
             </section>
 
-            {/* ▼ Section 3: 공감 태그 & 작가 스포트라이트 ▼ */}
+            {/* ▼ Section 3: 동적 워드 클라우드 & 작가 스포트라이트 ▼ */}
             <section className="w-full mt-[var(--spacing-1cm,32px)]">
                 <Container>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-                        <div className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-8 flex flex-col justify-center min-h-[260px]">
-                            <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">
-                                <Hash className="text-[#0066cc]" size={18} /> 지금 이 순간의 공감 태그
-                            </h3>
+                        
+                        {/* 좌측: 실시간 급상승 공감 태그 (API 연동 및 직각 디자인 반영) */}
+                        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-8 flex flex-col justify-center min-h-[260px]">
+                            <div className="mb-6 border-b border-gray-50 pb-4">
+                                <h3 className="text-[18px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
+                                    <Hash className="text-[#0066cc]" size={20} /> 지금 BoooknTalkers가 빠져있는 생각
+                                </h3>
+                                <p className="text-[12px] text-gray-400 mt-1 font-medium ml-7">최근 3일간 가장 많이 기록된 감정과 키워드</p>
+                            </div>
+                            
                             <div className="flex flex-wrap justify-center items-center gap-x-5 gap-y-4">
-                                {wordCloudTags.map((tag, i) => (
+                                {isLoading ? (
+                                    <Loader2 className="animate-spin text-[#0066cc] m-auto opacity-50" size={24} />
+                                ) : trendingTags.map((tag, i) => (
                                     <button 
                                         key={i} 
                                         onClick={() => handleCardClick(tag.text.replace('#', ''))}
-                                        className={`${tag.style} hover:scale-110 hover:text-[#0066cc] transition-all cursor-pointer`}
+                                        className={`${getTagStyle(i)} hover:scale-110 hover:text-[#0066cc] transition-all duration-300 cursor-pointer drop-shadow-sm`}
                                     >
                                         {tag.text}
                                     </button>
                                 ))}
+                                {!isLoading && trendingTags.length === 0 && (
+                                    <span className="text-gray-400 text-[13px]">아직 집계된 태그가 없습니다.</span>
+                                )}
                             </div>
                         </div>
-                        <div className="bg-gradient-to-r from-gray-50 to-white rounded-[24px] border border-gray-100 shadow-sm p-8 flex flex-col justify-center min-h-[260px]">
+
+                        {/* 우측: 작가 스포트라이트 (직각 디자인 반영) */}
+                        <div className="bg-gradient-to-r from-gray-50 to-white rounded-lg border border-gray-100 shadow-sm p-8 flex flex-col justify-center min-h-[260px]">
                             <div className="mb-6 border-b border-gray-100/50 pb-4">
                                 <span className="text-[12px] font-extrabold text-[#0066cc] tracking-widest block mb-1">AUTHOR SPOTLIGHT</span>
                                 <h3 className="text-[20px] font-extrabold text-[#1d1d1f]">유발 하라리의 세계</h3>
@@ -788,6 +790,7 @@ export default function Home() {
                                 ))}
                             </div>
                         </div>
+                        
                     </div>
                 </Container>
             </section>
@@ -836,7 +839,7 @@ export default function Home() {
             {/* ▼ Section 5: 하단 통계 대시보드 ▼ */}
             <section className="w-full mt-[var(--spacing-1cm,48px)] mb-10">
                 <Container>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white rounded-[24px] p-8 border border-gray-100 shadow-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white rounded-lg p-8 border border-gray-100 shadow-sm">
                         <div className="flex flex-col items-center justify-center text-center md:border-r border-gray-100 md:pr-6">
                             <span className="text-[13px] font-bold text-gray-400 mb-2">누적 수집된 독서노트</span>
                             <span className="text-[32px] font-black text-[#1d1d1f] tracking-tight">{isLoading ? "-" : stats.total_sentences.toLocaleString()}<span className="text-[18px] text-gray-400 ml-1">개</span></span>
