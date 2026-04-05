@@ -1,4 +1,4 @@
-// src/components/common/FloatingCover.tsx
+//frontend/src/components/common/FloatingCover.tsx
 import React from 'react';
 import Image from 'next/image';
 import { BookOpen } from 'lucide-react';
@@ -25,6 +25,7 @@ export function FloatingCover({ src, alt = "도서 커버", className = "w-full 
                     <Image 
                         src={src} 
                         alt={alt} 
+                        priority={true}
                         fill 
                         className="object-cover" 
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"

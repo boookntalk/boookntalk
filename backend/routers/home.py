@@ -5,6 +5,10 @@ from typing import Optional, List
 from database import get_db
 from sqlalchemy import asc, func, desc
 from datetime import datetime, timedelta  # ▼ 날짜 계산을 위해 추가된 모듈
+from models import GlobalTrendingAuthor, Tag, RecordTag
+from services.trending_service import update_global_trending_authors
+from schemas import TrendingAuthorResponse
+
 import models
 
 router = APIRouter(
@@ -413,57 +417,54 @@ def get_best_long_reviews(limit: int = 2, db: Session = Depends(get_db)):
     return results
 
 @router.get("/trending-tags")
-def get_trending_tags(days: int = 3, limit: int = 12, db: Session = Depends(get_db)):
-    # 1. 기준 시간 설정 (현재 시간으로부터 3일 전)
-    target_date = datetime.now() - timedelta(days=days)
+def get_trending_tags(db: Session = Depends(get_db)):
+    # 1. 실제 DB에서 태그 카운트 집계 (limit 제한을 제거하여 모든 태그 조회)
+    all_tags = db.query(
+            Tag.name, 
+            func.count(RecordTag.tag_id).label('tag_count')
+        ) \
+        .join(RecordTag, Tag.id == RecordTag.tag_id) \
+        .group_by(Tag.id, Tag.name) \
+        .order_by(desc('tag_count'), Tag.name.asc()) \
+        .all()
+
+    # 2. 만약 DB에 태그가 하나도 없다면 빈 배열 반환
+    if not all_tags:
+        return []
+
+    # 3. 프론트엔드 WordCloud 컴포넌트가 인식할 수 있는 JSON 포맷 [{"text": "태그명"}] 으로 변환
+    result = [{"text": tag.name} for tag in all_tags]
     
-    # 2. RecordTag(한줄평 태그)에서 최근 사용된 태그 집계
-    record_tags_query = db.query(
-        models.RecordTag.tag_id.label('tag_id'), # 👈 [핵심 수정] 명시적 라벨 추가!
-        func.count(models.RecordTag.tag_id).label('usage_count')
-    ).filter(
-        models.RecordTag.created_at >= target_date
-    ).group_by(models.RecordTag.tag_id)
+    return result
 
-    # 3. MemoTag(독서노트 태그)에서 최근 사용된 태그 집계
-    memo_tags_query = db.query(
-        models.MemoTag.tag_id.label('tag_id'), # 👈 [핵심 수정] 명시적 라벨 추가!
-        func.count(models.MemoTag.tag_id).label('usage_count')
-    ).filter(
-        models.MemoTag.created_at >= target_date
-    ).group_by(models.MemoTag.tag_id)
-
-    # 4. 두 쿼리를 UNION ALL로 합치고, 태그 ID별로 최종 합산을 수행
-    combined_subquery = record_tags_query.union_all(memo_tags_query).subquery()
+# 기능: 캐싱된 글로벌 트렌드 작가 Top 5 목록을 조회하여 0.1초 이내에 프론트엔드에 반환합니다.
+@router.get("/inspiring-authors")
+def get_inspiring_authors(db: Session = Depends(get_db)):
+    # 이미 정제된 캐싱 테이블에서 순위대로 가져오기만 하면 끝납니다.
+    authors = db.query(GlobalTrendingAuthor).order_by(GlobalTrendingAuthor.rank.asc()).all()
     
-    final_query = db.query(
-        models.Tag.name,
-        func.sum(combined_subquery.c.usage_count).label('total_count')
-    ).join(
-        models.Tag, models.Tag.id == combined_subquery.c.tag_id
-    ).group_by(
-        models.Tag.name
-    ).order_by(
-        desc('total_count')
-    ).limit(limit).all()
-
-    # 5. 프론트엔드에서 사용하기 편한 형태로 포맷팅
-    results = []
-    for tag_name, total_count in final_query:
-        results.append({
-            "text": f"#{tag_name}",
-            "count": int(total_count)
+    result = []
+    for a in authors:
+        result.append({
+            "id": a.contributor_id,
+            "name": a.author_name,
+            "cover": a.representative_cover,
+            "keyword": a.top_keyword,
+            "mentions": a.mention_count
         })
+        
+    return result
 
-    # 6. 스마트 폴백: 만약 3일간 태그 데이터가 부족하다면, BoooknTalk 기본 태그를 내려줍니다.
-    if not results:
-        results = [
-            {"text": "#인생책", "count": 100},
-            {"text": "#깊은여운", "count": 90},
-            {"text": "#위로가필요할때", "count": 80},
-            {"text": "#통찰력", "count": 70},
-            {"text": "#주말밤에", "count": 60},
-            {"text": "#생각의전환", "count": 50}
-        ]
+# 브라우저 주소창에서 바로 실행해보기 위해 GET으로 변경하고, 경로 중복을 제거합니다.
+@router.get("/sync-trending-authors")
+def sync_trending_authors(db: Session = Depends(get_db)):
+    result = update_global_trending_authors(db)
+    return result
 
-    return results
+# 기능: 트렌딩 작가 목록을 DB에서 조회한 후, TrendingAuthorResponse 스키마 규격에 맞춰 프론트엔드에 반환
+@router.get("/trending-authors", response_model=List[TrendingAuthorResponse])
+def get_trending_authors(db: Session = Depends(get_db)):
+    # DB에서 작가 로테이션 목록을 순위(rank) 순으로 정렬해서 가져오기
+    authors = db.query(GlobalTrendingAuthor).order_by(GlobalTrendingAuthor.rank.asc()).all()
+    
+    return authors

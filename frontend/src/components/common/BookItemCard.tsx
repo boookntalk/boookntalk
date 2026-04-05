@@ -1,3 +1,4 @@
+//frontend/src/components/common/BookItemCard.tsx
 'use client';
 
 import React from 'react';

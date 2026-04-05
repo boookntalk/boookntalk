@@ -15,6 +15,8 @@ class Contributor(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
     
+    profile_image = Column(String, nullable=True)
+    
     # [수정] 알라딘에 종속되지 않는 범용 외부 식별자 구조
     external_source = Column(String(50), nullable=True) # 예: 'NAVER', 'ALADIN', 'NLK'(국립중앙도서관)
     external_id = Column(String(100), nullable=True, index=True) 
@@ -454,3 +456,26 @@ class GenreTrainingData(Base):
     raw_keyword = Column(String, unique=True, index=True, nullable=False)
     # 관리자가 교정한 8대 표준 장르 (예: "과학 / IT / 공학")
     standard_genre = Column(String, nullable=False)
+
+# ===================================================================
+# [인사이트 및 통계 전용 영역] 글로벌(커뮤니티 전체) 메인 화면 캐싱
+# ===================================================================
+
+# 기능: BoooknTalk 전체 유저의 활동(독서노트 등)을 바탕으로 산정된 주간/일간 인기 작가 Top 5 데이터를 저장합니다.
+class GlobalTrendingAuthor(Base):
+    __tablename__ = "global_trending_authors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rank = Column(Integer, index=True, nullable=False) # 1~5위
+    
+    # 원본 Contributor 테이블과 연결하되, 빠른 조회를 위해 이름도 역정규화하여 저장
+    contributor_id = Column(Integer, ForeignKey("contributors.id", ondelete="CASCADE"), nullable=False)
+    author_name = Column(String(100), nullable=False)
+    
+    author_profile_image = Column(String, nullable=True)
+    
+    representative_cover = Column(String, nullable=True) # 가장 인기있는 판본의 표지 URL
+    top_keyword = Column(String(50), nullable=True)      # 해당 작가의 1위 연관 태그 (예: #인생책)
+    mention_count = Column(Integer, default=0)           # 인용/언급 횟수
+    
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

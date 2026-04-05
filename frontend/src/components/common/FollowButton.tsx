@@ -1,3 +1,4 @@
+//frontend/src/components/common/FollowButton.tsx
 'use client';
 
 import React, { useState } from 'react';
