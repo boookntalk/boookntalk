@@ -20,7 +20,7 @@ from services.insight_service import sync_insight_on_status_change
 from utils.genre_parser import map_to_standard_genre # ▼▼▼ [NEW] 공통 장르 필터 임포트 ▼▼▼
 from services.author_service import get_or_create_contributor
 from utils.global_category_mapper import get_category_hierarchy # ▼▼▼ [NEW] 글로벌 장르 파서 임포트 ▼▼▼
-
+from services.trending_service import update_global_trending_authors
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 import subprocess
@@ -474,6 +474,13 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
         author = nlk_item.get('AUTHOR') or naver_item.get('author') or "저자 미상"
         publisher = nlk_item.get('PUBLISHER') or naver_item.get('publisher') or "출판사 미상"
         pubDate = nlk_item.get('PUBLISH_PREDATE') or naver_item.get('pubdate') or ""
+
+        parsed_authors = parse_author_string(author)
+
+        # 대표 작가 1~2명만 깔끔하게 뽑아서 '대표 저자명'으로 만듭니다 (예: "조앤 K. 롤링")
+        main_author_names = [p['name'] for p in parsed_authors if p['role'] == 'AUTHOR']
+        clean_author_str = ", ".join(main_author_names) if main_author_names else (parsed_authors[0]['name'] if parsed_authors else "저자 미상")
+        # ▲▲▲ 수술 완료 ▲▲▲
         
         page_raw = nlk_item.get('PAGE') or ""
         page_count = 0
@@ -496,7 +503,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
 
         return {
             "title": final_title, 
-            "author": author,
+            "author": clean_author_str,
             "publisher": publisher,
             "pubDate": pubDate,
             "categoryName": standard_category,  # 👈 [수정됨] 기존 nlk_item.get('KDC') 대신 세탁된 장르 변수 투입!
@@ -504,7 +511,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             "description": naver_item.get('description') or "",
             "pageCount": page_count,
             "isbn": isbn,
-            "detailed_authors": [], 
+            "detailed_authors": parsed_authors, 
             "originalTitle": "", 
             "binding_type": "기타",
             "size_mm": "",
@@ -603,9 +610,7 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
         
         # 3-2. 작가 정보 연동 (BoooknTalk ISNI 엔진 적용)
         try:
-            # 알라딘 전용 로직(detailed_authors)을 완전히 제거하고, 
-            # 자체 개발한 parse_author_string 엔진으로 저자 텍스트를 정밀 분해합니다.
-            parsed_authors = parse_author_string(request.author)
+            parsed_authors = request.detailed_authors if request.detailed_authors else parse_author_string(request.author)
             
             for p_auth in parsed_authors:
                 # 💡 [핵심] 우리가 만든 완벽한 ISNI 엔진을 호출하여 작가를 찾거나 신규 등록(BKT-TEMP 발급)합니다!
@@ -2773,3 +2778,65 @@ async def retrain_ai_model(user_email: str):
         return {"status": "success", "message": "BoooknTalk AI가 새롭게 진화했습니다!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI 학습 중 오류 발생: {str(e)}")
+
+@app.get("/api/admin/refresh-trending")
+async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
+    """
+    [관리자 전용] 사색에 잠기게 한 작가들(GlobalTrendingAuthor) 캐시 테이블을 
+    즉시 삭제하고, 가장 최신의 정제된 데이터로 다시 집계하여 갱신합니다.
+    """
+    result = update_global_trending_authors(db)
+    return result
+
+@app.get("/api/admin/master-cleanup")
+async def execute_master_cleanup(db: Session = Depends(get_db)):
+    """
+    [최종 병기] 
+    1. Work 테이블의 원본 author 문자열 자체를 깨끗하게 세탁
+    2. Contributor 매핑 초기화 및 재생성
+    3. 찌꺼기(고아) 작가 데이터 완전 삭제
+    4. 랭킹 스냅샷 재갱신
+    이 모든 과정을 단 한 번의 호출로 완벽하게 수행합니다.
+    """
+    from utils.author_parser import parse_author_string
+    from services.trending_service import update_global_trending_authors
+    
+    # 1. 모든 책(Work) 데이터를 가져옵니다.
+    works = db.query(models.Work).all()
+    for work in works:
+        if not work.author: continue
+        
+        # 파서 엔진을 돌려 깨끗한 배열을 얻습니다.
+        parsed = parse_author_string(work.author)
+        if not parsed: continue
+        
+        # ▼▼▼ [핵심 수술] Work 마스터 테이블의 author 자체를 대표 작가 이름으로 영구 교체! ▼▼▼
+        main_authors = [p['name'] for p in parsed if p['role'] == 'AUTHOR']
+        clean_str = ", ".join(main_authors) if main_authors else parsed[0]['name']
+        work.author = clean_str # 이제 원본 텍스트 자체가 깨끗해집니다.
+        
+        # 기존 연결 고리 끊기
+        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
+        
+        # 새 연결 고리 맺기
+        for p_auth in parsed:
+            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+            if not contributor:
+                contributor = models.Contributor(name=p_auth['name'], original_name=p_auth.get('original_name'))
+                db.add(contributor)
+                db.flush()
+            
+            link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
+            db.add(link)
+            
+    db.commit()
+    
+    # 2. 연결되지 않은 찌꺼기 작가(': 시드니 셀던' 등) 영구 삭제
+    active_ids = db.query(models.WorkContributor.contributor_id).distinct()
+    db.query(models.Contributor).filter(models.Contributor.id.not_in(active_ids)).delete(synchronize_session=False)
+    db.commit()
+    
+    # 3. 트렌딩(사색 작가) 스냅샷 갱신
+    update_global_trending_authors(db)
+    
+    return {"status": "success", "message": "마스터 클린업 완료! BoooknTalk의 모든 작가 데이터가 완벽하게 정제되었습니다."}

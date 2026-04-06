@@ -177,54 +177,66 @@ export default function Home() {
     }, [readersChoice]);
 
     useEffect(() => {
-    const fetchHomeData = async () => {
-        if (memoryCache && memoryCache.sessionEmail === (session?.user?.email || null)) return; 
-        setIsLoading(true);
-        try {
-            const emailQuery = session?.user?.email ? `?user_email=${encodeURIComponent(session.user.email)}` : '';
-            
-            // 1. 배열 구조 분해 할당 맨 끝에 authorsRes 추가
-            const [statsRes, ugcRes, arrivalsRes, sentencesRes, rcRes, coverFlowRes, longReviewsRes, tagsRes, authorsRes] = await Promise.all([
-                fetch('http://localhost:8000/api/home/stats'),
-                fetch('http://localhost:8000/api/home/recent-ugc?limit=6'),
-                fetch('http://localhost:8000/api/home/new-arrivals?days=3'),
-                fetch(`http://localhost:8000/api/home/today-sentences${emailQuery}`),
-                fetch('http://localhost:8000/api/home/readers-choice'),
-                fetch('http://localhost:8000/api/home/cover-flow-books'),
-                fetch('http://localhost:8000/api/home/best-long-reviews'),
-                fetch('http://localhost:8000/api/home/trending-tags?limit=40'),
-                // ▼▼▼ [NEW] 1. 작가 랭킹 추출 백엔드 API 추가 ▼▼▼
-                fetch('http://localhost:8000/api/home/inspiring-authors') 
-            ]);
+        const fetchHomeData = async () => {
+            // 💡 [버그 픽스 1] 캐시가 있을 경우 return 하기 전에 반드시 로딩을 꺼줍니다! 
+            // (이 부분이 누락되어서 가끔 무한 로딩이 돌았던 원인 중 하나입니다.)
+            if (memoryCache && memoryCache.sessionEmail === (session?.user?.email || null)) {
+                setIsLoading(false);
+                return; 
+            } 
 
-            // 2. 가짜 데이터(dummyAuthors) 덩어리는 완전히 삭제했습니다.
+            setIsLoading(true);
+            try {
+                const emailQuery = session?.user?.email ? `?user_email=${encodeURIComponent(session.user.email)}` : '';
+                
+                // 🚀 [핵심 수술] 9번의 API 호출을 단 1번의 통합 대시보드 호출로 압축!
+                const res = await fetch(`http://localhost:8000/api/home/dashboard${emailQuery}`);
+                
+                if (!res.ok) {
+                    throw new Error("대시보드 통신 에러");
+                }
+                
+                const data = await res.json();
 
-            const newData = {
-                stats: statsRes.ok ? await statsRes.json() : stats,
-                ugcFeeds: ugcRes.ok ? await ugcRes.json() : [],
-                newArrivals: arrivalsRes.ok ? await arrivalsRes.json() : [],
-                heroSentences: sentencesRes.ok ? await sentencesRes.json() : [],
-                readersChoice: rcRes.ok ? await rcRes.json() : null,
-                coverFlowBooks: coverFlowRes.ok ? await coverFlowRes.json() : [],
-                bestLongReviews: longReviewsRes.ok ? await longReviewsRes.json() : [],
-                trendingTags: tagsRes.ok ? await tagsRes.json() : [],
-                // ▼▼▼ [NEW] 3. 진짜 API 응답 결과(.json())를 파싱해서 상태에 매핑 ▼▼▼
-                inspiringAuthors: authorsRes.ok ? await authorsRes.json() : [], 
-                sessionEmail: session?.user?.email || null
-            };
+                // 💡 [버그 픽스 2] 백엔드에서 데이터가 비어있어도 화면이 뻗지 않도록 기본값(Fallback) 철저히 부여
+                const newData = {
+                    stats: data.stats || { total_sentences: 0, total_pages: 0, reading_books: 0 },
+                    ugcFeeds: data.ugcFeeds || [],
+                    newArrivals: data.newArrivals || [],
+                    heroSentences: data.heroSentences || [],
+                    editorPick: data.editorPick || null, // 👈 이거 한 줄만 추가!
+                    readersChoice: data.readersChoice || null,
+                    coverFlowBooks: data.coverFlowBooks || [],
+                    bestLongReviews: data.bestLongReviews || [],
+                    trendingTags: data.trendingTags || [],
+                    inspiringAuthors: data.inspiringAuthors || [],
+                    sessionEmail: session?.user?.email || null
+                };
 
-            setStats(newData.stats); setUgcFeeds(newData.ugcFeeds); setNewArrivals(newData.newArrivals);
-            setHeroSentences(newData.heroSentences); setReadersChoice(newData.readersChoice);
-            setCoverFlowBooks(newData.coverFlowBooks); setBestLongReviews(newData.bestLongReviews);
-            setTrendingTags(newData.trendingTags); 
-            setInspiringAuthors(newData.inspiringAuthors); // 상태 업데이트 완료
-            
-            memoryCache = newData;
-        } catch (error) { console.error("홈 데이터 로딩 실패:", error); } 
-        finally { setIsLoading(false); }
-    };
-    fetchHomeData();
-}, [session]);
+                // 상태 업데이트
+                setStats(newData.stats); 
+                setUgcFeeds(newData.ugcFeeds); 
+                setNewArrivals(newData.newArrivals);
+                setHeroSentences(newData.heroSentences); 
+                setReadersChoice(newData.readersChoice);
+                setCoverFlowBooks(newData.coverFlowBooks); 
+                setBestLongReviews(newData.bestLongReviews);
+                setTrendingTags(newData.trendingTags); 
+                setInspiringAuthors(newData.inspiringAuthors); 
+                
+                // 메모리 캐싱
+                memoryCache = newData;
+            } catch (error) { 
+                console.error("홈 데이터 로딩 실패:", error); 
+                toast.error("일시적인 네트워크 오류입니다. 페이지를 새로고침 해주세요.");
+            } finally { 
+                // 어떤 경우에도 로딩바는 무조건 꺼지도록 설계
+                setIsLoading(false); 
+            }
+        };
+        
+        fetchHomeData();
+    }, [session]);
 
     const indexChars = ['All', 'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#'];
 
@@ -538,17 +550,11 @@ export default function Home() {
             {/* ▼ Section 3: 동적 워드 클라우드 & 사색 작가들 (높이 2/3 축소 및 고밀도 최적화) ▼ */}
             <section className="w-full mt-[32px]">
                 <Container>
-                    <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4">
-                        <div>
-                            <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-1.5 block">Trending Thoughts</span>
-                            <h2 className="text-[24px] font-black text-[#1D2433] mb-1.5 tracking-tight">BnTalkers Tag</h2>
-                            <p className="text-[#667085] font-medium text-[14px]">많이 읽히는 책보다, 많이 생각되는 주제를 보여줍니다.</p>
-                        </div>
-                        
-                        <div className="flex items-center gap-3">
-                            <select className="bg-white border border-[#E7E2D9] text-[#1D2433] text-[13px] font-bold rounded-sm px-4 py-2 outline-none hover:border-[#1F3A5F] transition-all cursor-pointer shadow-sm"><option>이번 주</option><option>오늘</option><option>이번 달</option></select>
-                            <select className="bg-white border border-[#E7E2D9] text-[#1D2433] text-[13px] font-bold rounded-sm px-4 py-2 outline-none hover:border-[#1F3A5F] transition-all cursor-pointer shadow-sm"><option>급상승</option><option>인기순</option></select>
-                        </div>
+                    {/* [수정됨] 우측에 있던 드롭박스(select)들을 완전히 제거하고 타이틀만 깔끔하게 남겼습니다. */}
+                    <div className="mb-6">
+                        <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-1.5 block">Trending Thoughts</span>
+                        <h2 className="text-[24px] font-black text-[#1D2433] mb-1.5 tracking-tight">BnTalkers Tag</h2>
+                        <p className="text-[#667085] font-medium text-[14px]">많이 읽히는 책보다, 많이 생각되는 주제를 보여줍니다.</p>
                     </div>
 
                     {/* 전체 높이를 기존 420px에서 320px(약 2/3 수준)로 축소, 갭 축소 */}
@@ -588,20 +594,17 @@ export default function Home() {
                         </InsightCard>
 
                         {/* Right (40%): 사색을 유발한 작가들 */}
-                        {/* 패딩 축소(!p-5) 및 컨텐츠 여백 압축 */}
                         <InsightCard className="lg:w-[40%] w-full h-full flex flex-col justify-between !p-5 bg-[#FFFFFF] hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow overflow-hidden">
                             <div className="flex-1 flex flex-col">
-                                {/* [수정됨] 드롭다운 기능이 있던 헤더를 완전히 삭제하고 깔끔한 고정 텍스트로 변경 */}
                                 <h3 className="text-[16px] font-extrabold text-[#1D2433] mb-4 flex items-center gap-2 border-b border-[#E7E2D9] pb-3 shrink-0">
                                     <PenTool size={16} className="text-[#C89B3C]" />
                                     우리를 사색에 잠기게 한 작가들
                                 </h3>
                                 
                                 <div className="space-y-3 flex-1 overflow-y-auto scrollbar-hide">
-                                    {/* 데이터가 없을 경우를 대비한 방어 코드 (?.) 적용 */}
                                     {inspiringAuthors?.slice(0, 5).map((author, index) => {
-                                        // 백엔드 API에서 변수명이 다르게 넘어올 경우를 모두 커버하는 방어 로직
                                         const authorId = author?.contributor_id || author?.id;
+                                        // [핵심] 백엔드에서 정제된 이름(시드니 셀던)이 그대로 꽂힙니다.
                                         const authorName = author?.author_name || author?.name || "이름 없는 작가";
                                         const profileImg = author?.author_profile_image || author?.profile_image;
                                         const displayTag = author?.top_keyword || author?.keyword || "#정보없음";
@@ -635,13 +638,13 @@ export default function Home() {
                                                     )}
                                                 </div>
 
-                                                {/* 3. 작가명 및 발견된 태그 */}
+                                                {/* 3. 정제된 작가명 및 태그 */}
                                                 <div className="flex flex-col flex-1 min-w-0 justify-center">
                                                     <span className="font-bold text-[#1D2433] text-[14px] truncate group-hover:text-[#1F3A5F] transition-colors">
                                                         {authorName}
                                                     </span>
                                                     <span className="text-[11px] font-medium text-[#667085] mt-0.5 w-fit truncate">
-                                                        발견된 태그: <span className="font-semibold text-[#1F3A5F]">
+                                                        Tag: <span className="font-semibold text-[#1F3A5F]">
                                                             {displayTag}
                                                         </span>
                                                     </span>
@@ -652,7 +655,6 @@ export default function Home() {
                                 </div>
                             </div>
                             
-                            {/* 하단 전체보기 버튼 (에러 방지를 위해 button 대신 div 사용) */}
                             <div 
                                 onClick={() => router.push('/authors')}
                                 className="mt-4 w-full py-2 bg-[#F7F5F1] hover:bg-[#1F3A5F] border border-[#E7E2D9] text-[#1F3A5F] hover:text-white font-bold rounded-sm transition-colors flex items-center justify-center gap-2 group text-[12px] shrink-0 cursor-pointer"

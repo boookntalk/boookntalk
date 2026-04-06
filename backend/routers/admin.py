@@ -1,8 +1,9 @@
 # 파일 경로: backend/routers/admin.py
 # 역할 및 기능: 관리자(ADMIN) 전용 API 라우터입니다. 데이터 클렌징, 작가 병합, 장르 오답 노트 수집 등의 시스템 핵심 관리 기능을 담당합니다.
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Body
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from pydantic import BaseModel
 import models
 from database import get_db
@@ -10,6 +11,8 @@ from services.admin_service import run_cleansing_and_merge
 
 import os
 import subprocess
+import uuid
+import shutil
 from utils.genre_parser import reload_ai_model
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -89,3 +92,71 @@ async def trigger_retrain_ai(user_email: str):
         raise HTTPException(status_code=500, detail=f"AI 학습 스크립트 실행 실패: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI 재학습 중 알 수 없는 오류 발생: {str(e)}")
+    
+# ==========================================
+# 1. 사진 누락 작가 리스트 조회 API
+# ==========================================
+@router.get("/authors/no-image")
+def get_authors_without_image(db: Session = Depends(get_db)):
+    """프로필 사진이 등록되지 않은 작가 리스트를 조회합니다."""
+    
+    # 💡 [핵심 방어막] 진짜 NULL, 빈 문자열(""), 가짜 "null" 텍스트까지 모조리 필터링
+    authors = db.query(models.Contributor).filter(
+        or_(
+            models.Contributor.profile_image == None, 
+            models.Contributor.profile_image == "",
+            models.Contributor.profile_image == "null"
+        )
+    ).order_by(models.Contributor.name.asc()).limit(100).all()
+    
+    return authors
+
+# ==========================================
+# 2. 작가 프로필 사진 수동 업로드 API
+# ==========================================
+@router.post("/authors/{contributor_id}/upload-image")
+def upload_author_image(
+    contributor_id: int, 
+    user_email: str = Body(...), # 프론트엔드의 FormData에서 이메일 추출
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
+    """특정 작가의 프로필 이미지를 수동으로 업로드하여 로컬에 저장하고 DB를 갱신합니다."""
+    
+    # 1. 최고 관리자 권한 검증
+    if not user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    contributor = db.query(models.Contributor).filter(models.Contributor.id == contributor_id).first()
+    if not contributor:
+        raise HTTPException(status_code=404, detail="작가를 찾을 수 없습니다.")
+
+    # 2. 로컬 저장소 폴더 확인 및 생성 (서버 루트 기준)
+    upload_dir = "static/uploads/authors"
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+
+    # 3. 해킹 방지용 난수 파일명(UUID) 생성
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(upload_dir, unique_filename)
+
+    # 4. 물리적 파일 저장
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # 5. 마스터 테이블 및 캐시 테이블 동시 업데이트
+    # 프론트엔드에서 바로 읽을 수 있는 로컬 URL 생성
+    image_url = f"http://localhost:8000/{upload_dir}/{unique_filename}"
+    
+    # 마스터 테이블 갱신
+    contributor.profile_image = image_url
+    
+    # 사색 작가 랭킹 캐시 테이블 동기화 (화면에 즉시 반영하기 위함)
+    db.query(models.GlobalTrendingAuthor).filter(
+        models.GlobalTrendingAuthor.contributor_id == contributor_id
+    ).update({"author_profile_image": image_url})
+    
+    db.commit()
+
+    return {"status": "success", "url": image_url}

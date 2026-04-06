@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc
 from typing import Optional, List
@@ -448,6 +448,7 @@ def get_inspiring_authors(db: Session = Depends(get_db)):
         result.append({
             "id": a.contributor_id,
             "name": a.author_name,
+            "author_profile_image": a.author_profile_image,
             "cover": a.representative_cover,
             "keyword": a.top_keyword,
             "mentions": a.mention_count
@@ -468,3 +469,29 @@ def get_trending_authors(db: Session = Depends(get_db)):
     authors = db.query(GlobalTrendingAuthor).order_by(GlobalTrendingAuthor.rank.asc()).all()
     
     return authors
+
+# ==========================================
+# [NEW] 메인 대시보드 통합 API (BFF 패턴 적용)
+# ==========================================
+@router.get("/dashboard")
+def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    [성능 최적화] 프론트엔드에서 9번 통신하던 것을 단 1번의 요청으로 압축합니다.
+    내부 함수 호출 시 의존성 에러(Depends object)를 막기 위해 반드시 db=db를 넘깁니다.
+    """
+    try:
+        return {
+            "stats": get_home_statistics(db=db),
+            "ugcFeeds": get_recent_ugc_feeds(limit=6, db=db),
+            "newArrivals": get_new_arrivals(days=3, db=db),
+            "heroSentences": get_today_sentences(user_email=user_email, db=db),
+            "editorPick": get_editor_pick(db=db), # 👈 프론트엔드 에러 방지용 에디터픽 추가!
+            "readersChoice": get_readers_choice(db=db),
+            "coverFlowBooks": get_cover_flow_books(db=db),
+            "bestLongReviews": get_best_long_reviews(limit=2, db=db), 
+            "trendingTags": get_trending_tags(db=db), 
+            "inspiringAuthors": get_inspiring_authors(db=db)
+        }
+    except Exception as e:
+        print(f"대시보드 통합 데이터 생성 실패: {e}")
+        raise HTTPException(status_code=500, detail="대시보드 데이터를 구성하는 중 서버 에러가 발생했습니다.")

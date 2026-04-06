@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { ShieldAlert, RefreshCw, Trash2, GitMerge, Wand2, Sparkles, Bot } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AuthorImageManager from './AuthorImageManager';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -197,6 +198,9 @@ export default function AdminPanel() {
                             {isLoading ? <DotLoader /> : "강제 흡수 병합 실행"}
                         </Button>
                     </div>
+                </div>
+                <div className="mt-8">
+                    <AuthorImageManager userEmail={session?.user?.email || ''} />
                 </div>
             </div>
         </div>
