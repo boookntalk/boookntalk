@@ -83,7 +83,8 @@ export default function WordCloudChart({ data, onWordClick }: WordCloudChartProp
         <ReactECharts 
             option={option} 
             onEvents={onEvents}
-            style={{ width: '100%', height: '100%', cursor: 'pointer' }} 
+            // 💡 [핵심 수술] height: '100%'를 '300px' 등 명시적인 값으로 변경!
+            style={{ width: '100%', height: '300px', cursor: 'pointer' }} 
             opts={{ renderer: 'canvas' }}
         />
     );

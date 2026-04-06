@@ -55,7 +55,7 @@ export default function Home() {
     const isDragging = useRef<boolean>(false);
     const isInitialized = useRef<boolean>(false);
    
-    const { data: session } = useSession();
+    const { data: session, status } = useSession();
     const router = useRouter();
 
     useEffect(() => {
@@ -177,34 +177,45 @@ export default function Home() {
     }, [readersChoice]);
 
     useEffect(() => {
+        if (status === "loading") return;
+
+        const safetyTimer = setTimeout(() => {
+            setIsLoading(false);
+        }, 3000);
+
         const fetchHomeData = async () => {
-            // 💡 [버그 픽스 1] 캐시가 있을 경우 return 하기 전에 반드시 로딩을 꺼줍니다! 
-            // (이 부분이 누락되어서 가끔 무한 로딩이 돌았던 원인 중 하나입니다.)
+            // 💡 [수정] 캐시가 있어도 로딩 상태를 확실히 종료해야 합니다.
             if (memoryCache && memoryCache.sessionEmail === (session?.user?.email || null)) {
-                setIsLoading(false);
+                // 캐시 데이터를 상태에 다시 바인딩 (뒤로 가기 시 안정성 확보)
+                setStats(memoryCache.stats);
+                setUgcFeeds(memoryCache.ugcFeeds);
+                setNewArrivals(memoryCache.newArrivals);
+                setHeroSentences(memoryCache.heroSentences);
+                setReadersChoice(memoryCache.readersChoice);
+                setCoverFlowBooks(memoryCache.coverFlowBooks);
+                setBestLongReviews(memoryCache.bestLongReviews);
+                setTrendingTags(memoryCache.trendingTags);
+                setInspiringAuthors(memoryCache.inspiringAuthors);
+                
+                clearTimeout(safetyTimer); // 캐시가 있으면 타이머 취소
+                setIsLoading(false); // 👈 가장 중요: 로딩바를 여기서 꺼줘야 합니다!
                 return; 
             } 
 
             setIsLoading(true);
             try {
                 const emailQuery = session?.user?.email ? `?user_email=${encodeURIComponent(session.user.email)}` : '';
-                
-                // 🚀 [핵심 수술] 9번의 API 호출을 단 1번의 통합 대시보드 호출로 압축!
                 const res = await fetch(`http://localhost:8000/api/home/dashboard${emailQuery}`);
                 
-                if (!res.ok) {
-                    throw new Error("대시보드 통신 에러");
-                }
+                if (!res.ok) throw new Error("대시보드 통신 에러");
                 
                 const data = await res.json();
-
-                // 💡 [버그 픽스 2] 백엔드에서 데이터가 비어있어도 화면이 뻗지 않도록 기본값(Fallback) 철저히 부여
                 const newData = {
                     stats: data.stats || { total_sentences: 0, total_pages: 0, reading_books: 0 },
                     ugcFeeds: data.ugcFeeds || [],
                     newArrivals: data.newArrivals || [],
                     heroSentences: data.heroSentences || [],
-                    editorPick: data.editorPick || null, // 👈 이거 한 줄만 추가!
+                    editorPick: data.editorPick || null,
                     readersChoice: data.readersChoice || null,
                     coverFlowBooks: data.coverFlowBooks || [],
                     bestLongReviews: data.bestLongReviews || [],
@@ -213,30 +224,26 @@ export default function Home() {
                     sessionEmail: session?.user?.email || null
                 };
 
-                // 상태 업데이트
-                setStats(newData.stats); 
-                setUgcFeeds(newData.ugcFeeds); 
+                setStats(newData.stats);
+                setUgcFeeds(newData.ugcFeeds);
                 setNewArrivals(newData.newArrivals);
-                setHeroSentences(newData.heroSentences); 
+                setHeroSentences(newData.heroSentences);
                 setReadersChoice(newData.readersChoice);
-                setCoverFlowBooks(newData.coverFlowBooks); 
+                setCoverFlowBooks(newData.coverFlowBooks);
                 setBestLongReviews(newData.bestLongReviews);
-                setTrendingTags(newData.trendingTags); 
-                setInspiringAuthors(newData.inspiringAuthors); 
+                setTrendingTags(newData.trendingTags);
+                setInspiringAuthors(newData.inspiringAuthors);
                 
-                // 메모리 캐싱
                 memoryCache = newData;
             } catch (error) { 
                 console.error("홈 데이터 로딩 실패:", error); 
-                toast.error("일시적인 네트워크 오류입니다. 페이지를 새로고침 해주세요.");
             } finally { 
-                // 어떤 경우에도 로딩바는 무조건 꺼지도록 설계
-                setIsLoading(false); 
+                setIsLoading(false); // 어떤 경우에도 마지막엔 꺼줍니다.
             }
         };
         
         fetchHomeData();
-    }, [session]);
+    }, [session, status]);
 
     const indexChars = ['All', 'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#'];
 
