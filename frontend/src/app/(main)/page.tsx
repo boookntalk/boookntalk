@@ -610,73 +610,68 @@ export default function Home() {
                             )}
                         </InsightCard>
 
-                        {/* Right (40%): 사색을 유발한 작가들 */}
-                        <InsightCard className="lg:w-[40%] w-full h-full flex flex-col justify-between !p-5 bg-[#FFFFFF] hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow overflow-hidden">
-                            <div className="flex-1 flex flex-col">
-                                <h3 className="text-[16px] font-extrabold text-[#1D2433] mb-4 flex items-center gap-2 border-b border-[#E7E2D9] pb-3 shrink-0">
-                                    <PenTool size={16} className="text-[#C89B3C]" />
-                                    우리를 사색에 잠기게 한 작가들
-                                </h3>
-                                
-                                <div className="space-y-3 flex-1 overflow-y-auto scrollbar-hide">
-                                    {inspiringAuthors?.slice(0, 5).map((author, index) => {
-                                        const authorId = author?.contributor_id || author?.id;
-                                        // [핵심] 백엔드에서 정제된 이름(시드니 셀던)이 그대로 꽂힙니다.
-                                        const authorName = author?.author_name || author?.name || "이름 없는 작가";
-                                        const profileImg = author?.author_profile_image || author?.profile_image;
-                                        const displayTag = author?.top_keyword || author?.keyword || "#정보없음";
-
-                                        return (
-                                            <div 
-                                                key={`author-${authorId || index}`} 
-                                                className="flex items-center gap-3 group cursor-pointer p-1 hover:bg-[#F7F5F1] rounded-md transition-colors"
-                                                onClick={() => router.push(`/author/${authorId || ''}`)}
-                                            >
-                                                {/* 1. 순위 및 왕관 아이콘 */}
-                                                <div className="w-5 flex items-center justify-center shrink-0">
-                                                    {index === 0 ? <Crown size={16} className="text-[#C89B3C]" /> :
-                                                    index === 1 ? <Crown size={14} className="text-[#A0AABF]" /> :
-                                                    index === 2 ? <Crown size={14} className="text-[#CD7F32]" /> :
-                                                    <span className="text-[12px] font-bold text-[#A0AABF]">{index + 1}</span>}
-                                                </div>
-
-                                                {/* 2. 작가 프로필 사진 */}
-                                                <div className="w-[40px] h-[40px] flex items-center justify-center shrink-0">
-                                                    {profileImg ? (
-                                                        <img 
-                                                            src={profileImg} 
-                                                            alt={authorName} 
-                                                            className="w-full h-full rounded-full object-cover border border-[#E7E2D9] shadow-sm"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-full h-full rounded-full bg-[#EEF2F7] border border-[#E7E2D9] flex items-center justify-center text-[#A0AABF]">
-                                                            <PenTool size={16} />
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* 3. 정제된 작가명 및 태그 */}
-                                                <div className="flex flex-col flex-1 min-w-0 justify-center">
-                                                    <span className="font-bold text-[#1D2433] text-[14px] truncate group-hover:text-[#1F3A5F] transition-colors">
-                                                        {authorName}
-                                                    </span>
-                                                    <span className="text-[11px] font-medium text-[#667085] mt-0.5 w-fit truncate">
-                                                        Tag: <span className="font-semibold text-[#1F3A5F]">
-                                                            {displayTag}
-                                                        </span>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                        {/* Right (40%): 사색을 유발한 작가들 (2단 그리드, 미니멀 호버 디자인) */}
+                        <InsightCard className="lg:w-[40%] w-full h-full flex flex-col !p-5 bg-[#FFFFFF] hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow">
                             
-                            <div 
-                                onClick={() => router.push('/authors')}
-                                className="mt-4 w-full py-2 bg-[#F7F5F1] hover:bg-[#1F3A5F] border border-[#E7E2D9] text-[#1F3A5F] hover:text-white font-bold rounded-sm transition-colors flex items-center justify-center gap-2 group text-[12px] shrink-0 cursor-pointer"
-                            >
-                                작가 랭킹 전체보기 <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                            {/* 헤더 영역 */}
+                            <h3 className="text-[16px] font-extrabold text-[#1D2433] mb-4 flex items-center gap-2 border-b border-[#E7E2D9] pb-3 shrink-0">
+                                <PenTool size={16} className="text-[#C89B3C]" />
+                                우리를 사색에 잠기게 한 작가들
+                            </h3>
+                            
+                            {/* 내부 스크롤 및 2단 그리드 래퍼 */}
+                            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pr-1">
+                                <div className="grid grid-cols-2 gap-2 pb-1">
+                                    {inspiringAuthors && inspiringAuthors.length > 0 ? (
+                                        inspiringAuthors.slice(0, 5).map((author, index) => {
+                                            const authorId = author?.contributor_id || author?.id;
+                                            const authorName = author?.author_name || author?.name || "이름 없는 작가";
+                                            const profileImg = author?.author_profile_image || author?.profile_image;
+                                            const displayTag = author?.top_keyword || author?.keyword || "#정보없음";
+
+                                            return (
+                                                <div 
+                                                    key={`author-${authorId || index}`} 
+                                                    // 💡 [핵심 변경] 테두리(border)와 그림자(shadow)를 제거하여 미니멀하고 깔끔한 호버 효과만 남김
+                                                    className="flex items-center gap-2.5 group cursor-pointer p-2 hover:bg-[#F7F5F1] rounded-lg transition-all"
+                                                    onClick={() => router.push(`/author/${authorId || ''}`)}
+                                                >
+                                                    {/* 작가 프로필 사진 */}
+                                                    <div className="w-[36px] h-[36px] flex items-center justify-center shrink-0">
+                                                        {profileImg ? (
+                                                            <img 
+                                                                src={profileImg} 
+                                                                alt={authorName} 
+                                                                className="w-full h-full rounded-full object-cover shadow-sm ring-2 ring-transparent group-hover:ring-[#EEF2F7] transition-all"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-full h-full rounded-full bg-[#EEF2F7] border border-[#E7E2D9] flex items-center justify-center text-[#A0AABF]">
+                                                                <PenTool size={14} />
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* 작가명 및 태그 */}
+                                                    <div className="flex flex-col flex-1 min-w-0 justify-center">
+                                                        <span className="font-bold text-[#1D2433] text-[13px] truncate group-hover:text-[#1F3A5F] transition-colors">
+                                                            {authorName}
+                                                        </span>
+                                                        <div className="flex items-center mt-0.5">
+                                                            <span className="text-[10px] font-bold text-[#1F3A5F] bg-[#EEF2F7] px-1.5 py-0.5 rounded-sm shrink-0 border border-[#E7E2D9]/50 shadow-sm truncate max-w-full">
+                                                                {displayTag}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="col-span-2 flex flex-col items-center justify-center text-[#A0AABF] text-[13px] text-center border-dashed rounded-md bg-[#F7F5F1] p-4 h-[200px] border">
+                                            <PenTool size={20} className="mb-2 opacity-30"/>
+                                            아직 수집된 작가 데이터가 없습니다.<br/>서재를 채워주세요.
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </InsightCard>
                     </div>

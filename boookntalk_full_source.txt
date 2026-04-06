@@ -17,6 +17,7 @@ PROJECT ROOT: boookntalk
 │   │   ├── insights.py
 │   │   ├── library.py
 │   │   └── memos.py
+│   ├── schemas.py
 │   ├── services
 │   │   ├── admin_service.py
 │   │   ├── author_service.py
@@ -70,6 +71,10 @@ PROJECT ROOT: boookntalk
 │   │   │   ├── e961f0ce-977e-4698-8fc4-da9b091c1092.jpg
 │   │   │   └── ffd232ec-828c-4be6-be43-c8f5fdb85f44.jpg
 │   │   └── uploads
+│   │       ├── authors
+│   │       │   ├── 53616526-c007-4de0-81e5-223d42386106.jpg
+│   │       │   ├── debe8078-efe6-4941-9d00-29fe5892368b.jpg
+│   │       │   └── e7d6bef6-f750-4a8f-9ed6-55e0d16e5623.jpg
 │   │       └── reviews
 │   │           ├── 348804af-195a-453c-9a30-261a965a3974.png
 │   │           ├── 9d4f8baf-64fa-4ae1-8e26-408deeb85067.png
@@ -1456,7 +1461,8 @@ PROJECT ROOT: boookntalk
 │   │   │   ├── ClientLayout.tsx
 │   │   │   ├── GlobalAddBookFAB.tsx
 │   │   │   ├── admin
-│   │   │   │   └── AdminPanel.tsx
+│   │   │   │   ├── AdminPanel.tsx
+│   │   │   │   └── AuthorImageManager.tsx
 │   │   │   ├── book-detail
 │   │   │   │   ├── BookDetailClient.tsx
 │   │   │   │   ├── BookTopInfo.tsx
@@ -7974,7 +7980,7 @@ export default function Home() {
     const isDragging = useRef<boolean>(false);
     const isInitialized = useRef<boolean>(false);
    
-    const { data: session } = useSession();
+    const { data: session, status } = useSession();
     const router = useRouter();
 
     useEffect(() => {
@@ -8096,54 +8102,83 @@ export default function Home() {
     }, [readersChoice]);
 
     useEffect(() => {
-    const fetchHomeData = async () => {
-        if (memoryCache && memoryCache.sessionEmail === (session?.user?.email || null)) return; 
-        setIsLoading(true);
-        try {
-            const emailQuery = session?.user?.email ? `?user_email=${encodeURIComponent(session.user.email)}` : '';
+        // 💡 [최후의 방어선] 무슨 일이 있어도 2.5초 뒤엔 무조건 로딩을 끄는 타이머!
+        const safetyTimer = setTimeout(() => {
+            setIsLoading(false);
+        }, 2500);
+
+        // 🚀 [핵심 수술] 메모리 캐시가 있다면, 세션이 로딩 중이든 꼬였든 다 무시하고 즉시 화면을 그립니다!
+        if (memoryCache) {
+            setStats(memoryCache.stats);
+            setUgcFeeds(memoryCache.ugcFeeds);
+            setNewArrivals(memoryCache.newArrivals);
+            setHeroSentences(memoryCache.heroSentences);
+            // setEditorPick(memoryCache.editorPick); // (상태 변수가 있다면 주석 해제)
+            setReadersChoice(memoryCache.readersChoice);
+            setCoverFlowBooks(memoryCache.coverFlowBooks);
+            setBestLongReviews(memoryCache.bestLongReviews);
+            setTrendingTags(memoryCache.trendingTags);
+            setInspiringAuthors(memoryCache.inspiringAuthors);
             
-            // 1. 배열 구조 분해 할당 맨 끝에 authorsRes 추가
-            const [statsRes, ugcRes, arrivalsRes, sentencesRes, rcRes, coverFlowRes, longReviewsRes, tagsRes, authorsRes] = await Promise.all([
-                fetch('http://localhost:8000/api/home/stats'),
-                fetch('http://localhost:8000/api/home/recent-ugc?limit=6'),
-                fetch('http://localhost:8000/api/home/new-arrivals?days=3'),
-                fetch(`http://localhost:8000/api/home/today-sentences${emailQuery}`),
-                fetch('http://localhost:8000/api/home/readers-choice'),
-                fetch('http://localhost:8000/api/home/cover-flow-books'),
-                fetch('http://localhost:8000/api/home/best-long-reviews'),
-                fetch('http://localhost:8000/api/home/trending-tags?limit=40'),
-                // ▼▼▼ [NEW] 1. 작가 랭킹 추출 백엔드 API 추가 ▼▼▼
-                fetch('http://localhost:8000/api/home/inspiring-authors') 
-            ]);
+            setIsLoading(false); // 즉시 로딩 끄기
+            clearTimeout(safetyTimer); // 캐시로 복구했으니 타이머 취소
+            return; 
+        }
 
-            // 2. 가짜 데이터(dummyAuthors) 덩어리는 완전히 삭제했습니다.
+        // 캐시가 아예 없을 때(최초 접속)만 세션 로딩을 기다려 줍니다.
+        if (status === "loading") {
+            return () => clearTimeout(safetyTimer);
+        }
 
-            const newData = {
-                stats: statsRes.ok ? await statsRes.json() : stats,
-                ugcFeeds: ugcRes.ok ? await ugcRes.json() : [],
-                newArrivals: arrivalsRes.ok ? await arrivalsRes.json() : [],
-                heroSentences: sentencesRes.ok ? await sentencesRes.json() : [],
-                readersChoice: rcRes.ok ? await rcRes.json() : null,
-                coverFlowBooks: coverFlowRes.ok ? await coverFlowRes.json() : [],
-                bestLongReviews: longReviewsRes.ok ? await longReviewsRes.json() : [],
-                trendingTags: tagsRes.ok ? await tagsRes.json() : [],
-                // ▼▼▼ [NEW] 3. 진짜 API 응답 결과(.json())를 파싱해서 상태에 매핑 ▼▼▼
-                inspiringAuthors: authorsRes.ok ? await authorsRes.json() : [], 
-                sessionEmail: session?.user?.email || null
-            };
+        const fetchHomeData = async () => {
+            setIsLoading(true);
+            try {
+                const emailQuery = session?.user?.email ? `?user_email=${encodeURIComponent(session.user.email)}` : '';
+                const res = await fetch(`http://localhost:8000/api/home/dashboard${emailQuery}`);
+                
+                if (!res.ok) throw new Error("대시보드 통신 에러");
+                
+                const data = await res.json();
+                
+                const newData = {
+                    stats: data.stats || { total_sentences: 0, total_pages: 0, reading_books: 0 },
+                    ugcFeeds: data.ugcFeeds || [],
+                    newArrivals: data.newArrivals || [],
+                    heroSentences: data.heroSentences || [],
+                    editorPick: data.editorPick || null,
+                    readersChoice: data.readersChoice || null,
+                    coverFlowBooks: data.coverFlowBooks || [],
+                    bestLongReviews: data.bestLongReviews || [],
+                    trendingTags: data.trendingTags || [],
+                    inspiringAuthors: data.inspiringAuthors || [],
+                    sessionEmail: session?.user?.email || null
+                };
 
-            setStats(newData.stats); setUgcFeeds(newData.ugcFeeds); setNewArrivals(newData.newArrivals);
-            setHeroSentences(newData.heroSentences); setReadersChoice(newData.readersChoice);
-            setCoverFlowBooks(newData.coverFlowBooks); setBestLongReviews(newData.bestLongReviews);
-            setTrendingTags(newData.trendingTags); 
-            setInspiringAuthors(newData.inspiringAuthors); // 상태 업데이트 완료
-            
-            memoryCache = newData;
-        } catch (error) { console.error("홈 데이터 로딩 실패:", error); } 
-        finally { setIsLoading(false); }
-    };
-    fetchHomeData();
-}, [session]);
+                setStats(newData.stats);
+                setUgcFeeds(newData.ugcFeeds);
+                setNewArrivals(newData.newArrivals);
+                setHeroSentences(newData.heroSentences);
+                // setEditorPick(newData.editorPick);
+                setReadersChoice(newData.readersChoice);
+                setCoverFlowBooks(newData.coverFlowBooks);
+                setBestLongReviews(newData.bestLongReviews);
+                setTrendingTags(newData.trendingTags);
+                setInspiringAuthors(newData.inspiringAuthors);
+                
+                memoryCache = newData;
+            } catch (error) { 
+                console.error("홈 데이터 로딩 실패:", error); 
+            } finally { 
+                setIsLoading(false); 
+                clearTimeout(safetyTimer);
+            }
+        };
+        
+        fetchHomeData();
+
+        // 클린업: 컴포넌트가 꺼질 때 찌꺼기 타이머 제거
+        return () => clearTimeout(safetyTimer);
+    }, [session, status]);
 
     const indexChars = ['All', 'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#'];
 
@@ -8454,21 +8489,14 @@ export default function Home() {
                 </Container>
             </section>
 
-            {/* ▼ Section 3: 동적 워드 클라우드 & 사색 작가들 (6:4 비율 전면 개편) ▼ */}
             {/* ▼ Section 3: 동적 워드 클라우드 & 사색 작가들 (높이 2/3 축소 및 고밀도 최적화) ▼ */}
             <section className="w-full mt-[32px]">
                 <Container>
-                    <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4">
-                        <div>
-                            <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-1.5 block">Trending Thoughts</span>
-                            <h2 className="text-[24px] font-black text-[#1D2433] mb-1.5 tracking-tight">BnTalkers Tag</h2>
-                            <p className="text-[#667085] font-medium text-[14px]">많이 읽히는 책보다, 많이 생각되는 주제를 보여줍니다.</p>
-                        </div>
-                        
-                        <div className="flex items-center gap-3">
-                            <select className="bg-white border border-[#E7E2D9] text-[#1D2433] text-[13px] font-bold rounded-sm px-4 py-2 outline-none hover:border-[#1F3A5F] transition-all cursor-pointer shadow-sm"><option>이번 주</option><option>오늘</option><option>이번 달</option></select>
-                            <select className="bg-white border border-[#E7E2D9] text-[#1D2433] text-[13px] font-bold rounded-sm px-4 py-2 outline-none hover:border-[#1F3A5F] transition-all cursor-pointer shadow-sm"><option>급상승</option><option>인기순</option></select>
-                        </div>
+                    {/* [수정됨] 우측에 있던 드롭박스(select)들을 완전히 제거하고 타이틀만 깔끔하게 남겼습니다. */}
+                    <div className="mb-6">
+                        <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-1.5 block">Trending Thoughts</span>
+                        <h2 className="text-[24px] font-black text-[#1D2433] mb-1.5 tracking-tight">BnTalkers Tag</h2>
+                        <p className="text-[#667085] font-medium text-[14px]">많이 읽히는 책보다, 많이 생각되는 주제를 보여줍니다.</p>
                     </div>
 
                     {/* 전체 높이를 기존 420px에서 320px(약 2/3 수준)로 축소, 갭 축소 */}
@@ -8508,7 +8536,6 @@ export default function Home() {
                         </InsightCard>
 
                         {/* Right (40%): 사색을 유발한 작가들 */}
-                        {/* 패딩 축소(!p-5) 및 컨텐츠 여백 압축 */}
                         <InsightCard className="lg:w-[40%] w-full h-full flex flex-col justify-between !p-5 bg-[#FFFFFF] hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow overflow-hidden">
                             <div className="flex-1 flex flex-col">
                                 <h3 className="text-[16px] font-extrabold text-[#1D2433] mb-4 flex items-center gap-2 border-b border-[#E7E2D9] pb-3 shrink-0">
@@ -8516,40 +8543,65 @@ export default function Home() {
                                     우리를 사색에 잠기게 한 작가들
                                 </h3>
                                 
-                                {/* 기능: 백엔드에서 전달받은 작가 배열을 순회하며 프로필 이미지를 렌더링하고, 클릭 시 해당 작가의 상세 페이지로 라우팅합니다. */}
                                 <div className="space-y-3 flex-1 overflow-y-auto scrollbar-hide">
-                                    {inspiringAuthors.slice(0, 5).map((author, index) => (
-                                        <div 
-                                            key={author.contributor_id} 
-                                            className="flex items-center gap-3 group cursor-pointer p-1 hover:bg-[#F7F5F1] rounded-md transition-colors"
-                                            onClick={() => router.push(`/author/${author.contributor_id}`)} // 작가 상세 페이지로 이동
-                                        >
-                                            {/* 작가 프로필 이미지 (없으면 기본 아바타 아이콘 처리) */}
-                                            <div className="w-[40px] h-[40px] flex items-center justify-center shrink-0">
-                                                {author.author_profile_image ? (
-                                                    <img 
-                                                        src={author.author_profile_image} 
-                                                        alt={author.author_name} 
-                                                        className="w-full h-full rounded-full object-cover border border-[#E7E2D9] shadow-sm"
-                                                    />
-                                                ) : (
-                                                    <div className="w-full h-full rounded-full bg-[#EEF2F7] border border-[#E7E2D9] flex items-center justify-center text-[#A0AABF]">
-                                                        <PenTool size={16} />
-                                                    </div>
-                                                )}
-                                            </div>
+                                    {inspiringAuthors?.slice(0, 5).map((author, index) => {
+                                        const authorId = author?.contributor_id || author?.id;
+                                        // [핵심] 백엔드에서 정제된 이름(시드니 셀던)이 그대로 꽂힙니다.
+                                        const authorName = author?.author_name || author?.name || "이름 없는 작가";
+                                        const profileImg = author?.author_profile_image || author?.profile_image;
+                                        const displayTag = author?.top_keyword || author?.keyword || "#정보없음";
 
-                                            <div className="flex flex-col flex-1 min-w-0 justify-center">
-                                                <span className="font-bold text-[#1D2433] text-[14px] truncate group-hover:text-[#1F3A5F] transition-colors">
-                                                    {author.author_name}
-                                                </span>
-                                                <span className="text-[11px] font-medium text-[#667085] mt-0.5 w-fit truncate">
-                                                    발견된 태그: <span className="font-semibold text-[#1F3A5F]">{author.top_keyword}</span>
-                                                </span>
+                                        return (
+                                            <div 
+                                                key={`author-${authorId || index}`} 
+                                                className="flex items-center gap-3 group cursor-pointer p-1 hover:bg-[#F7F5F1] rounded-md transition-colors"
+                                                onClick={() => router.push(`/author/${authorId || ''}`)}
+                                            >
+                                                {/* 1. 순위 및 왕관 아이콘 */}
+                                                <div className="w-5 flex items-center justify-center shrink-0">
+                                                    {index === 0 ? <Crown size={16} className="text-[#C89B3C]" /> :
+                                                    index === 1 ? <Crown size={14} className="text-[#A0AABF]" /> :
+                                                    index === 2 ? <Crown size={14} className="text-[#CD7F32]" /> :
+                                                    <span className="text-[12px] font-bold text-[#A0AABF]">{index + 1}</span>}
+                                                </div>
+
+                                                {/* 2. 작가 프로필 사진 */}
+                                                <div className="w-[40px] h-[40px] flex items-center justify-center shrink-0">
+                                                    {profileImg ? (
+                                                        <img 
+                                                            src={profileImg} 
+                                                            alt={authorName} 
+                                                            className="w-full h-full rounded-full object-cover border border-[#E7E2D9] shadow-sm"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full rounded-full bg-[#EEF2F7] border border-[#E7E2D9] flex items-center justify-center text-[#A0AABF]">
+                                                            <PenTool size={16} />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* 3. 정제된 작가명 및 태그 */}
+                                                <div className="flex flex-col flex-1 min-w-0 justify-center">
+                                                    <span className="font-bold text-[#1D2433] text-[14px] truncate group-hover:text-[#1F3A5F] transition-colors">
+                                                        {authorName}
+                                                    </span>
+                                                    <span className="text-[11px] font-medium text-[#667085] mt-0.5 w-fit truncate">
+                                                        Tag: <span className="font-semibold text-[#1F3A5F]">
+                                                            {displayTag}
+                                                        </span>
+                                                    </span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
+                            </div>
+                            
+                            <div 
+                                onClick={() => router.push('/authors')}
+                                className="mt-4 w-full py-2 bg-[#F7F5F1] hover:bg-[#1F3A5F] border border-[#E7E2D9] text-[#1F3A5F] hover:text-white font-bold rounded-sm transition-colors flex items-center justify-center gap-2 group text-[12px] shrink-0 cursor-pointer"
+                            >
+                                작가 랭킹 전체보기 <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
                             </div>
                         </InsightCard>
                     </div>
@@ -16768,6 +16820,7 @@ import { toast } from 'sonner';
 import { ShieldAlert, RefreshCw, Trash2, GitMerge, Wand2, Sparkles, Bot } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AuthorImageManager from './AuthorImageManager';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -16957,6 +17010,140 @@ export default function AdminPanel() {
                         </Button>
                     </div>
                 </div>
+                <div className="mt-8">
+                    <AuthorImageManager userEmail={session?.user?.email || ''} />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+
+============================================================
+FILE PATH: frontend/src/components/admin/AuthorImageManager.tsx
+============================================================
+// 파일 경로: src/components/admin/AuthorImageManager.tsx
+// 역할 및 기능: 프로필 사진이 누락된 작가 리스트를 조회하고, 관리자가 직접 사진을 업로드하여 즉시 반영할 수 있는 관리자 전용 UI 컴포넌트입니다.
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { Camera, Upload, UserCircle, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// 함수 기능: 프로필 사진이 누락된 작가 리스트를 조회하고 개별 업로드 UI를 렌더링합니다.
+export default function AuthorImageManager({ userEmail }: { userEmail: string }) {
+    const [authors, setAuthors] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isUploading, setIsUploading] = useState<number | null>(null);
+
+    // 함수 기능: 백엔드에서 사진이 없는 작가 목록을 가져와 상태를 업데이트합니다.
+    const fetchMissingAuthors = async () => {
+        setIsLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/admin/authors/no-image`);
+            if (res.ok) {
+                setAuthors(await res.json());
+            }
+        } catch (error) {
+            console.error("작가 로드 실패:", error);
+            toast.error("작가 목록을 불러오지 못했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => { 
+        fetchMissingAuthors(); 
+    }, []);
+
+    // 함수 기능: 선택된 파일을 백엔드로 전송하여 작가의 프로필 이미지를 업데이트합니다.
+    const handleUpload = async (contributorId: number, file: File) => {
+        setIsUploading(contributorId);
+        const formData = new FormData();
+        formData.append('file', file);
+        // JSON 바디 대신 폼 데이터로 이메일 전송 (보안 검증용)
+        formData.append('user_email', userEmail); 
+
+        try {
+            const res = await fetch(`${API_URL}/api/admin/authors/${contributorId}/upload-image`, {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (res.ok) {
+                toast.success('프로필 사진이 성공적으로 등록되었습니다.');
+                fetchMissingAuthors(); // 업로드 성공 시 리스트 갱신 (해당 작가는 리스트에서 사라짐)
+            } else {
+                const errorData = await res.json();
+                toast.error(errorData.detail || '업로드에 실패했습니다.');
+            }
+        } catch (error) {
+            toast.error('서버 통신 에러가 발생했습니다.');
+        } finally {
+            setIsUploading(null);
+        }
+    };
+
+    return (
+        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex flex-col h-full max-h-[400px]">
+            <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3 shrink-0">
+                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-1.5">
+                    <Camera size={16} className="text-[#0066cc]" />
+                    사진 누락 작가 관리 (총 {authors.length}명)
+                </h3>
+                <button 
+                    onClick={fetchMissingAuthors} 
+                    className="text-[11px] text-gray-400 hover:text-[#0066cc] font-bold"
+                >
+                    새로고침
+                </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide space-y-2">
+                {isLoading ? (
+                    <div className="flex justify-center items-center h-full">
+                        <Loader2 className="animate-spin text-gray-300" size={24} />
+                    </div>
+                ) : authors.length > 0 ? (
+                    authors.map((author) => (
+                        <div key={author.id} className="flex items-center justify-between p-3 bg-gray-50/50 hover:bg-gray-50 rounded-lg border border-gray-100 transition-colors group">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-300 shadow-sm shrink-0">
+                                    <UserCircle size={20} />
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                    <p className="font-bold text-[13px] text-gray-800 truncate">{author.name}</p>
+                                    <p className="text-[11px] text-gray-400 truncate">ID: {author.id} {author.original_name ? `| ${author.original_name}` : ''}</p>
+                                </div>
+                            </div>
+                            
+                            <label className="cursor-pointer shrink-0 ml-2">
+                                <input 
+                                    type="file" 
+                                    className="hidden" 
+                                    accept="image/*"
+                                    onChange={(e) => e.target.files?.[0] && handleUpload(author.id, e.target.files[0])}
+                                    disabled={isUploading === author.id}
+                                />
+                                <div className={`flex items-center justify-center w-8 h-8 rounded-md transition-all ${
+                                    isUploading === author.id 
+                                    ? 'bg-gray-200 text-gray-400' 
+                                    : 'bg-white border border-gray-200 text-gray-500 hover:border-[#0066cc] hover:text-[#0066cc] shadow-sm'
+                                }`}>
+                                    {isUploading === author.id ? <Loader2 className="animate-spin" size={14} /> : <Upload size={14} />}
+                                </div>
+                            </label>
+                        </div>
+                    ))
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 space-y-2">
+                        <Camera size={32} className="opacity-20" />
+                        <span className="text-[12px] font-medium">모든 작가의 사진이 등록되어 있습니다! ✨</span>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -19587,6 +19774,7 @@ export function FloatingCover({ src, alt = "도서 커버", className = "w-full 
                     <Image 
                         src={src} 
                         alt={alt} 
+                        priority={true}
                         fill 
                         className="object-cover" 
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -19688,7 +19876,8 @@ export default function WordCloudChart({ data, onWordClick }: WordCloudChartProp
         <ReactECharts 
             option={option} 
             onEvents={onEvents}
-            style={{ width: '100%', height: '100%', cursor: 'pointer' }} 
+            // 💡 [핵심 수술] height: '100%'를 '300px' 등 명시적인 값으로 변경!
+            style={{ width: '100%', height: '300px', cursor: 'pointer' }} 
             opts={{ renderer: 'canvas' }}
         />
     );
@@ -20880,6 +21069,9 @@ psycopg2-binary==2.9.10
 pydantic-settings==2.8.0
 python-dotenv==1.0.1
 
+# [신규 추가] 외부 API 통신 (위키피디아 작가 프로필 이미지 수집)
+requests
+
 
 ============================================================
 FILE PATH: backend/database.py
@@ -21213,6 +21405,28 @@ if __name__ == "__main__":
 
 
 ============================================================
+FILE PATH: backend/schemas.py
+============================================================
+# 경로: backend/schemas.py
+# 역할 및 기능: FastAPI에서 프론트엔드와 통신할 때 사용하는 API 데이터의 구조 검증 및 필터링(Pydantic 모델)을 담당합니다.
+
+from typing import Optional
+from pydantic import BaseModel
+
+# 기능: 프론트엔드 메인 페이지의 '사색을 유발한 작가들' 영역에 전달할 작가 정보 규격을 정의합니다.
+class TrendingAuthorResponse(BaseModel):
+    contributor_id: int
+    author_name: str
+    author_profile_image: Optional[str] = None
+    top_keyword: Optional[str] = None 
+    mention_count: int = 0
+
+    class Config:
+        # SQLAlchemy 모델(DB 객체)을 Pydantic 모델(JSON)로 자동 변환하도록 허용합니다.
+        from_attributes = True
+
+
+============================================================
 FILE PATH: backend/utils_org.py
 ============================================================
 import re
@@ -21279,7 +21493,7 @@ from services.insight_service import sync_insight_on_status_change
 from utils.genre_parser import map_to_standard_genre # ▼▼▼ [NEW] 공통 장르 필터 임포트 ▼▼▼
 from services.author_service import get_or_create_contributor
 from utils.global_category_mapper import get_category_hierarchy # ▼▼▼ [NEW] 글로벌 장르 파서 임포트 ▼▼▼
-
+from services.trending_service import update_global_trending_authors
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 import subprocess
@@ -21733,6 +21947,13 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
         author = nlk_item.get('AUTHOR') or naver_item.get('author') or "저자 미상"
         publisher = nlk_item.get('PUBLISHER') or naver_item.get('publisher') or "출판사 미상"
         pubDate = nlk_item.get('PUBLISH_PREDATE') or naver_item.get('pubdate') or ""
+
+        parsed_authors = parse_author_string(author)
+
+        # 대표 작가 1~2명만 깔끔하게 뽑아서 '대표 저자명'으로 만듭니다 (예: "조앤 K. 롤링")
+        main_author_names = [p['name'] for p in parsed_authors if p['role'] == 'AUTHOR']
+        clean_author_str = ", ".join(main_author_names) if main_author_names else (parsed_authors[0]['name'] if parsed_authors else "저자 미상")
+        # ▲▲▲ 수술 완료 ▲▲▲
         
         page_raw = nlk_item.get('PAGE') or ""
         page_count = 0
@@ -21755,7 +21976,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
 
         return {
             "title": final_title, 
-            "author": author,
+            "author": clean_author_str,
             "publisher": publisher,
             "pubDate": pubDate,
             "categoryName": standard_category,  # 👈 [수정됨] 기존 nlk_item.get('KDC') 대신 세탁된 장르 변수 투입!
@@ -21763,7 +21984,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             "description": naver_item.get('description') or "",
             "pageCount": page_count,
             "isbn": isbn,
-            "detailed_authors": [], 
+            "detailed_authors": parsed_authors, 
             "originalTitle": "", 
             "binding_type": "기타",
             "size_mm": "",
@@ -21862,9 +22083,7 @@ async def register_book(request: RegisterBookRequest, background_tasks: Backgrou
         
         # 3-2. 작가 정보 연동 (BoooknTalk ISNI 엔진 적용)
         try:
-            # 알라딘 전용 로직(detailed_authors)을 완전히 제거하고, 
-            # 자체 개발한 parse_author_string 엔진으로 저자 텍스트를 정밀 분해합니다.
-            parsed_authors = parse_author_string(request.author)
+            parsed_authors = request.detailed_authors if request.detailed_authors else parse_author_string(request.author)
             
             for p_auth in parsed_authors:
                 # 💡 [핵심] 우리가 만든 완벽한 ISNI 엔진을 호출하여 작가를 찾거나 신규 등록(BKT-TEMP 발급)합니다!
@@ -24033,6 +24252,68 @@ async def retrain_ai_model(user_email: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI 학습 중 오류 발생: {str(e)}")
 
+@app.get("/api/admin/refresh-trending")
+async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
+    """
+    [관리자 전용] 사색에 잠기게 한 작가들(GlobalTrendingAuthor) 캐시 테이블을 
+    즉시 삭제하고, 가장 최신의 정제된 데이터로 다시 집계하여 갱신합니다.
+    """
+    result = update_global_trending_authors(db)
+    return result
+
+@app.get("/api/admin/master-cleanup")
+async def execute_master_cleanup(db: Session = Depends(get_db)):
+    """
+    [최종 병기] 
+    1. Work 테이블의 원본 author 문자열 자체를 깨끗하게 세탁
+    2. Contributor 매핑 초기화 및 재생성
+    3. 찌꺼기(고아) 작가 데이터 완전 삭제
+    4. 랭킹 스냅샷 재갱신
+    이 모든 과정을 단 한 번의 호출로 완벽하게 수행합니다.
+    """
+    from utils.author_parser import parse_author_string
+    from services.trending_service import update_global_trending_authors
+    
+    # 1. 모든 책(Work) 데이터를 가져옵니다.
+    works = db.query(models.Work).all()
+    for work in works:
+        if not work.author: continue
+        
+        # 파서 엔진을 돌려 깨끗한 배열을 얻습니다.
+        parsed = parse_author_string(work.author)
+        if not parsed: continue
+        
+        # ▼▼▼ [핵심 수술] Work 마스터 테이블의 author 자체를 대표 작가 이름으로 영구 교체! ▼▼▼
+        main_authors = [p['name'] for p in parsed if p['role'] == 'AUTHOR']
+        clean_str = ", ".join(main_authors) if main_authors else parsed[0]['name']
+        work.author = clean_str # 이제 원본 텍스트 자체가 깨끗해집니다.
+        
+        # 기존 연결 고리 끊기
+        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
+        
+        # 새 연결 고리 맺기
+        for p_auth in parsed:
+            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+            if not contributor:
+                contributor = models.Contributor(name=p_auth['name'], original_name=p_auth.get('original_name'))
+                db.add(contributor)
+                db.flush()
+            
+            link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
+            db.add(link)
+            
+    db.commit()
+    
+    # 2. 연결되지 않은 찌꺼기 작가(': 시드니 셀던' 등) 영구 삭제
+    active_ids = db.query(models.WorkContributor.contributor_id).distinct()
+    db.query(models.Contributor).filter(models.Contributor.id.not_in(active_ids)).delete(synchronize_session=False)
+    db.commit()
+    
+    # 3. 트렌딩(사색 작가) 스냅샷 갱신
+    update_global_trending_authors(db)
+    
+    return {"status": "success", "message": "마스터 클린업 완료! BoooknTalk의 모든 작가 데이터가 완벽하게 정제되었습니다."}
+
 
 ============================================================
 FILE PATH: backend/routers/library.py
@@ -24208,7 +24489,7 @@ def delete_record(record_id: int, db: Session = Depends(get_db)):
 ============================================================
 FILE PATH: backend/routers/home.py
 ============================================================
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc
 from typing import Optional, List
@@ -24217,6 +24498,7 @@ from sqlalchemy import asc, func, desc
 from datetime import datetime, timedelta  # ▼ 날짜 계산을 위해 추가된 모듈
 from models import GlobalTrendingAuthor, Tag, RecordTag
 from services.trending_service import update_global_trending_authors
+from schemas import TrendingAuthorResponse
 
 import models
 
@@ -24657,6 +24939,7 @@ def get_inspiring_authors(db: Session = Depends(get_db)):
         result.append({
             "id": a.contributor_id,
             "name": a.author_name,
+            "author_profile_image": a.author_profile_image,
             "cover": a.representative_cover,
             "keyword": a.top_keyword,
             "mentions": a.mention_count
@@ -24670,6 +24953,40 @@ def sync_trending_authors(db: Session = Depends(get_db)):
     result = update_global_trending_authors(db)
     return result
 
+# 기능: 트렌딩 작가 목록을 DB에서 조회한 후, TrendingAuthorResponse 스키마 규격에 맞춰 프론트엔드에 반환
+@router.get("/trending-authors", response_model=List[TrendingAuthorResponse])
+def get_trending_authors(db: Session = Depends(get_db)):
+    # DB에서 작가 로테이션 목록을 순위(rank) 순으로 정렬해서 가져오기
+    authors = db.query(GlobalTrendingAuthor).order_by(GlobalTrendingAuthor.rank.asc()).all()
+    
+    return authors
+
+# ==========================================
+# [NEW] 메인 대시보드 통합 API (BFF 패턴 적용)
+# ==========================================
+@router.get("/dashboard")
+def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    [성능 최적화] 프론트엔드에서 9번 통신하던 것을 단 1번의 요청으로 압축합니다.
+    내부 함수 호출 시 의존성 에러(Depends object)를 막기 위해 반드시 db=db를 넘깁니다.
+    """
+    try:
+        return {
+            "stats": get_home_statistics(db=db),
+            "ugcFeeds": get_recent_ugc_feeds(limit=6, db=db),
+            "newArrivals": get_new_arrivals(days=3, db=db),
+            "heroSentences": get_today_sentences(user_email=user_email, db=db),
+            "editorPick": get_editor_pick(db=db), # 👈 프론트엔드 에러 방지용 에디터픽 추가!
+            "readersChoice": get_readers_choice(db=db),
+            "coverFlowBooks": get_cover_flow_books(db=db),
+            "bestLongReviews": get_best_long_reviews(limit=2, db=db), 
+            "trendingTags": get_trending_tags(db=db), 
+            "inspiringAuthors": get_inspiring_authors(db=db)
+        }
+    except Exception as e:
+        print(f"대시보드 통합 데이터 생성 실패: {e}")
+        raise HTTPException(status_code=500, detail="대시보드 데이터를 구성하는 중 서버 에러가 발생했습니다.")
+
 
 ============================================================
 FILE PATH: backend/routers/admin.py
@@ -24677,8 +24994,9 @@ FILE PATH: backend/routers/admin.py
 # 파일 경로: backend/routers/admin.py
 # 역할 및 기능: 관리자(ADMIN) 전용 API 라우터입니다. 데이터 클렌징, 작가 병합, 장르 오답 노트 수집 등의 시스템 핵심 관리 기능을 담당합니다.
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Body
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from pydantic import BaseModel
 import models
 from database import get_db
@@ -24686,6 +25004,8 @@ from services.admin_service import run_cleansing_and_merge
 
 import os
 import subprocess
+import uuid
+import shutil
 from utils.genre_parser import reload_ai_model
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -24765,6 +25085,74 @@ async def trigger_retrain_ai(user_email: str):
         raise HTTPException(status_code=500, detail=f"AI 학습 스크립트 실행 실패: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI 재학습 중 알 수 없는 오류 발생: {str(e)}")
+    
+# ==========================================
+# 1. 사진 누락 작가 리스트 조회 API
+# ==========================================
+@router.get("/authors/no-image")
+def get_authors_without_image(db: Session = Depends(get_db)):
+    """프로필 사진이 등록되지 않은 작가 리스트를 조회합니다."""
+    
+    # 💡 [핵심 방어막] 진짜 NULL, 빈 문자열(""), 가짜 "null" 텍스트까지 모조리 필터링
+    authors = db.query(models.Contributor).filter(
+        or_(
+            models.Contributor.profile_image == None, 
+            models.Contributor.profile_image == "",
+            models.Contributor.profile_image == "null"
+        )
+    ).order_by(models.Contributor.name.asc()).limit(100).all()
+    
+    return authors
+
+# ==========================================
+# 2. 작가 프로필 사진 수동 업로드 API
+# ==========================================
+@router.post("/authors/{contributor_id}/upload-image")
+def upload_author_image(
+    contributor_id: int, 
+    user_email: str = Body(...), # 프론트엔드의 FormData에서 이메일 추출
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
+    """특정 작가의 프로필 이미지를 수동으로 업로드하여 로컬에 저장하고 DB를 갱신합니다."""
+    
+    # 1. 최고 관리자 권한 검증
+    if not user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    contributor = db.query(models.Contributor).filter(models.Contributor.id == contributor_id).first()
+    if not contributor:
+        raise HTTPException(status_code=404, detail="작가를 찾을 수 없습니다.")
+
+    # 2. 로컬 저장소 폴더 확인 및 생성 (서버 루트 기준)
+    upload_dir = "static/uploads/authors"
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+
+    # 3. 해킹 방지용 난수 파일명(UUID) 생성
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(upload_dir, unique_filename)
+
+    # 4. 물리적 파일 저장
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # 5. 마스터 테이블 및 캐시 테이블 동시 업데이트
+    # 프론트엔드에서 바로 읽을 수 있는 로컬 URL 생성
+    image_url = f"http://localhost:8000/{upload_dir}/{unique_filename}"
+    
+    # 마스터 테이블 갱신
+    contributor.profile_image = image_url
+    
+    # 사색 작가 랭킹 캐시 테이블 동기화 (화면에 즉시 반영하기 위함)
+    db.query(models.GlobalTrendingAuthor).filter(
+        models.GlobalTrendingAuthor.contributor_id == contributor_id
+    ).update({"author_profile_image": image_url})
+    
+    db.commit()
+
+    return {"status": "success", "url": image_url}
 
 
 ============================================================
@@ -25176,139 +25564,60 @@ def get_yearly_flow(
 ============================================================
 FILE PATH: backend/utils/author_parser.py
 ============================================================
-# 파일 경로: backend/utils/author_parser.py
-# 역할 및 기능: 외부 API에서 전달받은 비구조적인 작가/참여자 문자열을 정규표현식을 통해 이름, 원어 이름, 역할(Role)로 완벽하게 분리하여 구조화된 데이터(List[dict])로 반환하는 파싱 엔진입니다.
+# 경로: backend/utils/author_parser.py
+# 역할 및 기능: 이름 앞에 붙는 콜론(:)이나 공백을 완벽하게 제거하고 정확한 작가명만 추출합니다.
 
 import re
 
-def parse_author_string(author_str: str):
-    """
-    입력: "J. R. R. 톨킨^Tolkien (지은이), 피터 잭슨 (각색)"
-    출력: [
-        {'name': 'J.R.R. 톨킨', 'original_name': 'Tolkien', 'role': 'Author'},
-        {'name': '피터 잭슨', 'original_name': None, 'role': 'Adapter'}
-    ]
-    """
-    if not author_str:
+def parse_author_string(raw_author: str):
+    if not raw_author or str(raw_author).strip() == "" or raw_author == "저자 미상":
         return []
 
-    contributors = []
-    # 1. 콤마(,)뿐만 아니라 세미콜론(;)으로도 완벽하게 쪼갭니다.
-    parts = [p.strip() for p in re.split(r'[,;]', author_str) if p.strip()]
-    
-    temp_names = [] 
-    
-    # ▼▼▼ 이름 정규화(Normalization) 다리미 엔진 ▼▼▼
-    def normalize_name(raw_name):
-        orig_name = None
-        # 1. NLK 특유의 '^' 기호를 기준으로 한글 이름과 원어 이름 분리
-        if '^' in raw_name:
-            splits = raw_name.split('^', 1)
-            raw_name = splits[0].strip()
-            orig_name = splits[1].strip()
-        
-        # 2. 이니셜 띄어쓰기 압축 (예: "J. R. R. 톨킨" -> "J.R.R. 톨킨")
-        raw_name = re.sub(r'([A-Za-z])\.\s+(?=[A-Z]\.)', r'\1.', raw_name)
-        
-        if orig_name:
-            orig_name = re.sub(r'([A-Za-z])\.\s+(?=[A-Z]\.)', r'\1.', orig_name)
-            
-        return raw_name, orig_name
-    # ▲▲▲ 엔진 끝 ▲▲▲
+    # 1. 구분자에 콜론(:)을 명시적으로 추가했습니다.
+    chunks = re.split(r'[;:,/·|&]', str(raw_author))
 
-    for part in parts:
-        role = "Unknown"
-        name = part
-        
-        # 💡 [핵심 업그레이드] 출판계의 모든 역할(각색, 감수, 기획 등)을 완벽하게 포용하는 정규식
-        nlk_match = re.search(r"^(지은이|저자|글|원작|원저|옮긴이|역자|번역|각색|그림|사진|일러스트|삽화|만화|감수|편집|기획|엮은이|편저자)\s*[:|：]\s*(.+)$", part)
-        aladin_match = re.search(r"(.+?)\s*\((.+?)\)$", part)
-        
-        if nlk_match:
-            role_kr = nlk_match.group(1).strip()
-            name = nlk_match.group(2).strip() 
-            
-            # 국립중앙도서관 포맷 역할 맵핑
-            if role_kr in ['지은이', '저자', '글', '원작', '원저']: role = "Author"
-            elif role_kr in ['옮긴이', '역자', '번역']: role = "Translator"
-            elif role_kr in ['각색']: role = "Adapter"  # 💡 [NEW] 각색 역할 부여
-            elif role_kr in ['그림', '사진', '일러스트', '삽화', '만화']: role = "Illustrator"
-            elif role_kr in ['감수', '편집', '기획', '엮은이', '편저자']: role = "Editor"
-            
-            clean_n, orig_n = normalize_name(name)
-            contributors.append({'name': clean_n, 'original_name': orig_n, 'role': role})
-            
-        elif aladin_match:
-            name = aladin_match.group(1).strip() 
-            role_kr = aladin_match.group(2).strip()
-            
-            # 알라딘/네이버 괄호 포맷 역할 맵핑
-            if any(x in role_kr for x in ['지은이', '저자', '글', '원작', '원저']): role = "Author"
-            elif any(x in role_kr for x in ['옮긴이', '역자', '번역']): role = "Translator"
-            elif any(x in role_kr for x in ['각색']): role = "Adapter" # 💡 [NEW] 각색 역할 부여
-            elif any(x in role_kr for x in ['그림', '삽화', '일러스트', '만화', '사진']): role = "Illustrator"
-            elif any(x in role_kr for x in ['감수', '편집', '기획', '엮은이', '편저자']): role = "Editor"
-            else: role = "Author"
-            
-            clean_n, orig_n = normalize_name(name)
-            temp_names.append((clean_n, orig_n))
-            
-            # "A, B (지은이)" 처럼 앞에 누적된 이름들이 있다면 괄호 안의 역할을 일괄 부여
-            for t_n, t_orig in temp_names:
-                contributors.append({'name': t_n, 'original_name': t_orig, 'role': role})
-            temp_names = []
-            
-        else:
-            # 접미사 포맷 (예: "홍길동 지음", "이순신 각색")
-            if part.endswith('지음') or part.endswith('저') or part.endswith('글'):
-                name = re.sub(r'(지음|저|글)$', '', part).strip()
-                clean_n, orig_n = normalize_name(name)
-                contributors.append({'name': clean_n, 'original_name': orig_n, 'role': 'Author'})
-            elif part.endswith('옮김') or part.endswith('역'):
-                name = re.sub(r'(옮김|역)$', '', part).strip()
-                clean_n, orig_n = normalize_name(name)
-                contributors.append({'name': clean_n, 'original_name': orig_n, 'role': 'Translator'})
-            elif part.endswith('각색'): # 💡 [NEW] 각색 접미사 처리
-                name = re.sub(r'각색$', '', part).strip()
-                clean_n, orig_n = normalize_name(name)
-                contributors.append({'name': clean_n, 'original_name': orig_n, 'role': 'Adapter'})
-            elif part.endswith('그림'):
-                name = re.sub(r'그림$', '', part).strip()
-                clean_n, orig_n = normalize_name(name)
-                contributors.append({'name': clean_n, 'original_name': orig_n, 'role': 'Illustrator'})
-            else:
-                clean_n, orig_n = normalize_name(part)
-                temp_names.append((clean_n, orig_n))
-                
-    # 끝까지 역할이 명시되지 않고 덩그러니 남은 이름들은 기본값인 Author 처리
-    for t_n, t_orig in temp_names:
-        contributors.append({'name': t_n, 'original_name': t_orig, 'role': 'Author'})
-        
-    return contributors
-
-
-def cleanse_author_name(raw_name: str) -> str:
-    """
-    함수 기능: 작가 이름에서 불필요한 노이즈 단어들을 1차적으로 걷어내는 클렌징 기능입니다.
-    """
-    if not raw_name:
-        return ""
-    # 💡 [NEW] '각색' 노이즈 단어 풀에 추가 완료
-    stopwords = [r'장편소설', r'소설', r'지음', r'저', r'옮김', r'번역', r'그림', r'엮음', r'지은이', r'글', r'각색']
-    cleaned = raw_name
-    for word in stopwords:
-        cleaned = re.sub(rf'\s*{word}\s*', '', cleaned)
-    return cleaned.strip()
-
-
-def get_merge_mapping():
-    """
-    함수 기능: 파편화된 작가 이름들을 수동으로 병합하기 위한 하드코딩 매핑 테이블입니다.
-    """
-    return {
-        "J.R.R. Tolkien": "J.R.R. 톨킨",
-        "J. R. R. 톨킨": "J.R.R. 톨킨",
+    parsed_chunks = []
+    ROLE_REGEX = {
+        "TRANSLATOR": r'(옮김|번역|옮긴이|역자|편역|공역|우리말|역)',
+        "ILLUSTRATOR": r'(그림|그린이|일러스트|일러스트레이터|만화|작화|사진|화보|삽화)',
+        "AUTHOR": r'(지음|저자|지은이|글|원작|씀|스토리|극본|각본|원안|기획|저|원저|엮음|편저|엮은이|편저자|편집|편|감수)'
     }
+
+    for chunk in chunks:
+        chunk = chunk.strip()
+        if not chunk: continue
+
+        chunk = re.sub(r'[\[\]<>]', '', chunk)
+        explicit_role = None
+        name = chunk
+
+        if re.search(ROLE_REGEX["TRANSLATOR"], chunk):
+            explicit_role = "TRANSLATOR"
+            name = re.sub(ROLE_REGEX["TRANSLATOR"], '', name)
+        elif re.search(ROLE_REGEX["ILLUSTRATOR"], chunk):
+            explicit_role = "ILLUSTRATOR"
+            name = re.sub(ROLE_REGEX["ILLUSTRATOR"], '', name)
+        elif re.search(ROLE_REGEX["AUTHOR"], chunk):
+            explicit_role = "AUTHOR"
+            name = re.sub(ROLE_REGEX["AUTHOR"], '', name)
+
+        # 2. 이름 앞뒤에 남은 콜론(:)이나 지저분한 기호를 강제로 제거합니다.
+        name = re.sub(r'^[:\s]+', '', name) # 시작 부분의 콜론과 공백 제거
+        name = re.sub(r'외\s*\d+명?', '', name)
+        name = re.sub(r'[\(\)]', '', name) 
+        name = name.strip()
+
+        if name:
+            parsed_chunks.append({"name": name, "explicit_role": explicit_role})
+
+    results = []
+    current_role = "AUTHOR"
+    for item in reversed(parsed_chunks):
+        if item["explicit_role"]:
+            current_role = item["explicit_role"]
+        results.insert(0, {"name": item["name"], "role": current_role})
+
+    return results
 
 
 ============================================================
@@ -25485,28 +25794,50 @@ if __name__ == "__main__":
 FILE PATH: backend/utils/image_fetcher.py
 ============================================================
 # 경로: backend/utils/image_fetcher.py
-# 역할 및 기능: 상업적 이용이 가능한 위키피디아(Wikimedia) API를 활용하여 작가의 프로필 이미지를 안전하게 검색하고 URL을 반환합니다.
+# 역할 및 기능: 상업적 이용이 가능한 위키피디아 API를 활용하여 작가의 프로필 이미지를 안전하게 검색합니다.
+# 위키미디어재단의 보안 정책을 준수하기 위해 User-Agent 신분증을 부착하여 차단을 방지합니다.
 
 import requests
 from urllib.parse import quote
 
-# 기능: 작가 이름을 위키피디아에서 검색하여, 해당 문서에 등록된 메인 이미지(주로 저작권 프리) URL을 가져옵니다.
+# 기능: 작가 이름을 위키피디아에서 '검색'하여, 연관성 1위 문서의 메인 이미지 URL을 가져옵니다.
 def fetch_safe_author_image(author_name: str) -> str:
-    try:
-        # 1. 위키피디아 한국어 페이지에서 작가 검색
-        search_url = f"https://ko.wikipedia.org/w/api.php?action=query&titles={quote(author_name)}&prop=pageimages&format=json&pithumbsize=500"
-        response = requests.get(search_url, timeout=5)
-        data = response.json()
-        
-        pages = data.get("query", {}).get("pages", {})
-        for page_id, page_info in pages.items():
-            if page_id != "-1" and "thumbnail" in page_info:
-                # 2. 썸네일(이미지) URL이 존재하면 반환
-                return page_info["thumbnail"]["source"]
+    if not author_name or author_name in ["이름 없는 작가", "저자 미상"]:
+        return None
+
+    endpoints = [
+        "https://ko.wikipedia.org/w/api.php",
+        "https://en.wikipedia.org/w/api.php"
+    ]
+    
+    # ▼▼▼ [핵심 수술] 위키피디아 서버 보안을 통과하기 위한 명함(User-Agent) 생성 ▼▼▼
+    headers = {
+        "User-Agent": "BoooknTalk/1.0 (https://github.com/bathespoir/boookntalk; contact@boookntalk.com) python-requests"
+    }
+    
+    for endpoint in endpoints:
+        try:
+            search_url = f"{endpoint}?action=query&generator=search&gsrsearch={quote(author_name)}&gsrlimit=1&prop=pageimages&format=json&pithumbsize=500"
+            
+            # headers=headers 를 추가하여 신분증을 함께 제출합니다.
+            response = requests.get(search_url, headers=headers, timeout=5)
+            
+            # 서버가 200(정상)을 주지 않으면, 에러 페이지를 JSON으로 파싱하려다 뻗지 않도록 즉시 건너뜁니다.
+            if response.status_code != 200:
+                continue
                 
-    except Exception as e:
-        print(f"Failed to fetch image for {author_name}: {e}")
-        
+            data = response.json()
+            
+            pages = data.get("query", {}).get("pages", {})
+            for page_id, page_info in pages.items():
+                if page_id != "-1" and "thumbnail" in page_info:
+                    print(f"📸 위키피디아 사진 수집 성공 ({endpoint}): {author_name}")
+                    return page_info["thumbnail"]["source"]
+                    
+        except Exception as e:
+            print(f"⚠️ 위키피디아 사진 수집 에러 ({endpoint} - {author_name}): {e}")
+            continue
+            
     return None
 
 
