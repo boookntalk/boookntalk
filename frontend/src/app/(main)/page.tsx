@@ -177,31 +177,35 @@ export default function Home() {
     }, [readersChoice]);
 
     useEffect(() => {
-        if (status === "loading") return;
-
+        // 💡 [최후의 방어선] 무슨 일이 있어도 2.5초 뒤엔 무조건 로딩을 끄는 타이머!
         const safetyTimer = setTimeout(() => {
             setIsLoading(false);
-        }, 3000);
+        }, 2500);
+
+        // 🚀 [핵심 수술] 메모리 캐시가 있다면, 세션이 로딩 중이든 꼬였든 다 무시하고 즉시 화면을 그립니다!
+        if (memoryCache) {
+            setStats(memoryCache.stats);
+            setUgcFeeds(memoryCache.ugcFeeds);
+            setNewArrivals(memoryCache.newArrivals);
+            setHeroSentences(memoryCache.heroSentences);
+            // setEditorPick(memoryCache.editorPick); // (상태 변수가 있다면 주석 해제)
+            setReadersChoice(memoryCache.readersChoice);
+            setCoverFlowBooks(memoryCache.coverFlowBooks);
+            setBestLongReviews(memoryCache.bestLongReviews);
+            setTrendingTags(memoryCache.trendingTags);
+            setInspiringAuthors(memoryCache.inspiringAuthors);
+            
+            setIsLoading(false); // 즉시 로딩 끄기
+            clearTimeout(safetyTimer); // 캐시로 복구했으니 타이머 취소
+            return; 
+        }
+
+        // 캐시가 아예 없을 때(최초 접속)만 세션 로딩을 기다려 줍니다.
+        if (status === "loading") {
+            return () => clearTimeout(safetyTimer);
+        }
 
         const fetchHomeData = async () => {
-            // 💡 [수정] 캐시가 있어도 로딩 상태를 확실히 종료해야 합니다.
-            if (memoryCache && memoryCache.sessionEmail === (session?.user?.email || null)) {
-                // 캐시 데이터를 상태에 다시 바인딩 (뒤로 가기 시 안정성 확보)
-                setStats(memoryCache.stats);
-                setUgcFeeds(memoryCache.ugcFeeds);
-                setNewArrivals(memoryCache.newArrivals);
-                setHeroSentences(memoryCache.heroSentences);
-                setReadersChoice(memoryCache.readersChoice);
-                setCoverFlowBooks(memoryCache.coverFlowBooks);
-                setBestLongReviews(memoryCache.bestLongReviews);
-                setTrendingTags(memoryCache.trendingTags);
-                setInspiringAuthors(memoryCache.inspiringAuthors);
-                
-                clearTimeout(safetyTimer); // 캐시가 있으면 타이머 취소
-                setIsLoading(false); // 👈 가장 중요: 로딩바를 여기서 꺼줘야 합니다!
-                return; 
-            } 
-
             setIsLoading(true);
             try {
                 const emailQuery = session?.user?.email ? `?user_email=${encodeURIComponent(session.user.email)}` : '';
@@ -210,6 +214,7 @@ export default function Home() {
                 if (!res.ok) throw new Error("대시보드 통신 에러");
                 
                 const data = await res.json();
+                
                 const newData = {
                     stats: data.stats || { total_sentences: 0, total_pages: 0, reading_books: 0 },
                     ugcFeeds: data.ugcFeeds || [],
@@ -228,6 +233,7 @@ export default function Home() {
                 setUgcFeeds(newData.ugcFeeds);
                 setNewArrivals(newData.newArrivals);
                 setHeroSentences(newData.heroSentences);
+                // setEditorPick(newData.editorPick);
                 setReadersChoice(newData.readersChoice);
                 setCoverFlowBooks(newData.coverFlowBooks);
                 setBestLongReviews(newData.bestLongReviews);
@@ -238,11 +244,15 @@ export default function Home() {
             } catch (error) { 
                 console.error("홈 데이터 로딩 실패:", error); 
             } finally { 
-                setIsLoading(false); // 어떤 경우에도 마지막엔 꺼줍니다.
+                setIsLoading(false); 
+                clearTimeout(safetyTimer);
             }
         };
         
         fetchHomeData();
+
+        // 클린업: 컴포넌트가 꺼질 때 찌꺼기 타이머 제거
+        return () => clearTimeout(safetyTimer);
     }, [session, status]);
 
     const indexChars = ['All', 'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#'];
