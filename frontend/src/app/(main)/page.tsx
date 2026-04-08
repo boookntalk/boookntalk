@@ -584,23 +584,42 @@ export default function Home() {
 
                                     return activeBooks.map((book, i) => {
                                         const isInternal = discoveryTab === 'bntalk' || !!book.internal_work_id;
-                                        const targetUrl = isInternal ? `/works/${book.internal_work_id || book.work_id}` : `/search?q=${book.isbn}`;
 
                                         return (
-                                            // 가로 너비 고정, 스냅(Snap) 적용
-                                            <div key={`discovery-${i}`} onClick={() => router.push(targetUrl)} className="w-[120px] md:w-[150px] shrink-0 snap-start group cursor-pointer flex flex-col relative min-w-0">
-                                                <div className="relative mb-3 w-full aspect-[1/1.45] rounded-[3px] overflow-hidden shadow-sm border border-[#E7E2D9] group-hover:shadow-[0_8px_24px_rgba(29,36,51,0.15)] group-hover:-translate-y-1 transition-all duration-300 bg-white">
-                                                    {book.cover ? (
-                                                        <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-full h-full bg-[#F7F5F1] flex items-center justify-center text-[#A0AABF]"><BookOpen size={24}/></div>
-                                                    )}
+                                            <div 
+                                                key={`discovery-${i}`} 
+                                                onClick={() => {
+                                                    if (isInternal) {
+                                                        // 1. 우리 사이트에 있는 경우: 광장(상세) 페이지로 이동
+                                                        router.push(`/works/${book.internal_work_id || book.work_id}`);
+                                                    } else {
+                                                        // 2. 없는 경우: 구글 도서 ISBN 검색 결과로 아웃링크 (새 창)
+                                                        if (book.isbn) {
+                                                            window.open(`https://books.google.co.kr/books?vid=ISBN${book.isbn}`, '_blank', 'noopener,noreferrer');
+                                                        } else {
+                                                            // ISBN이 없는 예외 케이스는 제목으로 검색
+                                                            window.open(`https://www.google.co.kr/search?tbm=bks&q=${encodeURIComponent(book.title)}`, '_blank', 'noopener,noreferrer');
+                                                        }
+                                                    }
+                                                }} 
+                                                className="w-[120px] md:w-[150px] shrink-0 snap-start group cursor-pointer flex flex-col relative min-w-0">
+                                                
+                                                {/* 💡 [수정] 하드코딩된 img 태그를 걷어내고 공통 컴포넌트인 FloatingCover 적용 */}
+                                                <div className="relative mb-3 w-full">
+                                                    <FloatingCover 
+                                                        src={book.cover} 
+                                                        className="w-full aspect-[1/1.45]" 
+                                                        iconSize={24} 
+                                                    />
+                                                    
+                                                    {/* 서재 연결 배지 (FloatingCover 위에 절대 위치로 띄움) */}
                                                     {isInternal && (
-                                                        <div className="absolute top-1.5 right-1.5 bg-[#1F3A5F]/90 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded-sm shadow-sm flex items-center gap-0.5 z-10">
+                                                        <div className="absolute top-1.5 right-1.5 bg-[#1F3A5F]/90 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded-sm shadow-sm flex items-center gap-0.5 z-10 pointer-events-none">
                                                             <BookOpen size={8} /> 서재
                                                         </div>
                                                     )}
                                                 </div>
+
                                                 <div className="flex flex-col flex-1 px-0.5">
                                                     <h3 className="font-bold text-[#1D2433] text-[12px] md:text-[13px] leading-snug line-clamp-2 mb-1 group-hover:text-[#C89B3C] transition-colors">{book.title}</h3>
                                                     <p className="text-[10px] md:text-[11px] text-[#667085] line-clamp-1 font-medium">{book.author || book.discoverer}</p>

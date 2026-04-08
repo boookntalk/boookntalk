@@ -47,6 +47,20 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         { id: 'long-review', label: '긴줄평' }
     ] as const;
 
+    // ▼▼▼ [추가] 화면 확인용 더미 데이터 (추후 API 연동으로 교체) ▼▼▼
+    const DUMMY_AUTHOR_INFO = {
+        id: "author_1",
+        name: work?.author?.split(',')[0] || "작가 이름", // 기존 work 데이터에서 이름만 임시 추출
+        photo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Keigo_Higashino.jpg/220px-Keigo_Higashino.jpg",
+        bio: "이 작가는 놀라운 필력으로 독자들을 사로잡는 베스트셀러 작가입니다."
+    };
+
+    const DUMMY_OTHER_BOOKS = [
+        { id: 'work_1', title: "다른 책 1", cover: "https://via.placeholder.com/150x200" },
+        { id: 'work_2', title: "다른 책 2", cover: "https://via.placeholder.com/150x200" },
+        { id: 'work_3', title: "다른 책 3", cover: "https://via.placeholder.com/150x200" }
+    ];
+
     // ▼▼▼ [핵심 2] 컴포넌트가 마운트될 때 긴줄평 개수만 살짝 가져옵니다 ▼▼▼
     useEffect(() => {
         if (work?.id) {
@@ -180,7 +194,17 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                 </Container>
             </div>
 
-            <BookTopInfo record={record} edition={current_edition} work={work} myEditions={my_editions} onRecordChange={(id) => router.push(`/library/${id}`)} />
+            <BookTopInfo 
+                record={record} 
+                edition={current_edition} 
+                work={work} 
+                myEditions={my_editions} 
+                onRecordChange={(id) => router.push(`/library/${id}`)}
+                
+                // 👇 [핵심] 여기에 작가 데이터를 넘겨주어야 1/3 영역이 나타납니다!
+                authorInfo={DUMMY_AUTHOR_INFO}
+                authorOtherBooks={DUMMY_OTHER_BOOKS}
+            />
 
             <div id="review-tabs-area" className="sticky top-[56px] z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <Container className="max-w-[1200px]">
