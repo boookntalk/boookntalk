@@ -5,6 +5,7 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Text, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+from datetime import datetime
 
 # ===================================================================
 # [1] 참여자(작가/옮긴이) 정보 마스터 테이블 (수정 완료)
@@ -479,3 +480,20 @@ class GlobalTrendingAuthor(Base):
     mention_count = Column(Integer, default=0)           # 인용/언급 횟수
     
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+# 기능: 외부 Open API(네이버, 도서관 정보나루)에서 수집한 도서 데이터를 저장하는 캐시 테이블
+class ExternalBookCache(Base):
+    __tablename__ = "external_book_cache"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String, index=True) # 'library_popular' (도서관 인기), 'naver_new' (네이버 신간)
+    title = Column(String, nullable=False)
+    author = Column(String)
+    cover = Column(String)
+    isbn = Column(String, index=True) # 💡 연결고리를 위해 index 추가
+    
+    # 💡 [핵심] 우리 BoooknTalk 내부 서재에 이미 등록된 책일 경우 내부 work_id를 저장!
+    internal_work_id = Column(String, nullable=True, index=True) 
+    
+    rank = Column(Integer) # 노출 순위
+    cached_at = Column(DateTime, default=datetime.utcnow) # 캐싱 업데이트 시간
