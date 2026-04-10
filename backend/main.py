@@ -2364,7 +2364,6 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
 
     if edition_ids:
         # 3. 통합 통계 (총 담긴 횟수, 평균 별점)
-        # Record 테이블에서 edition_id가 해당 작품의 판본들인 것만 필터링
         stats = db.query(
             func.count(models.Record.id).label('total_added'),
             func.avg(models.Record.rating).label('avg_rating')
@@ -2385,9 +2384,27 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
             popular_edition = db.query(models.Edition).filter(models.Edition.id == popular_edition_stat.edition_id).first()
             best_cover = popular_edition.cover_image if popular_edition else None
             
-        # 서재에 담긴 기록이 하나도 없다면, 그냥 첫 번째 판본의 표지를 사용
         if not best_cover and editions:
             best_cover = editions[0].cover_image
+
+    # 💡 [NEW] 5. 작가(Contributor) 상세 정보 및 사진 조회
+    # WorkContributor 테이블을 통해 실제 Contributor 객체를 찾습니다.
+    work_contributor = db.query(models.WorkContributor).filter(
+        models.WorkContributor.work_id == work_id,
+        models.WorkContributor.role == 'AUTHOR'
+    ).first()
+
+    author_info = None
+    if work_contributor and work_contributor.contributor:
+        author = work_contributor.contributor
+        author_info = {
+            "id": str(author.id),
+            "name": author.name,
+            # 💡 바로 이 값이 어드민에서 업로드한 로컬 경로(예: /static/uploads/...)입니다!
+            "photo": author.profile_image, 
+            "bio": author.description,
+            "role": work_contributor.role
+        }
 
     return {
         "work_id": work.id,
@@ -2399,7 +2416,10 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
         "best_cover": best_cover,
         "total_added": total_added,
         "average_rating": avg_rating,
-        "edition_count": len(editions) # 이 작품에 엮인 판본(출판사/개정판)의 총 개수
+        "edition_count": len(editions),
+        
+        # 💡 [NEW] 프론트엔드가 기다리던 작가 상세 객체를 최종 응답에 포함시킵니다.
+        "authorInfo": author_info 
     }
 
 @app.get("/api/works/{work_id}/editions")

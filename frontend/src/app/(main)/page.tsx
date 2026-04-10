@@ -23,6 +23,7 @@ import { useRouter } from 'next/navigation';
 import { FloatingCover } from '@/components/common/FloatingCover';
 import { InsightCard } from '@/components/common/InsightCard';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
+import { AuthorAvatar } from '@/components/common/AuthorAvatar';
 
 // Next.js 환경에서 ECharts WordCloud SSR 충돌을 완벽 방지하는 다이나믹 임포트
 const WordCloudChart = dynamic(() => import('@/components/common/WordCloudChart'), { ssr: false });
@@ -695,13 +696,14 @@ export default function Home() {
                                                     className="flex items-center gap-2.5 group cursor-pointer p-2 hover:bg-[#F7F5F1] rounded-lg transition-all"
                                                     onClick={() => router.push(`/author/${authorId || ''}`)}
                                                 >
-                                                    <div className="w-[36px] h-[36px] flex items-center justify-center shrink-0">
-                                                        {profileImg ? (
-                                                            <img src={profileImg} alt={authorName} className="w-full h-full rounded-full object-cover shadow-sm ring-2 ring-transparent group-hover:ring-[#EEF2F7] transition-all" />
-                                                        ) : (
-                                                            <div className="w-full h-full rounded-full bg-[#EEF2F7] border border-[#E7E2D9] flex items-center justify-center text-[#A0AABF]"><PenTool size={14} /></div>
-                                                        )}
-                                                    </div>
+                                                    {/* 💡 공통 AuthorAvatar 컴포넌트로 교체 완료 */}
+                                                    <AuthorAvatar 
+                                                        src={profileImg} 
+                                                        alt={authorName} 
+                                                        size={36} 
+                                                        fallbackType="pen" 
+                                                        className="shadow-sm ring-2 ring-transparent group-hover:ring-[#EEF2F7] transition-all"
+                                                    />
                                                     <div className="flex flex-col flex-1 min-w-0 justify-center">
                                                         <span className="font-bold text-[#1D2433] text-[13px] truncate group-hover:text-[#1F3A5F] transition-colors">{authorName}</span>
                                                         <div className="flex items-center mt-0.5">

@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Star, ExternalLink, Layers, User, ArrowRight, Edit3, Trash2 } from 'lucide-react';
 import { FloatingCover } from '@/components/common/FloatingCover';
+import { Tooltip } from '@/components/common/Tooltip';
 import { useRouter } from 'next/navigation';
+import { AuthorAvatar } from '@/components/common/AuthorAvatar';
 
 interface BookTopInfoProps {
     record: any;
@@ -70,7 +72,7 @@ export default function BookTopInfo({
     const statusIndex = currentStatus === 'finished' ? 2 : currentStatus === 'reading' ? 1 : 0;
 
     return (
-        <section className="bg-white border-b border-gray-100 relative z-10">
+        <section className="bg-white border-b border-gray-100 relative z-[100]">
             <div className="max-w-[1200px] mx-auto px-8 pt-4 pb-10">
                 
                 {/* [1. 전체 레이아웃] 좌측 고정 표지 vs 우측 정보 영역 */}
@@ -157,16 +159,15 @@ export default function BookTopInfo({
                                     </div>
                                 </div>
 
-                                <div className="relative group mb-6">
-                                    {/* 💡 기획 요건 반영: line-clamp-2 -> line-clamp-3 으로 변경하여 3줄 노출 및 말줄임 처리 */}
-                                    <p className="text-[14px] text-gray-600 leading-relaxed font-medium line-clamp-3 break-keep cursor-pointer">
-                                        {displayDesc}
-                                    </p>
-                                    {displayDesc && displayDesc !== "상세 설명이 없습니다." && (
-                                        <div className="absolute z-50 left-0 top-full mt-2 w-full max-w-[500px] p-6 bg-white text-[#1d1d1f] text-[13px] font-medium leading-relaxed rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 pointer-events-none break-keep">
+                                <div className="mb-6">
+                                    <Tooltip 
+                                        content={displayDesc !== "상세 설명이 없습니다." ? displayDesc : null} 
+                                        position="bottom" // 하단 탭 메뉴에 가리지 않도록 위로 열림
+                                    >
+                                        <p className="text-[14px] text-gray-600 leading-relaxed font-medium line-clamp-3 break-keep cursor-pointer">
                                             {displayDesc}
-                                        </div>
-                                    )}
+                                        </p>
+                                    </Tooltip>
                                 </div>
 
                                 <div className="mt-auto bg-white rounded-[20px] p-6 border border-gray-200 shadow-[0_2px_16px_rgba(0,0,0,0.03)]">
@@ -211,9 +212,15 @@ export default function BookTopInfo({
                                         <div className="flex flex-col">
                                             <h2 className="text-[13px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
                                             <div className="flex items-center gap-3 mb-4">
-                                                <div className="w-[48px] h-[48px] rounded-full overflow-hidden bg-gray-50 border border-gray-200 shrink-0 flex items-center justify-center">
-                                                    {authorInfo.photo ? <img src={authorInfo.photo} alt={authorInfo.name} className="w-full h-full object-cover" /> : <User size={20} className="text-gray-300" />}
-                                                </div>
+                                                
+                                                {/* 💡 기존의 복잡했던 div 래퍼와 img, User 조건부 렌더링을 공통 컴포넌트로 교체 완료 */}
+                                                <AuthorAvatar 
+                                                    src={authorInfo.photo} 
+                                                    alt={authorInfo.name} 
+                                                    size={48} 
+                                                    fallbackType="user" 
+                                                />
+                                                
                                                 <div>
                                                     <h3 className="text-[16px] font-extrabold text-[#1d1d1f]">{authorInfo.name}</h3>
                                                     {authorInfo.role && <p className="text-[11px] font-bold text-[#0066cc] mt-0.5">{authorInfo.role}</p>}
