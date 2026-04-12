@@ -2,9 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { /* BoooknTalk 표준 배경색 */
-  --header-height: 56px; /* Header h-14와 일치 */
-  --content-gap: 20px;   /* 사용자 요청 여백 */
+:root {
+  --header-height: 64px;
+  --sidebar-width: 260px;
+  
+  /* 💡 폭 사이즈를 기존의 시원한 느낌으로 확장 (1200px -> 1440px) */
+  --max-content-width: 1440px;
+  
+  /* 1cm 간격 규칙 고정 */
+  --spacing-1cm: 38px;
+
+  --bg-main: #F7F5F1;
+  --border-light: #E7E2D9;
 }
 
 html, body {
@@ -12,7 +21,8 @@ html, body {
   margin: 0;
   padding: 0;
   /* overflow: hidden; <-- 16번 줄: ❌ 삭제 필수! (이게 스크롤을 막고 있음) */
-  background-color: var(--background);
+  /* background-color: var(--background); */
+  background-color: var(--bg-main);
 }
 
 * {

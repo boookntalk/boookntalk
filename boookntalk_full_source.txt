@@ -22,6 +22,7 @@ PROJECT ROOT: boookntalk
 │   │   ├── admin_service.py
 │   │   ├── author_service.py
 │   │   ├── book_service_org.py
+│   │   ├── external_api_service.py
 │   │   ├── insight_service.py
 │   │   └── trending_service.py
 │   ├── static
@@ -1474,6 +1475,7 @@ PROJECT ROOT: boookntalk
 │   │   │   │   ├── ShortReviewSection.tsx
 │   │   │   │   └── ShortReviewWriteModal.tsx
 │   │   │   ├── common
+│   │   │   │   ├── AuthorAvatar.tsx
 │   │   │   │   ├── BookCover.tsx
 │   │   │   │   ├── BookItemCard.tsx
 │   │   │   │   ├── BookRecordCard.tsx
@@ -1481,6 +1483,7 @@ PROJECT ROOT: boookntalk
 │   │   │   │   ├── FollowButton.tsx
 │   │   │   │   ├── InsightCard.tsx
 │   │   │   │   ├── SmartTruncatedText.tsx
+│   │   │   │   ├── Tooltip.tsx
 │   │   │   │   └── WordCloudChart.tsx
 │   │   │   ├── community
 │   │   │   │   └── FollowingFeed.tsx
@@ -7925,7 +7928,8 @@ FILE PATH: frontend/src/app/(main)/page.tsx
 ============================================================
 // 경로: frontend/src/app/[(main)]/page.tsx
 // 역할 및 기능: BoooknTalk 비로그인(Guest) 사용자 및 전체 사용자를 위한 메인 랜딩 페이지. 
-// 에디토리얼 무드를 바탕으로 차분하고 고급스러운 디지털 서재 경험을 제공합니다. (공통 컴포넌트 적용, 고밀도 워드클라우드 및 영감 작가 리스트 6:4 레이아웃 적용)
+// 에디토리얼 무드를 바탕으로 차분하고 고급스러운 디지털 서재 경험을 제공합니다. 
+// (최신 업데이트: 상단 5:5 탭 레이아웃 적용, Discovery Hub 가로 스크롤(스와이프) 다이어트 적용)
 
 'use client';
 
@@ -7935,7 +7939,7 @@ import dynamic from 'next/dynamic';
 import { 
     Quote, MessageCircle, ArrowRight, BookOpen, ChevronRight, 
     ChevronLeft, Star, Loader2, TrendingUp, Flame, HelpCircle, 
-    PenTool, Crown 
+    PenTool, Crown, Search, AlignLeft
 } from 'lucide-react';
 import Container from '@/components/layout/Container';
 import Footer from '@/components/layout/Footer';
@@ -7945,36 +7949,41 @@ import { useRouter } from 'next/navigation';
 
 // 공통 컴포넌트 Import
 import { FloatingCover } from '@/components/common/FloatingCover';
-import { BookItemCard } from '@/components/common/BookItemCard';
 import { InsightCard } from '@/components/common/InsightCard';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
+import { AuthorAvatar } from '@/components/common/AuthorAvatar';
 
 // Next.js 환경에서 ECharts WordCloud SSR 충돌을 완벽 방지하는 다이나믹 임포트
 const WordCloudChart = dynamic(() => import('@/components/common/WordCloudChart'), { ssr: false });
 
 let memoryCache: any = null;
 let cachedCoverIdx = 0;
-let cachedArrivalsIdx = 0;
 
 export default function Home() {
     const [isLoading, setIsLoading] = useState(true);
     const [stats, setStats] = useState({ total_sentences: 0, total_pages: 0, reading_books: 0 });
-    const [ugcFeeds, setUgcFeeds] = useState<any[]>([]);
-    const [newArrivals, setNewArrivals] = useState<any[]>([]);
-    const [coverFlowBooks, setCoverFlowBooks] = useState<any[]>([]);
+    
+    // 섹션 1 (5:5 레이아웃) 상태
     const [heroSentences, setHeroSentences] = useState<any[]>([]);
     const [currentSlide, setCurrentSlide] = useState(0);
-    const [readersChoice, setReadersChoice] = useState<any>(null);
-    const [rcReviewIndex, setRcReviewIndex] = useState(0);
-    const [activeCoverflowIndex, setActiveCoverflowIndex] = useState(0);
-    const [arrivalsIndex, setArrivalsIndex] = useState(0);
-    const [selectedGenre, setSelectedGenre] = useState<string>('All');
-    const [bestLongReviews, setBestLongReviews] = useState<any[]>([]);
-    const [likedFeeds, setLikedFeeds] = useState<Record<string, boolean>>({});
-    const [trendingTags, setTrendingTags] = useState<any[]>([]);
+    const [readersChoice, setReadersChoice] = useState<any>(null); // 한줄평 데이터
+    const [bestLongReviews, setBestLongReviews] = useState<any[]>([]); // 긴줄평 데이터
+    const [reviewTab, setReviewTab] = useState<'short' | 'long'>('short'); // 리뷰 탭 상태
+    const [rcReviewIndex, setRcReviewIndex] = useState(0); // 한줄평 슬라이드 인덱스
+    const [lrReviewIndex, setLrReviewIndex] = useState(0); // 긴줄평 슬라이드 인덱스
     
-    // [신규] 사색을 유발한 작가들 데이터를 저장할 상태 변수
+    // 커버플로우 및 작가, 태그 상태
+    const [coverFlowBooks, setCoverFlowBooks] = useState<any[]>([]);
+    const [activeCoverflowIndex, setActiveCoverflowIndex] = useState(0);
+    const [selectedGenre, setSelectedGenre] = useState<string>('All');
+    const [trendingTags, setTrendingTags] = useState<any[]>([]);
     const [inspiringAuthors, setInspiringAuthors] = useState<any[]>([]);
+
+    // 💡 Discovery Hub 탭 상태 및 외부 API 데이터 상태
+    const [discoveryTab, setDiscoveryTab] = useState<'library' | 'naver' | 'bntalk'>('library');
+    const [libraryPopular, setLibraryPopular] = useState<any[]>([]);
+    const [naverNewArrivals, setNaverNewArrivals] = useState<any[]>([]);
+    const [newArrivals, setNewArrivals] = useState<any[]>([]); // BoooknTalk 내부 신간
 
     const dragStartX = useRef<number | null>(null);
     const isDragging = useRef<boolean>(false);
@@ -7985,24 +7994,26 @@ export default function Home() {
 
     useEffect(() => {
         const savedCoverIndex = sessionStorage.getItem('bnt_coverIndex');
-        const savedArrivalsIndex = sessionStorage.getItem('bnt_arrivalsIndex');
-        
         if (savedCoverIndex !== null) setActiveCoverflowIndex(parseInt(savedCoverIndex, 10));
-        if (savedArrivalsIndex !== null) setArrivalsIndex(parseInt(savedArrivalsIndex, 10));
-        
-        if (memoryCache) {
-            setStats(memoryCache.stats); setUgcFeeds(memoryCache.ugcFeeds); setNewArrivals(memoryCache.newArrivals);
-            setHeroSentences(memoryCache.heroSentences); setReadersChoice(memoryCache.readersChoice);
-            setCoverFlowBooks(memoryCache.coverFlowBooks); setBestLongReviews(memoryCache.bestLongReviews);
-            setTrendingTags(memoryCache.trendingTags); setInspiringAuthors(memoryCache.inspiringAuthors);
-            setActiveCoverflowIndex(cachedCoverIdx); setArrivalsIndex(cachedArrivalsIdx);
-            setIsLoading(false);
-        }
         isInitialized.current = true;
     }, []);
 
     useEffect(() => { if (isInitialized.current) sessionStorage.setItem('bnt_coverIndex', activeCoverflowIndex.toString()); cachedCoverIdx = activeCoverflowIndex; }, [activeCoverflowIndex]);
-    useEffect(() => { if (isInitialized.current) sessionStorage.setItem('bnt_arrivalsIndex', arrivalsIndex.toString()); cachedArrivalsIdx = arrivalsIndex; }, [arrivalsIndex]);
+
+    // 💡 [NEW] 작가 이름에 붙은 불필요한 장르명, 역할어 찌꺼기를 안전하게 제거하는 함수
+    const cleanAuthorName = (name: string) => {
+        if (!name) return '';
+        // 1. 쉼표, 괄호, 파이프 등으로 첫 번째(메인) 작가만 분리
+        let clean = name.split(',')[0].split('(')[0].split(';')[0].split('|')[0];
+        
+        // 2. 이름의 '끝'에 붙어있는 역할어나 장르명 찌꺼기 제거 (공백 유무 상관없이 모두 처리)
+        clean = clean.replace(/\s*(장편소설|장소설|소설|지음|옮김|저자|편자|그림|글|지은이|옮긴이)\s*$/g, '');
+        
+        // 3. 한 번 더 치환 (혹시 '조엘 디케르 장소설 지음' 처럼 두 개가 연달아 붙어있을 경우를 대비)
+        clean = clean.replace(/\s*(장편소설|장소설|소설|지음|옮김|저자|편자|그림|글|지은이|옮긴이)\s*$/g, '');
+
+        return clean.trim();
+    };
 
     const getInitialConsonant = (str: string) => {
         if (!str) return '';
@@ -8064,31 +8075,13 @@ export default function Home() {
 
     const handleCoverClick = (idx: number, offset: number) => {
         if (isDragging.current) return; 
-        if (offset === 0) handleSquareNavigation();
+        if (offset === 0) {
+            if (coverFlowBooks[idx]?.isbn) router.push(`/search?q=${coverFlowBooks[idx].isbn}`);
+        }
         else setActiveCoverflowIndex(idx);
     };
 
-    const handleLikeClick = async (e: React.MouseEvent, feedId: string) => {
-        e.stopPropagation(); 
-        if (!session) return toast('로그인이 필요해요', { action: { label: '로그인', onClick: () => signIn('google') }, duration: 3000 });
-        setLikedFeeds(prev => ({ ...prev, [feedId]: !prev[feedId] }));
-        try {
-            await fetch(`http://localhost:8000/api/feeds/${feedId}/like`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_email: session.user?.email })
-            });
-        } catch (error) { setLikedFeeds(prev => ({ ...prev, [feedId]: !prev[feedId] })); }
-    };
-
-    const nextArrivals = () => { if (newArrivals.length > 0) setArrivalsIndex((prev) => (prev + 1) % newArrivals.length); };
-    const prevArrivals = () => { if (newArrivals.length > 0) setArrivalsIndex((prev) => (prev - 1 + newArrivals.length) % newArrivals.length); };
-    
-    const visibleArrivals = [];
-    if (newArrivals.length > 0) {
-        for (let i = 0; i < Math.min(10, newArrivals.length); i++) {
-            visibleArrivals.push(newArrivals[(arrivalsIndex + i) % newArrivals.length]);
-        }
-    }
-
+    // 💡 슬라이더 타이머 로직들
     useEffect(() => {
         if (heroSentences.length === 0) return;
         const timer = setInterval(() => setCurrentSlide((prev) => (prev + 1) % heroSentences.length), 5000);
@@ -8096,36 +8089,43 @@ export default function Home() {
     }, [heroSentences.length]);
 
     useEffect(() => {
-        if (!readersChoice || readersChoice.length <= 1) return;
-        const timer = setInterval(() => setRcReviewIndex((prev) => (prev + 1) % readersChoice.length), 4500);
+        if (!readersChoice || readersChoice.length <= 1 || reviewTab !== 'short') return;
+        const timer = setInterval(() => setRcReviewIndex((prev) => (prev + 1) % readersChoice.length), 5000);
         return () => clearInterval(timer);
-    }, [readersChoice]);
+    }, [readersChoice, reviewTab]);
 
     useEffect(() => {
-        // 💡 [최후의 방어선] 무슨 일이 있어도 2.5초 뒤엔 무조건 로딩을 끄는 타이머!
-        const safetyTimer = setTimeout(() => {
-            setIsLoading(false);
-        }, 2500);
+        if (!bestLongReviews || bestLongReviews.length <= 1 || reviewTab !== 'long') return;
+        const timer = setInterval(() => setLrReviewIndex((prev) => (prev + 1) % bestLongReviews.length), 5000);
+        return () => clearInterval(timer);
+    }, [bestLongReviews, reviewTab]);
 
-        // 🚀 [핵심 수술] 메모리 캐시가 있다면, 세션이 로딩 중이든 꼬였든 다 무시하고 즉시 화면을 그립니다!
+
+    // ============================================================
+    // 🚀 [메인 데이터 패칭 및 캐시 복구 로직]
+    // ============================================================
+    useEffect(() => {
+        const safetyTimer = setTimeout(() => { setIsLoading(false); }, 2500);
+
         if (memoryCache) {
             setStats(memoryCache.stats);
-            setUgcFeeds(memoryCache.ugcFeeds);
-            setNewArrivals(memoryCache.newArrivals);
             setHeroSentences(memoryCache.heroSentences);
-            // setEditorPick(memoryCache.editorPick); // (상태 변수가 있다면 주석 해제)
             setReadersChoice(memoryCache.readersChoice);
-            setCoverFlowBooks(memoryCache.coverFlowBooks);
             setBestLongReviews(memoryCache.bestLongReviews);
+            setCoverFlowBooks(memoryCache.coverFlowBooks);
             setTrendingTags(memoryCache.trendingTags);
             setInspiringAuthors(memoryCache.inspiringAuthors);
             
-            setIsLoading(false); // 즉시 로딩 끄기
-            clearTimeout(safetyTimer); // 캐시로 복구했으니 타이머 취소
+            setLibraryPopular(memoryCache.libraryPopular);
+            setNaverNewArrivals(memoryCache.naverNewArrivals);
+            setNewArrivals(memoryCache.newArrivals);
+            
+            setActiveCoverflowIndex(cachedCoverIdx);
+            setIsLoading(false); 
+            clearTimeout(safetyTimer); 
             return; 
         }
 
-        // 캐시가 아예 없을 때(최초 접속)만 세션 로딩을 기다려 줍니다.
         if (status === "loading") {
             return () => clearTimeout(safetyTimer);
         }
@@ -8137,35 +8137,39 @@ export default function Home() {
                 const res = await fetch(`http://localhost:8000/api/home/dashboard${emailQuery}`);
                 
                 if (!res.ok) throw new Error("대시보드 통신 에러");
-                
                 const data = await res.json();
                 
                 const newData = {
                     stats: data.stats || { total_sentences: 0, total_pages: 0, reading_books: 0 },
-                    ugcFeeds: data.ugcFeeds || [],
-                    newArrivals: data.newArrivals || [],
                     heroSentences: data.heroSentences || [],
-                    editorPick: data.editorPick || null,
-                    readersChoice: data.readersChoice || null,
-                    coverFlowBooks: data.coverFlowBooks || [],
+                    readersChoice: data.readersChoice || [],
                     bestLongReviews: data.bestLongReviews || [],
+                    coverFlowBooks: data.coverFlowBooks || [],
                     trendingTags: data.trendingTags || [],
                     inspiringAuthors: data.inspiringAuthors || [],
+                    
+                    libraryPopular: data.libraryPopular || [],
+                    naverNewArrivals: data.naverNewArrivals || [],
+                    newArrivals: data.newArrivals || [],
+                    
                     sessionEmail: session?.user?.email || null
                 };
 
                 setStats(newData.stats);
-                setUgcFeeds(newData.ugcFeeds);
-                setNewArrivals(newData.newArrivals);
                 setHeroSentences(newData.heroSentences);
-                // setEditorPick(newData.editorPick);
                 setReadersChoice(newData.readersChoice);
-                setCoverFlowBooks(newData.coverFlowBooks);
                 setBestLongReviews(newData.bestLongReviews);
+                setCoverFlowBooks(newData.coverFlowBooks);
                 setTrendingTags(newData.trendingTags);
                 setInspiringAuthors(newData.inspiringAuthors);
                 
+                setLibraryPopular(newData.libraryPopular);
+                setNaverNewArrivals(newData.naverNewArrivals);
+                setNewArrivals(newData.newArrivals);
+                
                 memoryCache = newData;
+                setRcReviewIndex(0);
+                setLrReviewIndex(0);
             } catch (error) { 
                 console.error("홈 데이터 로딩 실패:", error); 
             } finally { 
@@ -8175,8 +8179,6 @@ export default function Home() {
         };
         
         fetchHomeData();
-
-        // 클린업: 컴포넌트가 꺼질 때 찌꺼기 타이머 제거
         return () => clearTimeout(safetyTimer);
     }, [session, status]);
 
@@ -8267,11 +8269,14 @@ export default function Home() {
                 </Container>
             </section>
 
-            {/* ▼ Section 1: 오늘의 독서노트 & 독자의 한줄평 ▼ */}
+            {/* ▼ Section 1: 오늘의 문장 (메모) & 유저 리뷰 (5:5 분할) ▼ */}
             <section className="w-full pt-[32px]">
                 <Container>
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch h-auto lg:min-h-[220px]">
-                        <div className="lg:col-span-8 relative rounded-sm overflow-hidden shadow-[0_4px_24px_rgba(29,36,51,0.06)] group bg-[#162335] flex flex-col border border-[#1F3A5F]/20">
+                    {/* 💡 카드의 기본 높이를 살짝 키워(300px) 3줄 텍스트가 안정적으로 들어가게 최적화 */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch h-auto lg:h-[300px]">
+                        
+                        {/* 1. 좌측 (50%): 오늘의 문장 (메모) */}
+                        <div className="lg:col-span-6 relative rounded-sm overflow-hidden shadow-[0_4px_24px_rgba(29,36,51,0.06)] group bg-[#162335] flex flex-col border border-[#1F3A5F]/20 h-full min-h-[280px]">
                             {heroSentences.length > 0 ? (
                                 <>
                                     <div className="flex w-full h-full transition-transform duration-700 ease-in-out flex-1" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
@@ -8281,35 +8286,36 @@ export default function Home() {
                                                     {sentence.cover ? <Image src={sentence.cover} alt="Background" fill className="object-cover blur-[50px] scale-125 opacity-40 mix-blend-overlay" unoptimized /> : <div className="w-full h-full bg-[#162335]"></div>}
                                                     <div className="absolute inset-0 bg-gradient-to-t from-[#162335] via-[#162335]/80 to-transparent"></div>
                                                 </div>
-                                                <div className="relative z-10 flex flex-col justify-between w-full h-full p-6 md:p-8">
-                                                    <div>
-                                                        <div className="flex items-center gap-2 mb-4">
-                                                            <Quote size={14} className="text-[#C89B3C]" />
-                                                            <span className="text-[12px] font-black tracking-widest text-[#C89B3C] uppercase">Today's Sentence</span>
-                                                        </div>
-                                                        <div className="relative" onClick={(e) => { e.stopPropagation(); handleSentenceClick(sentence); }}>
-                                                            <SmartTruncatedText 
-                                                                content={`${sentence.text} ${sentence.page ? `- ${sentence.page}p` : ''}`} 
-                                                                textClassName="text-[20px] md:text-[22px] font-serif font-medium leading-[1.6] break-keep tracking-tight text-white drop-shadow-md"
-                                                                wrapQuotes={true}
-                                                            />
-                                                        </div>
+                                                
+                                                {/* 💡 카드 내부 패딩과 구조 최적화 */}
+                                                <div className="relative z-10 flex flex-col w-full h-full p-6 md:p-8">
+                                                    
+                                                    {/* 상단 타이틀 (고정) */}
+                                                    <div className="flex items-center gap-2 mb-4 shrink-0">
+                                                        <Quote size={14} className="text-[#C89B3C]" />
+                                                        <span className="text-[12px] font-black tracking-widest text-[#C89B3C] uppercase">Today's Sentence</span>
                                                     </div>
-                                                    <div className="flex items-end justify-between w-full mt-auto pt-4 border-t border-white/10">
-                                                        <div className="flex items-center gap-4">
-                                                            <FloatingCover src={sentence.cover} className="w-[40px] h-[58px]" iconSize={16} />
-                                                            <div className="flex flex-col text-left justify-center">
-                                                                <p className="text-[15px] font-bold text-white mb-0.5 line-clamp-1">{sentence.book}</p>
-                                                                <p className="text-[12px] text-[#A0AABF] font-medium mb-1 line-clamp-1">저자 : {sentence.author}</p>
+
+                                                    {/* 💡 [핵심] 중앙 텍스트 영역: 최대 3줄 제한(line-clamp-3) 적용 및 flex-1로 공간 확보 */}
+                                                    <div className="relative flex-1 min-h-0 flex flex-col justify-center" onClick={(e) => { e.stopPropagation(); handleSentenceClick(sentence); }}>
+                                                        <SmartTruncatedText 
+                                                            content={`${sentence.text} ${sentence.page ? `- ${sentence.page}p` : ''}`} 
+                                                            textClassName="text-[18px] md:text-[20px] font-serif font-medium leading-[1.6] break-keep tracking-tight text-white drop-shadow-md line-clamp-3"
+                                                            wrapQuotes={true}
+                                                        />
+                                                    </div>
+
+                                                    {/* 하단 책 및 유저 정보 (shrink-0으로 절대 밀려나지 않게 고정) */}
+                                                    <div className="flex items-end justify-between w-full mt-4 pt-4 border-t border-white/10 shrink-0">
+                                                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                            <FloatingCover src={sentence.cover} className="w-[36px] h-[52px]" iconSize={14} />
+                                                            <div className="flex flex-col text-left justify-center min-w-0 pr-2">
+                                                                <p className="text-[14px] font-bold text-white mb-0.5 line-clamp-1">{sentence.book}</p>
+                                                                <p className="text-[11px] text-[#A0AABF] font-medium mb-1 line-clamp-1">저자 : {cleanAuthorName(sentence.author)}</p>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-3 shrink-0">
-                                                            <div className="inline-flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-sm backdrop-blur-md border border-white/10">
-                                                                <span className="text-[12px] text-white font-medium truncate">{sentence.user || 'BnTalker'}</span>
-                                                            </div>
-                                                            <div className="w-8 h-8 rounded-sm flex shrink-0 items-center justify-center transition-all duration-300 border border-[#C89B3C]/50 group-hover:bg-[#C89B3C] group-hover:border-[#C89B3C]">
-                                                                <ArrowRight size={14} className="text-[#C89B3C] group-hover:text-white transition-colors" />
-                                                            </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <span className="text-[12px] text-white/80 font-medium truncate bg-white/5 px-2 py-1 rounded-sm border border-white/10 max-w-[100px]">{sentence.user || 'BnTalker'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -8325,64 +8331,133 @@ export default function Home() {
                                     )}
                                 </>
                             ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center min-h-[220px]">
+                                <div className="w-full h-full flex flex-col items-center justify-center min-h-[250px]">
                                     <Loader2 className="animate-spin text-[#C89B3C]" size={28} />
                                 </div>
                             )}
                         </div>
 
-                        <div className="lg:col-span-4 flex flex-col h-full min-h-[220px]">
-                            <InsightCard className="flex-1 flex flex-col relative overflow-hidden group hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow duration-300 !p-6">
+                        {/* 2. 우측 (50%): 유저 리뷰 탭 (한줄평 & 긴줄평) */}
+                        <div className="lg:col-span-6 flex flex-col h-full min-h-[280px]">
+                            <InsightCard className="flex-1 flex flex-col relative overflow-hidden group hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow duration-300 !p-6 h-full bg-[#FFFFFF]">
                                 <div className="relative z-10 flex flex-col h-full">
-                                    <div className="flex items-center justify-between mb-4 shrink-0 border-b border-[#EEF2F7] pb-3">
-                                        <div className="flex items-center gap-2">
-                                            <MessageCircle size={14} className="text-[#C89B3C]" />
-                                            <span className="text-[12px] font-bold text-[#1D2433] tracking-widest uppercase">독자의 한줄평</span>
-                                        </div>
-                                        {!isLoading && readersChoice && readersChoice.length > 0 && (
-                                            <div key={`user-${rcReviewIndex}`} className="animate-in fade-in duration-500 flex items-center gap-1.5">
-                                                <span className="text-[11px] font-medium text-[#667085] truncate max-w-[120px]">{readersChoice[rcReviewIndex].user}</span>
-                                            </div>
-                                        )}
+                                    
+                                    {/* 💡 [네이밍 수정 적용] 리뷰 탭 영역 */}
+                                    <div className="flex items-center gap-6 mb-4 shrink-0 border-b border-[#EEF2F7] pb-3">
+                                        <button 
+                                            onClick={() => { setReviewTab('short'); setRcReviewIndex(0); }} 
+                                            className={`text-[13px] font-extrabold tracking-tight transition-all flex items-center gap-1.5 relative pb-1 ${reviewTab === 'short' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}
+                                        >
+                                            <MessageCircle size={14} className={reviewTab === 'short' ? 'text-[#C89B3C]' : ''}/> 한줄평(Short Review)
+                                            {reviewTab === 'short' && <span className="absolute bottom-[-13px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
+                                        </button>
+                                        <button 
+                                            onClick={() => { setReviewTab('long'); setLrReviewIndex(0); }} 
+                                            className={`text-[13px] font-extrabold tracking-tight transition-all flex items-center gap-1.5 relative pb-1 ${reviewTab === 'long' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}
+                                        >
+                                            <AlignLeft size={14} className={reviewTab === 'long' ? 'text-[#C89B3C]' : ''} /> 긴줄평(Review)
+                                            {reviewTab === 'long' && <span className="absolute bottom-[-13px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
+                                        </button>
                                     </div>
                                     
                                     {isLoading ? (
                                         <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF] h-full"><Loader2 className="animate-spin text-[#C89B3C] mb-3" size={24} /></div>
-                                    ) : readersChoice && readersChoice.length > 0 ? (
+                                    ) : (
                                         <>
-                                            <div key={`book-${rcReviewIndex}`} onClick={() => handleSentenceClick({ work_id: readersChoice[rcReviewIndex].work_id, book: readersChoice[rcReviewIndex].title })} className="animate-in fade-in duration-500 flex items-center gap-3 mb-4 cursor-pointer shrink-0 group/mini">
-                                                <FloatingCover src={readersChoice[rcReviewIndex].cover} className="w-[36px] h-[52px]" iconSize={16} />
-                                                <div className="flex flex-col justify-center">
-                                                    <span className="text-[14px] font-bold text-[#1D2433] line-clamp-1 group-hover/mini:text-[#1F3A5F] transition-colors">{readersChoice[rcReviewIndex].title}</span>
-                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                        <span className="text-[12px] text-[#667085] line-clamp-1">{readersChoice[rcReviewIndex].author}</span>
-                                                        {readersChoice[rcReviewIndex].rating > 0 && (
-                                                            <div className="flex items-center gap-0.5 text-[#C89B3C]">
-                                                                <Star size={10} fill="currentColor" />
-                                                                <span className="text-[10px] font-bold">{readersChoice[rcReviewIndex].rating}</span>
+                                            {/* 탭 1: 한줄평 (Short Review) 렌더링 */}
+                                            {reviewTab === 'short' && readersChoice && readersChoice.length > 0 && readersChoice[rcReviewIndex] && (
+                                                <div className="flex-1 flex flex-col h-full animate-in fade-in duration-500 min-h-0">
+                                                    <div onClick={() => handleSentenceClick({ work_id: readersChoice[rcReviewIndex].work_id, book: readersChoice[rcReviewIndex].title })} className="flex items-center gap-3 mb-4 cursor-pointer shrink-0 group/mini">
+                                                        <FloatingCover src={readersChoice[rcReviewIndex].cover} className="w-[32px] h-[46px]" iconSize={14} />
+                                                        <div className="flex flex-col justify-center flex-1 min-w-0">
+                                                            <div className="flex items-center justify-between w-full">
+                                                                <span className="text-[13px] font-bold text-[#1D2433] line-clamp-1 group-hover/mini:text-[#1F3A5F] transition-colors">{readersChoice[rcReviewIndex].title}</span>
+                                                                <span className="text-[11px] font-medium text-[#A0AABF] shrink-0 truncate ml-2 max-w-[80px]">{readersChoice[rcReviewIndex].user}</span>
                                                             </div>
-                                                        )}
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <span className="text-[11px] text-[#667085] line-clamp-1">{cleanAuthorName(readersChoice[rcReviewIndex].author)}</span>
+                                                                {readersChoice[rcReviewIndex].rating > 0 && (
+                                                                    <div className="flex items-center gap-0.5 text-[#C89B3C]">
+                                                                        {[...Array(5)].map((_, i) => (
+                                                                            <Star 
+                                                                                key={`star-${i}`} 
+                                                                                size={10} 
+                                                                                fill={i < Math.floor(readersChoice[rcReviewIndex].rating) ? "currentColor" : "none"} 
+                                                                                className={i < Math.floor(readersChoice[rcReviewIndex].rating) ? "" : "text-[#EEF2F7]"} 
+                                                                            />
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </div>
-                                            <div className="flex-1 relative flex flex-col justify-center bg-[#F7F5F1]/50 rounded-md p-4 border border-[#EEF2F7]">
-                                                <div key={`text-${rcReviewIndex}`} className="animate-in fade-in duration-500 h-full flex flex-col justify-center relative">
-                                                    <Quote size={16} className="text-[#C89B3C]/20 absolute -top-1 -left-1" />
-                                                    <div className="pl-4 relative z-10 w-full h-full flex items-center">
-                                                        <SmartTruncatedText content={readersChoice[rcReviewIndex].text} textClassName="text-[14px] font-medium text-[#1D2433] font-serif" />
+                                                    {/* 한줄평 컨텐츠 */}
+                                                    <div className="flex-1 relative flex flex-col justify-center bg-[#F7F5F1]/50 rounded-md p-4 border border-[#EEF2F7]">
+                                                        <div className="h-full flex flex-col justify-center relative">
+                                                            <Quote size={16} className="text-[#C89B3C]/20 absolute -top-1 -left-1" />
+                                                            <div className="pl-4 relative z-10 w-full h-full flex items-center">
+                                                                <SmartTruncatedText content={readersChoice[rcReviewIndex].text} textClassName="text-[14px] font-medium text-[#1D2433] font-serif" />
+                                                            </div>
+                                                        </div>
                                                     </div>
+                                                    {readersChoice.length > 1 && (
+                                                        <div className="flex items-center justify-center gap-2 mt-4 shrink-0">
+                                                            {readersChoice.map((_: any, i: number) => (
+                                                                <button key={`rc-dot-${i}`} onClick={() => setRcReviewIndex(i)} className={`h-1.5 rounded-sm transition-all duration-300 ${rcReviewIndex === i ? 'w-4 bg-[#1F3A5F]' : 'w-1.5 bg-[#E7E2D9] hover:bg-[#A0AABF]'}`} />
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </div>
-                                            {readersChoice.length > 1 && (
-                                                <div className="flex items-center justify-center gap-2 mt-4 shrink-0">
-                                                    {readersChoice.map((_: any, i: number) => (
-                                                        <button key={i} onClick={() => setRcReviewIndex(i)} className={`h-1.5 rounded-sm transition-all duration-300 ${rcReviewIndex === i ? 'w-4 bg-[#1F3A5F]' : 'w-1.5 bg-[#E7E2D9] hover:bg-[#A0AABF]'}`} />
-                                                    ))}
+                                            )}
+
+                                            {/* 탭 2: 긴줄평 (Long Review) 렌더링 */}
+                                            {reviewTab === 'long' && bestLongReviews && bestLongReviews.length > 0 && bestLongReviews[lrReviewIndex] && (
+                                                <div className="flex-1 flex flex-col h-full animate-in fade-in duration-500 min-h-0">
+                                                    <div onClick={() => handleSentenceClick(bestLongReviews[lrReviewIndex])} className="flex gap-4 cursor-pointer group/mini h-full">
+                                                        <div className="w-[80px] shrink-0">
+                                                            <FloatingCover src={bestLongReviews[lrReviewIndex].cover} className="w-full aspect-[1/1.45]" iconSize={20} />
+                                                            <div className="mt-2 flex justify-center text-[#C89B3C]">
+                                                                {[...Array(5)].map((_, i) => <Star key={i} size={8} fill={i < Math.floor(bestLongReviews[lrReviewIndex].rating || 5) ? "currentColor" : "none"} className={i < Math.floor(bestLongReviews[lrReviewIndex].rating || 5) ? "" : "text-[#EEF2F7]"} />)}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                                                            <div>
+                                                                <div className="flex items-center justify-between w-full mb-1">
+                                                                    <h3 className="text-[14px] font-bold text-[#1D2433] line-clamp-1 group-hover/mini:text-[#1F3A5F] transition-colors">{bestLongReviews[lrReviewIndex].title}</h3>
+                                                                    <span className="text-[11px] font-medium text-[#A0AABF] shrink-0 truncate ml-2 max-w-[80px]">{bestLongReviews[lrReviewIndex].user}</span>
+                                                                </div>
+                                                                <div className="relative mt-2">
+                                                                    <Quote size={12} className="text-[#E7E2D9] absolute -top-1 -left-1.5 z-0" />
+                                                                    <div className="pl-3 relative z-10 w-full pt-0.5">
+                                                                        {/* 긴줄평 텍스트 처리 */}
+                                                                        <SmartTruncatedText content={bestLongReviews[lrReviewIndex].text?.replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ')} textClassName="text-[13px] leading-[1.6] text-[#667085] font-serif line-clamp-4" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="mt-2 flex justify-end shrink-0">
+                                                                <span className="text-[11px] font-bold text-[#1F3A5F] flex items-center gap-1 group-hover/mini:translate-x-1 transition-transform">전문 읽기 <ArrowRight size={12} /></span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {bestLongReviews.length > 1 && (
+                                                        <div className="flex items-center justify-center gap-2 mt-4 shrink-0 border-t border-[#EEF2F7] pt-3">
+                                                            {bestLongReviews.map((_: any, i: number) => (
+                                                                <button key={`lr-dot-${i}`} onClick={() => setLrReviewIndex(i)} className={`h-1.5 rounded-sm transition-all duration-300 ${lrReviewIndex === i ? 'w-4 bg-[#1F3A5F]' : 'w-1.5 bg-[#E7E2D9] hover:bg-[#A0AABF]'}`} />
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* 탭 공통 데이터 없음 Fallback */}
+                                            {((reviewTab === 'short' && (!readersChoice || readersChoice.length === 0)) || 
+                                              (reviewTab === 'long' && (!bestLongReviews || bestLongReviews.length === 0))) && (
+                                                <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF] gap-2 border border-dashed border-[#EEF2F7] rounded-md bg-[#F7F5F1]/30">
+                                                    <MessageCircle className="mb-1 opacity-30" size={24} />
+                                                    <span className="text-[12px]">등록된 {reviewTab === 'short' ? '한줄평' : '긴줄평'}이 없습니다.</span>
                                                 </div>
                                             )}
                                         </>
-                                    ) : (
-                                        <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF]"><MessageCircle className="mb-2 opacity-30" size={24} /><span className="text-[12px]">등록된 한줄평이 없습니다.</span></div>
                                     )}
                                 </div>
                             </InsightCard>
@@ -8391,127 +8466,121 @@ export default function Home() {
                 </Container>
             </section>
 
-            {/* ▼ Section 1.5: BnTalkers의 긴줄평 ▼ */}
+            {/* ============================================================ */}
+            {/* 🚀 [NEW] Section 2: 북앤톡 디스커버리 (Netflix형 가로 스크롤 다이어트) */}
+            {/* ============================================================ */}
             <section className="w-full mt-[32px]">
                 <Container>
-                    <div className="flex items-end justify-between mb-8">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 border-b border-[#E7E2D9] pb-4 gap-4">
                         <div>
-                            <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-2 block">Deep Reviews</span>
-                            <h2 className="text-[24px] font-black text-[#1D2433] flex items-center gap-2 tracking-tight">BnTalkers Review</h2>
-                            <p className="text-[14px] text-[#667085] mt-1 font-medium">정성껏 남긴 서재의 긴줄평들</p>
+                            <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-2 block">Discovery Hub</span>
+                            <h2 className="text-[24px] font-black text-[#1D2433] flex items-center gap-2 tracking-tight">새로운 영감을 발견하세요</h2>
+                        </div>
+
+                        <div className="flex items-center gap-6 overflow-x-auto scrollbar-hide shrink-0">
+                            <button onClick={() => setDiscoveryTab('library')} className={`pb-2 text-[14px] font-bold transition-all relative whitespace-nowrap ${discoveryTab === 'library' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}>
+                                도서관 인기 대출 {discoveryTab === 'library' && <span className="absolute bottom-[-17px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
+                            </button>
+                            <button onClick={() => setDiscoveryTab('naver')} className={`pb-2 text-[14px] font-bold transition-all relative whitespace-nowrap ${discoveryTab === 'naver' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}>
+                                이달의 주목 신간 {discoveryTab === 'naver' && <span className="absolute bottom-[-17px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
+                            </button>
+                            <button onClick={() => setDiscoveryTab('bntalk')} className={`pb-2 text-[14px] font-bold transition-all relative whitespace-nowrap ${discoveryTab === 'bntalk' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}>
+                                서재 최신 등록 {discoveryTab === 'bntalk' && <span className="absolute bottom-[-17px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
+                            </button>
                         </div>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {bestLongReviews.map((review, idx) => (
-                            <InsightCard key={review.id || idx} className="!p-6 lg:!p-8 flex gap-6 cursor-pointer group hover:shadow-[0_12px_40px_rgba(29,36,51,0.06)] transition-shadow duration-400">
-                                <div onClick={() => handleSentenceClick(review)} className="w-[110px] shrink-0">
-                                    <FloatingCover src={review.cover} className="w-full aspect-[1/1.45]" iconSize={24} />
-                                    <div className="mt-4 flex justify-center text-[#C89B3C]">
-                                        {[...Array(5)].map((_, i) => <Star key={i} size={10} fill={i < Math.floor(review.rating || 5) ? "currentColor" : "none"} className={i < Math.floor(review.rating || 5) ? "" : "text-[#EEF2F7]"} />)}
-                                    </div>
-                                </div>
-                                
-                                <div onClick={() => handleSentenceClick(review)} className="flex-1 flex flex-col justify-between overflow-hidden">
-                                    <div>
-                                        <div className="mb-3">
-                                            <h3 className="text-[18px] font-bold text-[#1D2433] line-clamp-1 group-hover:text-[#1F3A5F] transition-colors">{review.title}</h3>
-                                            <p className="text-[12px] text-[#667085] mt-1">by <span className="font-semibold text-[#1D2433]">{review.user}</span></p>
-                                        </div>
-                                        <div className="relative mt-3">
-                                            <Quote size={14} className="text-[#E7E2D9] absolute -top-1 -left-2 z-0" />
-                                            <div className="pl-3 relative z-10 w-full h-full pt-1">
-                                                <SmartTruncatedText content={review.text?.replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ')} textClassName="text-[14px] leading-[1.7] text-[#667085] font-serif" />
+
+                    {/* 💡 [핵심] 가로 스크롤(Swipe) 컨테이너: 세로 높이를 1줄로 확 줄임 */}
+                    <div className="w-full relative">
+                        {isLoading ? (
+                            <div className="flex justify-center items-center py-20 h-[240px]"><Loader2 className="animate-spin text-[#1F3A5F]" size={32} /></div>
+                        ) : (
+                            <div className="flex overflow-x-auto scrollbar-hide gap-4 md:gap-5 pb-4 snap-x snap-mandatory animate-in fade-in duration-500">
+                                {(() => {
+                                    let activeBooks = [];
+                                    if (discoveryTab === 'library') activeBooks = libraryPopular.slice(0, 10);
+                                    else if (discoveryTab === 'naver') activeBooks = naverNewArrivals.slice(0, 10);
+                                    else activeBooks = newArrivals.slice(0, 10);
+
+                                    if (activeBooks.length === 0) {
+                                        return (
+                                            <div className="w-full flex flex-col items-center justify-center text-[#A0AABF] font-medium border border-[#E7E2D9] border-dashed rounded-lg bg-white h-[200px]">
+                                                <Search className="mb-3 opacity-30" size={32} />
+                                                데이터를 수집 중이거나 아직 등록된 책이 없습니다.
                                             </div>
-                                        </div>
-                                    </div>
-                                    <div className="mt-5 pt-4 border-t border-[#EEF2F7] flex justify-between items-center shrink-0">
-                                        <span className="text-[11px] font-bold text-[#A0AABF] uppercase tracking-wider">{review.created_at ? review.created_at.split('T')[0] : 'Recent'}</span>
-                                        <span className="text-[12px] font-bold text-[#1F3A5F] flex items-center gap-1 group-hover:translate-x-1 transition-transform">전문 읽기 <ArrowRight size={14} /></span>
-                                    </div>
-                                </div>
-                            </InsightCard>
-                        ))}
+                                        );
+                                    }
+
+                                    return activeBooks.map((book, i) => {
+                                        const isInternal = discoveryTab === 'bntalk' || !!book.internal_work_id;
+
+                                        return (
+                                            <div 
+                                                key={`discovery-${i}`} 
+                                                onClick={() => {
+                                                    if (isInternal) {
+                                                        // 1. 우리 사이트에 있는 경우: 광장(상세) 페이지로 이동
+                                                        router.push(`/works/${book.internal_work_id || book.work_id}`);
+                                                    } else {
+                                                        // 2. 없는 경우: 구글 도서 ISBN 검색 결과로 아웃링크 (새 창)
+                                                        if (book.isbn) {
+                                                            window.open(`https://books.google.co.kr/books?vid=ISBN${book.isbn}`, '_blank', 'noopener,noreferrer');
+                                                        } else {
+                                                            // ISBN이 없는 예외 케이스는 제목으로 검색
+                                                            window.open(`https://www.google.co.kr/search?tbm=bks&q=${encodeURIComponent(book.title)}`, '_blank', 'noopener,noreferrer');
+                                                        }
+                                                    }
+                                                }} 
+                                                className="w-[120px] md:w-[150px] shrink-0 snap-start group cursor-pointer flex flex-col relative min-w-0">
+                                                
+                                                {/* 💡 [수정] 하드코딩된 img 태그를 걷어내고 공통 컴포넌트인 FloatingCover 적용 */}
+                                                <div className="relative mb-3 w-full">
+                                                    <FloatingCover 
+                                                        src={book.cover} 
+                                                        className="w-full aspect-[1/1.45]" 
+                                                        iconSize={24} 
+                                                    />
+                                                    
+                                                    {/* 서재 연결 배지 (FloatingCover 위에 절대 위치로 띄움) */}
+                                                    {isInternal && (
+                                                        <div className="absolute top-1.5 right-1.5 bg-[#1F3A5F]/90 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded-sm shadow-sm flex items-center gap-0.5 z-10 pointer-events-none">
+                                                            <BookOpen size={8} /> 서재
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex flex-col flex-1 px-0.5">
+                                                    <h3 className="font-bold text-[#1D2433] text-[12px] md:text-[13px] leading-snug line-clamp-2 mb-1 group-hover:text-[#C89B3C] transition-colors">{book.title}</h3>
+                                                    <p className="text-[10px] md:text-[11px] text-[#667085] line-clamp-1 font-medium">{book.author || book.discoverer}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    });
+                                })()}
+                            </div>
+                        )}
                     </div>
                 </Container>
             </section>
 
-            {/* ▼ Section 2: 실시간 독서노트와 한줄평 (Grid 피드) ▼ */}
-            <section className="w-full mt-[32px]">
-                <Container> 
-                    <div className="mb-8 flex justify-between items-end border-b border-[#E7E2D9] pb-4">
-                        <div>
-                            <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-2 block">Live Feeds</span>
-                            <h2 className="text-[24px] font-black text-[#1D2433] flex items-center gap-2 tracking-tight">서재의 독서노트 & 한줄평</h2>
-                        </div>
-                        <button onClick={handleSquareNavigation} className="text-[13px] font-bold text-[#667085] hover:text-[#1F3A5F] flex items-center gap-1 transition-colors pb-1">
-                            광장 전체보기 <ChevronRight size={16} />
-                        </button>
-                    </div>
-
-                    {isLoading ? (
-                        <div className="flex justify-center items-center py-12"><Loader2 className="animate-spin text-[#1F3A5F]" size={32} /></div>
-                    ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 w-full">
-                            {ugcFeeds.map((feed) => (
-                                <InsightCard key={feed.id} className="!p-5 aspect-[4/5] flex flex-col cursor-pointer group hover:shadow-[0_8px_24px_rgba(29,36,51,0.08)] transition-shadow duration-400">
-                                    <div onClick={() => handleSentenceClick(feed)} className="flex items-center justify-between mb-4 shrink-0">
-                                        {feed.type === 'sentence' ? (
-                                            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-sm bg-[#EEF2F7] text-[10px] font-bold tracking-widest text-[#1F3A5F]"><Quote size={10} /> 독서노트</div>
-                                        ) : (
-                                            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-sm bg-[#FDF8EE] text-[10px] font-bold tracking-widest text-[#C89B3C]"><MessageCircle size={10} /> 한줄평</div>
-                                        )}
-                                        {feed.type !== 'sentence' && (
-                                            <div className="flex text-[#C89B3C]">
-                                                {[...Array(Math.floor(feed.rating || 5))].map((_, i) => <Star key={i} size={10} fill="currentColor" />)}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div onClick={() => handleSentenceClick(feed)} className="flex-1 flex w-full relative">
-                                        <SmartTruncatedText content={feed.text} textClassName={`text-[13px] md:text-[14px] leading-[1.7] ${feed.type === 'sentence' ? 'font-serif text-[#1D2433]' : 'text-[#667085]'}`} />
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-[#EEF2F7] flex items-center justify-between shrink-0 gap-3 min-w-0">
-                                        <div onClick={() => handleSentenceClick(feed)} className="flex items-center gap-3 flex-1 min-w-0">
-                                            <FloatingCover src={feed.cover} className="w-[32px] h-[46px]" iconSize={14} />
-                                            <div className="flex flex-col flex-1 min-w-0">
-                                                <span className="font-bold text-[#1D2433] text-[12px] truncate">{feed.book}</span>
-                                                <span className="text-[#667085] text-[11px] truncate">{feed.user}</span>
-                                            </div>
-                                        </div>
-                                        <button onClick={(e) => handleLikeClick(e, feed.id)} className={`flex shrink-0 items-center justify-center w-7 h-7 rounded-sm transition-all duration-300 border ${likedFeeds[feed.id] ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-[#E7E2D9] text-[#A0AABF] hover:border-[#1F3A5F] hover:text-[#1F3A5F]'}`}>
-                                            <Star size={12} fill={likedFeeds[feed.id] ? "currentColor" : "none"} className={likedFeeds[feed.id] ? 'animate-in zoom-in duration-300' : ''} />
-                                        </button>
-                                    </div>
-                                </InsightCard>
-                            ))}
-                        </div>
-                    )}
-                </Container>
-            </section>
-
-            {/* ▼ Section 3: 동적 워드 클라우드 & 사색 작가들 (높이 2/3 축소 및 고밀도 최적화) ▼ */}
+            {/* ▼ Section 3: 동적 워드 클라우드 & 사색 작가들 ▼ */}
             <section className="w-full mt-[32px]">
                 <Container>
-                    {/* [수정됨] 우측에 있던 드롭박스(select)들을 완전히 제거하고 타이틀만 깔끔하게 남겼습니다. */}
                     <div className="mb-6">
                         <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-1.5 block">Trending Thoughts</span>
                         <h2 className="text-[24px] font-black text-[#1D2433] mb-1.5 tracking-tight">BnTalkers Tag</h2>
                         <p className="text-[#667085] font-medium text-[14px]">많이 읽히는 책보다, 많이 생각되는 주제를 보여줍니다.</p>
                     </div>
 
-                    {/* 전체 높이를 기존 420px에서 320px(약 2/3 수준)로 축소, 갭 축소 */}
                     <div className="flex flex-col lg:flex-row gap-6 items-stretch min-h-[320px] lg:h-[320px]">
                         
                         {/* Left (60%): 고밀도 팩킹 워드 클라우드 */}
                         <InsightCard className="lg:w-[60%] w-full h-full relative flex items-center justify-center p-2 hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow overflow-visible">
-                            
-                            {/* 컬러 가이드 툴팁 */}
                             <div className="absolute top-4 right-4 z-20">
                                 <div className="relative group">
                                     <div className="flex items-center gap-1 text-[12px] font-bold text-[#A0AABF] hover:text-[#1D2433] cursor-help transition-colors bg-white/80 px-2 py-1 rounded-sm backdrop-blur-sm">
                                         <HelpCircle size={14} /> Color Guide
                                     </div>
-                                    
                                     <div className="absolute right-0 top-full mt-2 w-[220px] bg-[#FFFFFF] rounded-sm p-4 border border-[#EEF2F7] shadow-[0_8px_30px_rgba(29,36,51,0.12)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 pointer-events-none">
                                         <span className="text-[11px] text-[#667085] font-bold uppercase tracking-widest mb-3 block">Color Guide</span>
                                         <ul className="space-y-2.5">
@@ -8523,7 +8592,6 @@ export default function Home() {
                                     </div>
                                 </div>
                             </div>
-
                             {isLoading ? (
                                 <Loader2 className="animate-spin text-[#1F3A5F]" size={32} />
                             ) : trendingTags.length > 0 ? (
@@ -8531,117 +8599,62 @@ export default function Home() {
                                     <WordCloudChart data={trendingTags} onWordClick={handleCardClick} />
                                 </div>
                             ) : (
-                                <span className="text-[#A0AABF] font-medium text-[15px]">아직 수집된 사색의 조각이 없습니다.</span>
+                                <span className="text-[#A0AABF] font-medium text-[15px] text-center border p-4 rounded-md">아직 수집된 사색의 조각이 없습니다.</span>
                             )}
                         </InsightCard>
 
                         {/* Right (40%): 사색을 유발한 작가들 */}
-                        <InsightCard className="lg:w-[40%] w-full h-full flex flex-col justify-between !p-5 bg-[#FFFFFF] hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow overflow-hidden">
-                            <div className="flex-1 flex flex-col">
-                                <h3 className="text-[16px] font-extrabold text-[#1D2433] mb-4 flex items-center gap-2 border-b border-[#E7E2D9] pb-3 shrink-0">
-                                    <PenTool size={16} className="text-[#C89B3C]" />
-                                    우리를 사색에 잠기게 한 작가들
-                                </h3>
-                                
-                                <div className="space-y-3 flex-1 overflow-y-auto scrollbar-hide">
-                                    {inspiringAuthors?.slice(0, 5).map((author, index) => {
-                                        const authorId = author?.contributor_id || author?.id;
-                                        // [핵심] 백엔드에서 정제된 이름(시드니 셀던)이 그대로 꽂힙니다.
-                                        const authorName = author?.author_name || author?.name || "이름 없는 작가";
-                                        const profileImg = author?.author_profile_image || author?.profile_image;
-                                        const displayTag = author?.top_keyword || author?.keyword || "#정보없음";
+                        <InsightCard className="lg:w-[40%] w-full h-full flex flex-col !p-5 bg-[#FFFFFF] hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow">
+                            <h3 className="text-[16px] font-extrabold text-[#1D2433] mb-4 flex items-center gap-2 border-b border-[#E7E2D9] pb-3 shrink-0">
+                                <PenTool size={16} className="text-[#C89B3C]" />
+                                우리를 사색에 잠기게 한 작가들
+                            </h3>
+                            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pr-1">
+                                <div className="grid grid-cols-2 gap-2 pb-1">
+                                    {inspiringAuthors && inspiringAuthors.length > 0 ? (
+                                        inspiringAuthors.slice(0, 5).map((author, index) => {
+                                            const authorId = author?.contributor_id || author?.id;
+                                            const authorName = author?.author_name || author?.name || "이름 없는 작가";
+                                            const profileImg = author?.author_profile_image || author?.profile_image;
+                                            const displayTag = author?.top_keyword || author?.keyword || "#정보없음";
 
-                                        return (
-                                            <div 
-                                                key={`author-${authorId || index}`} 
-                                                className="flex items-center gap-3 group cursor-pointer p-1 hover:bg-[#F7F5F1] rounded-md transition-colors"
-                                                onClick={() => router.push(`/author/${authorId || ''}`)}
-                                            >
-                                                {/* 1. 순위 및 왕관 아이콘 */}
-                                                <div className="w-5 flex items-center justify-center shrink-0">
-                                                    {index === 0 ? <Crown size={16} className="text-[#C89B3C]" /> :
-                                                    index === 1 ? <Crown size={14} className="text-[#A0AABF]" /> :
-                                                    index === 2 ? <Crown size={14} className="text-[#CD7F32]" /> :
-                                                    <span className="text-[12px] font-bold text-[#A0AABF]">{index + 1}</span>}
-                                                </div>
-
-                                                {/* 2. 작가 프로필 사진 */}
-                                                <div className="w-[40px] h-[40px] flex items-center justify-center shrink-0">
-                                                    {profileImg ? (
-                                                        <img 
-                                                            src={profileImg} 
-                                                            alt={authorName} 
-                                                            className="w-full h-full rounded-full object-cover border border-[#E7E2D9] shadow-sm"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-full h-full rounded-full bg-[#EEF2F7] border border-[#E7E2D9] flex items-center justify-center text-[#A0AABF]">
-                                                            <PenTool size={16} />
+                                            return (
+                                                <div 
+                                                    key={`author-${authorId || index}`} 
+                                                    className="flex items-center gap-2.5 group cursor-pointer p-2 hover:bg-[#F7F5F1] rounded-lg transition-all"
+                                                    onClick={() => router.push(`/author/${authorId || ''}`)}
+                                                >
+                                                    {/* 💡 공통 AuthorAvatar 컴포넌트로 교체 완료 */}
+                                                    <AuthorAvatar 
+                                                        src={profileImg} 
+                                                        alt={authorName} 
+                                                        size={36} 
+                                                        fallbackType="pen" 
+                                                        className="shadow-sm ring-2 ring-transparent group-hover:ring-[#EEF2F7] transition-all"
+                                                    />
+                                                    <div className="flex flex-col flex-1 min-w-0 justify-center">
+                                                        <span className="font-bold text-[#1D2433] text-[13px] truncate group-hover:text-[#1F3A5F] transition-colors">{authorName}</span>
+                                                        <div className="flex items-center mt-0.5">
+                                                            <span className="text-[10px] font-bold text-[#1F3A5F] bg-[#EEF2F7] px-1.5 py-0.5 rounded-sm shrink-0 border border-[#E7E2D9]/50 shadow-sm truncate max-w-full">{displayTag}</span>
                                                         </div>
-                                                    )}
+                                                    </div>
                                                 </div>
-
-                                                {/* 3. 정제된 작가명 및 태그 */}
-                                                <div className="flex flex-col flex-1 min-w-0 justify-center">
-                                                    <span className="font-bold text-[#1D2433] text-[14px] truncate group-hover:text-[#1F3A5F] transition-colors">
-                                                        {authorName}
-                                                    </span>
-                                                    <span className="text-[11px] font-medium text-[#667085] mt-0.5 w-fit truncate">
-                                                        Tag: <span className="font-semibold text-[#1F3A5F]">
-                                                            {displayTag}
-                                                        </span>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="col-span-2 flex flex-col items-center justify-center text-[#A0AABF] text-[13px] text-center border-dashed rounded-md bg-[#F7F5F1] p-4 h-[200px] border">
+                                            <PenTool size={20} className="mb-2 opacity-30"/>
+                                            아직 수집된 작가 데이터가 없습니다.<br/>서재를 채워주세요.
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                            
-                            <div 
-                                onClick={() => router.push('/authors')}
-                                className="mt-4 w-full py-2 bg-[#F7F5F1] hover:bg-[#1F3A5F] border border-[#E7E2D9] text-[#1F3A5F] hover:text-white font-bold rounded-sm transition-colors flex items-center justify-center gap-2 group text-[12px] shrink-0 cursor-pointer"
-                            >
-                                작가 랭킹 전체보기 <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
                             </div>
                         </InsightCard>
                     </div>
                 </Container>
             </section>
 
-            {/* ▼ Section 4: 새로 등록된 책 ▼ */}
-            <section className="w-full mt-[32px] relative">
-                <Container>
-                    <div className="flex items-end justify-between mb-8">
-                        <div>
-                            <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-2 block">New Arrivals</span>
-                            <h2 className="text-[24px] font-black text-[#1D2433] flex items-center gap-3 tracking-tight">
-                                새로 등록된 책 <span className="text-[13px] font-bold text-[#1F3A5F] bg-[#EEF2F7] px-3 py-1 rounded-sm align-middle">총 {newArrivals.length}권</span>
-                            </h2>
-                        </div>
-                        {newArrivals.length > 10 && (
-                            <div className="flex items-center gap-2">
-                                <button onClick={prevArrivals} className="w-9 h-9 flex items-center justify-center rounded-sm bg-white border border-[#E7E2D9] hover:border-[#1F3A5F] hover:text-[#1F3A5F] transition-colors shadow-sm"><ChevronLeft size={18} /></button>
-                                <button onClick={nextArrivals} className="w-9 h-9 flex items-center justify-center rounded-sm bg-white border border-[#E7E2D9] hover:border-[#1F3A5F] hover:text-[#1F3A5F] transition-colors shadow-sm"><ChevronRight size={18} /></button>
-                            </div>
-                        )}
-                    </div>
-                    {isLoading ? (
-                        <div className="flex justify-center items-center py-12"><Loader2 className="animate-spin text-[#1F3A5F]" size={32} /></div>
-                    ) : (
-                        <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-3 md:gap-4">
-                            {visibleArrivals.map((book, i) => (
-                                <div key={`${book.id}-${i}`} onClick={() => handleSentenceClick(book)} className="group cursor-pointer flex flex-col animate-in fade-in duration-500">
-                                    <FloatingCover src={book.cover} className="w-full aspect-[1/1.45] mb-2" iconSize={16} />
-                                    <h3 className="font-bold text-[#1D2433] text-[11px] leading-tight line-clamp-2 mb-0.5 group-hover:text-[#0066cc] transition-colors">{book.title}</h3>
-                                    <p className="text-[10px] text-gray-400 line-clamp-1">{book.discoverer}</p>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </Container>
-            </section>
-
-            {/* ▼ Section 5: 하단 통계 대시보드 ▼ */}
+            {/* ▼ Section 4: 하단 통계 대시보드 ▼ */}
             <section className="w-full mt-[32px] mb-20">
                 <Container>
                     <InsightCard className="grid grid-cols-1 md:grid-cols-3 gap-8 !p-10">
@@ -17154,16 +17167,18 @@ export default function AuthorImageManager({ userEmail }: { userEmail: string })
 FILE PATH: frontend/src/components/book-detail/BookTopInfo.tsx
 ============================================================
 // 파일 경로: src/components/book/BookTopInfo.tsx
-// 역할 및 기능: 도서 상세 화면의 최상단 영역을 구성하며, 1cm 간격 규격(--spacing-1cm)을 준수하여 도서 표지, 이중 레이어 장르/태그, 메타 정보 및 사용자의 독서 기록(진행률, 별점 등)을 렌더링합니다.
+// 역할 및 기능: BoooknTalk 도서 상세 페이지의 최상단 영역을 담당하며, 도서 표지, 상세 정보, 사용자의 독서 기록 상태, 그리고 간략한 작가 정보 및 대표작을 렌더링하는 UI 컴포넌트입니다.
 
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Star, BookType, ExternalLink, Edit3, Trash2, Hash, Layers } from 'lucide-react';
+import { Star, ExternalLink, Layers, User, ArrowRight, Edit3, Trash2 } from 'lucide-react';
 import { FloatingCover } from '@/components/common/FloatingCover';
+import { Tooltip } from '@/components/common/Tooltip';
+import { useRouter } from 'next/navigation';
+import { AuthorAvatar } from '@/components/common/AuthorAvatar';
 
 interface BookTopInfoProps {
     record: any;
@@ -17171,6 +17186,18 @@ interface BookTopInfoProps {
     work: any;
     myEditions?: any[];
     onRecordChange?: (recordId: string) => void;
+    authorInfo?: {
+        id: string;
+        name: string;
+        role?: string;
+        photo?: string;
+        bio?: string;
+    };
+    authorOtherBooks?: Array<{
+        id: string;
+        title: string;
+        cover: string;
+    }>;
 }
 
 const getSafeDateString = (dateString: string) => {
@@ -17180,18 +17207,20 @@ const getSafeDateString = (dateString: string) => {
     return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}.`;
 };
 
-// 함수 기능: 전달받은 도서(work, edition) 및 독서 기록(record) 데이터를 기반으로 화면 상단의 주요 정보 UI를 구성합니다. KDC/DDC 기반의 계층형 카테고리와 AI 마이크로 태그를 제목 상단에 이중 레이어로 노출합니다.
-export default function BookTopInfo({ record, edition, work, myEditions = [], onRecordChange }: BookTopInfoProps) {
+// 함수 기능: 도서 데이터, 사용자 독서 기록, 작가 데이터를 props로 전달받아, 좌측 도서 표지와 우측 도서 정보(2/3) 및 작가 정보(1/3)를 포함한 반응형 레이아웃을 구성합니다. 도서 상세 설명은 3줄까지 표시(말줄임)하며 툴팁으로 전체 내용을 제공합니다.
+export default function BookTopInfo({ 
+    record, edition, work, myEditions = [], onRecordChange,
+    authorInfo, authorOtherBooks = []
+}: BookTopInfoProps) {
+    const router = useRouter();
     const [isMounted, setIsMounted] = useState(false);
 
-    useEffect(() => {
-        setIsMounted(true);
-    }, []);
+    useEffect(() => { setIsMounted(true); }, []);
 
     let pubYear = '';
-    if (edition?.pubDate) {
+    if (edition?.pub_date || edition?.pubDate) {
         try {
-            const d = new Date(edition.pubDate);
+            const d = new Date(edition.pub_date || edition.pubDate);
             if (!isNaN(d.getTime())) pubYear = d.getFullYear().toString();
         } catch (e) {}
     }
@@ -17199,7 +17228,6 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
     const getHighResCover = (url: string) => url ? url.replace(/\?type=m\d/g, '?type=w1200') : '';
     const formatAuthor = (authorStr: string) => authorStr ? authorStr.replace(/;/g, ' • ').replace(/\|/g, ' • ').trim() : "저자 미상";
     
-    // 네이버 도서 검색 외부 링크
     const externalLink = `https://search.shopping.naver.com/book/search?query=${edition?.isbn}`;
     const displayDesc = (edition?.description || work?.description || "").trim() || "상세 설명이 없습니다.";
 
@@ -17208,23 +17236,17 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
     const progressPercent = Math.min(Math.round((currentPage / totalPage) * 100), 100);
     const currentStatus = (record?.status || '').toLowerCase();
     
-    // 1. 카테고리 (백엔드에서 값이 안 넘어오면 깔끔하게 '미분류' 하나만 띄움)
-    const categoryHierarchy = work?.category 
-        ? work.category.split('/').map((c: string) => c.trim()) 
-        : ['미분류'];
-
-    // 2. AI 마이크로 태그 (값이 아예 없거나 빈 배열이면, 가짜 데이터를 띄우지 않고 아예 안 보이게 처리!)
-    const displayTags = (work?.tags && work.tags.length > 0) 
-        ? work.tags 
-        : [];
-
+    const categoryHierarchy = work?.category ? work.category.split('/').map((c: string) => c.trim()) : ['미분류'];
     const statusIndex = currentStatus === 'finished' ? 2 : currentStatus === 'reading' ? 1 : 0;
 
     return (
-        <section className="bg-white border-b border-gray-100 relative">
+        <section className="bg-white border-b border-gray-100 relative z-[100]">
             <div className="max-w-[1200px] mx-auto px-8 pt-4 pb-10">
+                
+                {/* [1. 전체 레이아웃] 좌측 고정 표지 vs 우측 정보 영역 */}
                 <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,40px)] items-stretch">
-                    {/* [1. 좌측 영역]: 도서 표지 */}
+                    
+                    {/* [좌측 영역]: 도서 표지 (폭 고정) */}
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
                         <FloatingCover 
                             src={edition?.cover_image || edition?.cover || work?.cover_image ? getHighResCover(edition.cover_image || edition.cover || work.cover_image) : null}
@@ -17232,162 +17254,179 @@ export default function BookTopInfo({ record, edition, work, myEditions = [], on
                             className="w-full aspect-[1/1.45]"
                             iconSize={48}
                         />
-                        
-                        {/* 외부 링크 버튼 */}
                         <div className="flex w-full mt-auto">
-                            <Button 
-                                variant="outline" 
-                                onClick={() => window.open(externalLink, '_blank')} 
-                                className="w-full h-10 rounded-xl border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-[#03C75A] transition-colors text-[13px] font-bold shadow-sm flex items-center justify-center gap-2"
-                            >
-                                <ExternalLink size={15} className="opacity-70" />
-                                네이버 도서 정보
+                            <Button variant="outline" onClick={() => window.open(externalLink, '_blank')} className="w-full h-10 rounded-xl border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-[#03C75A] transition-colors text-[13px] font-bold shadow-sm flex items-center justify-center gap-2">
+                                <ExternalLink size={15} className="opacity-70" /> 네이버 도서 정보
                             </Button>
                         </div>
                     </div>
 
-                    {/* [2. 우측 영역]: 메타 정보 및 대시보드 */}
+                    {/* [우측 영역]: 내부에서 다시 2/3 (도서) 와 1/3 (작가) 로 강제 분할 */}
                     <div className="flex-1 flex flex-col min-w-0">
-                        {/* 도서명 및 에디션 선택기 */}
-                        <div className="flex justify-between items-start mb-2 gap-4">
-                            <h1 className="text-[28px] md:text-[32px] font-extrabold text-[#1d1d1f] leading-tight tracking-tight break-keep">
-                                {work?.title}
-                            </h1>
-                            {isMounted && myEditions.length > 0 && (
-                                <div className="flex items-center bg-gray-50 rounded-lg pr-1 shadow-sm border border-gray-100 flex-shrink-0 mt-1">
-                                    <div className="pl-3 pr-2 py-1.5 flex items-center gap-1.5 border-r border-gray-200/60">
-                                        <Layers size={14} className="text-gray-400" />
-                                        <span className="text-[12px] font-bold text-gray-500 hidden sm:inline-block">판본(에디션)</span>
-                                    </div>
-                                    <Select onValueChange={onRecordChange} defaultValue={record?.id?.toString()}>
-                                        <SelectTrigger className="h-8 border-none bg-transparent shadow-none focus:ring-0 text-[13px] font-bold text-[#0066cc] w-auto min-w-[120px]">
-                                            <SelectValue placeholder="판본 선택" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {myEditions.map((ed: any) => (
-                                                <SelectItem key={ed.record_id} value={ed.record_id.toString()}>
-                                                    {ed.publisher} {ed.publish_date ? `(${ed.publish_date.substring(0,4)})` : ''}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 저자 및 출판사 */}
-                        <div className="text-[15px] text-gray-700 font-bold mb-3 flex items-center flex-wrap gap-2">
-                            <span>{formatAuthor(work?.author)}</span>
-                            <span className="text-gray-300 mx-1">|</span>
-                            <span>{edition?.publisher}</span>
-                            {pubYear && <span className="text-gray-500 font-medium">({pubYear})</span>}
-                        </div>
-
-                        {/* 도서 스펙, 태그, 별점 */}
-                        <div className="flex flex-wrap items-center justify-between mb-5 gap-y-3">
-                            {/* 좌측: 스펙 및 장르 뼈대 & 태그 (모두 하나의 flex 컨테이너로 묶어서 한 줄 배치 강제) */}
-                            <div className="flex items-center flex-wrap gap-2.5">
-                                {/* 1. 쪽수 및 ISBN */}
-                                <div className="text-[13px] text-gray-500 font-medium flex items-center gap-1.5">
-                                    <span>{edition?.page_count ? `${edition.page_count}쪽` : '쪽수 미상'}</span>
-                                    <span className="text-gray-300">·</span>
-                                    <span className="font-mono">ISBN {edition?.isbn}</span>
-                                </div>
+                        {/* 💡 Grid 대신 Flexbox를 사용하여 w-2/3, w-1/3 비율을 명확하게 줌 */}
+                        <div className="flex flex-col lg:flex-row gap-8 w-full">
+                            
+                            {/* [우측-1] 도서 상세 정보 (66.6% 비율) + 우측 세로 경계선(border-r) */}
+                            <div className="w-full lg:w-2/3 flex flex-col min-w-0 lg:border-r lg:border-gray-200 lg:pr-8">
                                 
-                                {/* 2. 카테고리 뼈대 (구분선 + 계층) */}
-                                {categoryHierarchy && categoryHierarchy.length > 0 && (
-                                    <>
-                                        <span className="text-gray-300">|</span>
-                                        <div className="flex items-center text-[13px] font-bold text-gray-500 tracking-tight">
-                                            {categoryHierarchy.map((cat: string, idx: number) => (
-                                                <React.Fragment key={idx}>
-                                                    <span className={`cursor-pointer transition-colors ${idx === categoryHierarchy.length - 1 ? 'text-gray-800' : 'hover:text-gray-800'}`}>
-                                                        {cat}
-                                                    </span>
-                                                    {idx < categoryHierarchy.length - 1 && <span className="mx-1.5 text-gray-300">›</span>}
-                                                </React.Fragment>
-                                            ))}
+                                <div className="flex justify-between items-start mb-2 gap-4">
+                                    <h1 className="text-[28px] md:text-[32px] font-extrabold text-[#1d1d1f] leading-tight tracking-tight break-keep">
+                                        {work?.title}
+                                    </h1>
+                                    {isMounted && myEditions.length > 0 && (
+                                        <div className="flex items-center bg-gray-50 rounded-lg pr-1 shadow-sm border border-gray-100 flex-shrink-0 mt-1">
+                                            <div className="pl-3 pr-2 py-1.5 flex items-center gap-1.5 border-r border-gray-200/60">
+                                                <Layers size={14} className="text-gray-400" />
+                                            </div>
+                                            <Select onValueChange={onRecordChange} defaultValue={record?.id?.toString()}>
+                                                <SelectTrigger className="h-8 border-none bg-transparent shadow-none focus:ring-0 text-[13px] font-bold text-[#0066cc] w-auto min-w-[120px]">
+                                                    <SelectValue placeholder="판본 선택" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {myEditions.map((ed: any) => (
+                                                        <SelectItem key={ed.record_id} value={ed.record_id.toString()}>
+                                                            {ed.publisher} {ed.publish_date ? `(${ed.publish_date.substring(0,4)})` : ''}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* 우측: 별점 대시보드 */}
-                            <div className="flex items-center gap-4 bg-gray-50/50 px-3 py-1.5 rounded-xl border border-gray-100 shrink-0">
-                                <div className="flex items-center gap-1.5 pr-3 border-r border-gray-200">
-                                    <span className="text-[11px] font-bold text-gray-500">BoooknTalk 평균</span>
-                                    <span className="text-[13px] font-black text-[#1d1d1f] flex items-center gap-0.5">
-                                        <Star size={12} className="text-[#FFCC00]" fill="currentColor" />
-                                        {work?.average_rating || "0.0"}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-[11px] font-bold text-gray-500">나의 별점</span>
-                                    {currentStatus !== 'wish' ? (
-                                        <div className="flex text-[#FFCC00]">
-                                            {[1, 2, 3, 4, 5].map((s) => <Star key={s} size={13} fill={s <= (record?.rating || 0) ? "currentColor" : "none"} className={s <= (record?.rating || 0) ? "text-[#FFCC00]" : "text-gray-200"} />)}
-                                        </div>
-                                    ) : (
-                                        <span className="text-[11px] font-medium text-gray-400">평가 전</span>
                                     )}
                                 </div>
-                            </div>
-                        </div>
 
-                        {/* 상세 설명 */}
-                        {/* 0. 부모 div에 relative를 줘서 툴팁이 이 안에서만 돌게 만듭니다. */}
-                        <div className="relative group mb-6">
-                            {/* 기존 2줄 줄임 처리된 텍스트 */}
-                            <p className="text-[14px] text-gray-600 leading-relaxed font-medium line-clamp-2 break-keep cursor-pointer">
-                                {displayDesc}
-                            </p>
-                            
-                            {/* ▼▼▼ [NEW] 마우스 오버 시 나타나는 전체 설명 툴팁 (클린 테마) ▼▼▼ */}
-                            {displayDesc && displayDesc !== "상세 설명이 없습니다." && (
-                                <div className="absolute z-50 left-0 top-full mt-2 w-full max-w-[500px] p-6 bg-white text-[#1d1d1f] text-[13px] font-medium leading-relaxed rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 pointer-events-none break-keep">
-                                    {displayDesc}
+                                <div className="text-[15px] text-gray-700 font-bold mb-3 flex items-center flex-wrap gap-2">
+                                    <span>{formatAuthor(work?.author)}</span>
+                                    <span className="text-gray-300 mx-1">|</span>
+                                    <span>{edition?.publisher}</span>
+                                    {pubYear && <span className="text-gray-500 font-medium">({pubYear})</span>}
                                 </div>
-                            )}
-                        </div>
 
-                        {/* 나의 독서 기록 박스 */}
-                        <div className="mt-auto bg-white rounded-[20px] p-6 border border-gray-200 shadow-[0_2px_16px_rgba(0,0,0,0.03)]">
-                            <div className="flex justify-between items-center mb-6">
-                                <div className="flex items-baseline gap-2">
-                                    <h3 className="font-bold text-[16px] text-[#1d1d1f]">나의 독서 기록</h3>
-                                    <span className="text-[13px] font-medium text-gray-400">
-                                        {currentStatus === 'wish' ? '' : (
-                                            `(${record?.start_date ? getSafeDateString(record.start_date) : '미정'} ~ ${record?.finish_date ? getSafeDateString(record.finish_date) : (currentStatus === 'reading' ? '현재' : '')})`
+                                <div className="flex flex-wrap items-center justify-between mb-5 gap-y-3">
+                                    <div className="flex items-center flex-wrap gap-2.5">
+                                        <div className="text-[13px] text-gray-500 font-medium flex items-center gap-1.5 flex-wrap">
+                                            {edition?.format && <><span className="text-[#1d1d1f] font-bold">{edition.format}</span><span className="text-gray-300">·</span></>}
+                                            {edition?.language && <><span className="text-[#1d1d1f] font-bold">{edition.language}</span><span className="text-gray-300">·</span></>}
+                                            <span>{edition?.page_count ? `${edition.page_count}쪽` : '쪽수 미상'}</span>
+                                            <span className="text-gray-300">·</span>
+                                            <span className="font-mono">ISBN {edition?.isbn}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 bg-gray-50/50 px-3 py-1.5 rounded-xl border border-gray-100 shrink-0">
+                                        <div className="flex items-center gap-1.5 pr-3 border-r border-gray-200">
+                                            <span className="text-[11px] font-bold text-gray-500">BoooknTalk 평균</span>
+                                            <span className="text-[13px] font-black text-[#1d1d1f] flex items-center gap-0.5"><Star size={12} className="text-[#FFCC00]" fill="currentColor" /> {work?.average_rating || "0.0"}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[11px] font-bold text-gray-500">나의 별점</span>
+                                            {currentStatus !== 'wish' ? (
+                                                <div className="flex text-[#FFCC00]">{[1, 2, 3, 4, 5].map((s) => <Star key={s} size={13} fill={s <= (record?.rating || 0) ? "currentColor" : "none"} className={s <= (record?.rating || 0) ? "text-[#FFCC00]" : "text-gray-200"} />)}</div>
+                                            ) : (
+                                                <span className="text-[11px] font-medium text-gray-400">평가 전</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mb-6">
+                                    <Tooltip 
+                                        content={displayDesc !== "상세 설명이 없습니다." ? displayDesc : null} 
+                                        position="bottom" // 하단 탭 메뉴에 가리지 않도록 위로 열림
+                                    >
+                                        <p className="text-[14px] text-gray-600 leading-relaxed font-medium line-clamp-3 break-keep cursor-pointer">
+                                            {displayDesc}
+                                        </p>
+                                    </Tooltip>
+                                </div>
+
+                                <div className="mt-auto bg-white rounded-[20px] p-6 border border-gray-200 shadow-[0_2px_16px_rgba(0,0,0,0.03)]">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <div className="flex items-baseline gap-2">
+                                            <h3 className="font-bold text-[16px] text-[#1d1d1f]">나의 독서 기록</h3>
+                                            <span className="text-[13px] font-medium text-gray-400">
+                                                {currentStatus === 'wish' ? '' : `(${record?.start_date ? getSafeDateString(record.start_date) : '미정'} ~ ${record?.finish_date ? getSafeDateString(record.finish_date) : (currentStatus === 'reading' ? '현재' : '')})`}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <button className="p-1.5 text-gray-400 hover:text-[#0066cc] hover:bg-blue-50 rounded-md transition-colors" title="기록 수정"><Edit3 size={15} /></button>
+                                            <button className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" title="기록 삭제"><Trash2 size={15} /></button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        {currentStatus === 'reading' && (
+                                            <div className="flex justify-between items-end mb-2">
+                                                <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">{progressPercent}%</span>
+                                                <span className="text-[13px] text-gray-500 font-bold">{currentPage} / {totalPage} 페이지</span>
+                                            </div>
                                         )}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <button className="p-1.5 text-gray-400 hover:text-[#0066cc] hover:bg-blue-50 rounded-md transition-colors" title="기록 수정"><Edit3 size={15} /></button>
-                                    <button className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" title="기록 삭제"><Trash2 size={15} /></button>
+                                        <div className="relative h-2 bg-gray-100 rounded-full flex items-center mt-3 mb-2">
+                                            <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: currentStatus === 'wish' ? '0%' : currentStatus === 'finished' ? '100%' : `${progressPercent}%` }}></div>
+                                            <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                            <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                            <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 ${statusIndex === 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                        </div>
+                                        <div className="flex justify-between text-[11px] font-bold text-gray-400 relative">
+                                            <span className={`absolute left-0 -ml-1 ${statusIndex >= 0 ? 'text-[#0066cc]' : ''}`}>읽고 싶음</span>
+                                            <span className={`absolute left-1/2 -translate-x-1/2 ${statusIndex >= 1 ? 'text-[#0066cc]' : ''}`}>읽는 중</span>
+                                            <span className={`absolute right-0 -mr-1 ${statusIndex === 2 ? 'text-[#0066cc]' : ''}`}>완독</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div>
-                                {currentStatus === 'reading' && (
-                                    <div className="flex justify-between items-end mb-2">
-                                        <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">{progressPercent}%</span>
-                                        <span className="text-[13px] text-gray-500 font-bold">{currentPage} / {totalPage} 페이지</span>
+                            {/* [우측-2] 작가 정보 영역 (33.3% 비율) */}
+                            <div className="w-full lg:w-1/3 flex flex-col min-w-0">
+                                {authorInfo && (
+                                    <div className="flex flex-col gap-6">
+                                        <div className="flex flex-col">
+                                            <h2 className="text-[13px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
+                                            <div className="flex items-center gap-3 mb-4">
+                                                
+                                                {/* 💡 기존의 복잡했던 div 래퍼와 img, User 조건부 렌더링을 공통 컴포넌트로 교체 완료 */}
+                                                <AuthorAvatar 
+                                                    src={authorInfo.photo} 
+                                                    alt={authorInfo.name} 
+                                                    size={48} 
+                                                    fallbackType="user" 
+                                                />
+                                                
+                                                <div>
+                                                    <h3 className="text-[16px] font-extrabold text-[#1d1d1f]">{authorInfo.name}</h3>
+                                                    {authorInfo.role && <p className="text-[11px] font-bold text-[#0066cc] mt-0.5">{authorInfo.role}</p>}
+                                                </div>
+                                            </div>
+                                            
+                                            <p className="text-[13px] leading-[1.6] text-gray-600 font-medium break-keep line-clamp-4 mb-4">
+                                                {authorInfo.bio || "등록된 저자 소개가 없습니다."}
+                                            </p>
+                                        </div>
+
+                                        {/* 이 저자의 다른 책 (1권만) */}
+                                        {authorOtherBooks.length > 0 && (
+                                            <div className="pt-6 border-t border-gray-100/60 mt-auto">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <h3 className="text-[12px] font-extrabold text-gray-500 uppercase tracking-wide">대표작</h3>
+                                                    {authorOtherBooks.length > 1 && (
+                                                        <button onClick={() => router.push(`/author/${authorInfo.id}`)} className="text-[11px] font-bold text-[#0066cc] flex items-center gap-1 hover:underline group">
+                                                            더 보기 <ArrowRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {authorOtherBooks.slice(0, 1).map((book) => (
+                                                    <div key={book.id} onClick={() => router.push(`/works/${book.id}`)} className="flex items-center gap-3 cursor-pointer group rounded-xl hover:bg-gray-50 transition-all p-1 -ml-1">
+                                                        <FloatingCover src={book.cover} className="w-[40px] shrink-0 aspect-[1/1.45]" iconSize={12} />
+                                                        <div className="flex flex-col flex-1 min-w-0">
+                                                            <h4 className="text-[13px] font-bold text-[#1d1d1f] line-clamp-2 leading-tight group-hover:text-[#0066cc] transition-colors mb-0.5">{book.title}</h4>
+                                                            <span className="text-[10px] font-bold text-gray-400">BoooknTalk 광장</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
-                                <div className="relative h-2 bg-gray-100 rounded-full flex items-center mt-3 mb-2">
-                                    <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: currentStatus === 'wish' ? '0%' : currentStatus === 'finished' ? '100%' : `${progressPercent}%` }}></div>
-                                    <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                    <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                    <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 ${statusIndex === 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                </div>
-                                <div className="flex justify-between text-[11px] font-bold text-gray-400 relative">
-                                    <span className={`absolute left-0 -ml-1 ${statusIndex >= 0 ? 'text-[#0066cc]' : ''}`}>읽고 싶음</span>
-                                    <span className={`absolute left-1/2 -translate-x-1/2 ${statusIndex >= 1 ? 'text-[#0066cc]' : ''}`}>읽는 중</span>
-                                    <span className={`absolute right-0 -mr-1 ${statusIndex === 2 ? 'text-[#0066cc]' : ''}`}>완독</span>
-                                </div>
                             </div>
-                        </div>
 
+                        </div>
                     </div>
                 </div>
             </div>
@@ -18760,6 +18799,20 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         { id: 'long-review', label: '긴줄평' }
     ] as const;
 
+    // ▼▼▼ [추가] 화면 확인용 더미 데이터 (추후 API 연동으로 교체) ▼▼▼
+    const DUMMY_AUTHOR_INFO = {
+        id: "author_1",
+        name: work?.author?.split(',')[0] || "작가 이름", // 기존 work 데이터에서 이름만 임시 추출
+        photo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Keigo_Higashino.jpg/220px-Keigo_Higashino.jpg",
+        bio: "이 작가는 놀라운 필력으로 독자들을 사로잡는 베스트셀러 작가입니다."
+    };
+
+    const DUMMY_OTHER_BOOKS = [
+        { id: 'work_1', title: "다른 책 1", cover: "https://via.placeholder.com/150x200" },
+        { id: 'work_2', title: "다른 책 2", cover: "https://via.placeholder.com/150x200" },
+        { id: 'work_3', title: "다른 책 3", cover: "https://via.placeholder.com/150x200" }
+    ];
+
     // ▼▼▼ [핵심 2] 컴포넌트가 마운트될 때 긴줄평 개수만 살짝 가져옵니다 ▼▼▼
     useEffect(() => {
         if (work?.id) {
@@ -18893,7 +18946,17 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                 </Container>
             </div>
 
-            <BookTopInfo record={record} edition={current_edition} work={work} myEditions={my_editions} onRecordChange={(id) => router.push(`/library/${id}`)} />
+            <BookTopInfo 
+                record={record} 
+                edition={current_edition} 
+                work={work} 
+                myEditions={my_editions} 
+                onRecordChange={(id) => router.push(`/library/${id}`)}
+                
+                // 👇 [핵심] 여기에 작가 데이터를 넘겨주어야 1/3 영역이 나타납니다!
+                authorInfo={DUMMY_AUTHOR_INFO}
+                authorOtherBooks={DUMMY_OTHER_BOOKS}
+            />
 
             <div id="review-tabs-area" className="sticky top-[56px] z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
                 <Container className="max-w-[1200px]">
@@ -19615,6 +19678,41 @@ export default function FollowButton({
 
 
 ============================================================
+FILE PATH: frontend/src/components/common/Tooltip.tsx
+============================================================
+// 파일 경로: src/components/common/Tooltip.tsx
+// 역할 및 기능: BoooknTalk 서비스 전역에서 사용되는 공통 툴팁 컴포넌트입니다. 눈의 피로를 줄이는 다크 테마를 적용하고, 화면 가림 현상을 방지하기 위해 노출 방향(top/bottom)을 제어합니다.
+
+import React, { ReactNode } from 'react';
+
+interface TooltipProps {
+    content: ReactNode;
+    children: ReactNode;
+    position?: 'top' | 'bottom';
+}
+
+// 함수 기능: 자식 요소(children)에 마우스 오버 시, 눈이 편안한 색상(bg-slate-800, text-slate-100)의 툴팁 내용을 설정한 방향에 맞게 화면 최상단(z-[9999])에 렌더링합니다.
+export function Tooltip({ content, children, position = 'bottom' }: TooltipProps) {
+    if (!content) return <>{children}</>;
+
+    // 💡 기획 요건 반영: 하단 메뉴에 가려지지 않도록 위로 열리는(top) 옵션 추가 및 최상위 z-index 적용
+    const positionClasses = position === 'top' 
+        ? "bottom-full mb-3" 
+        : "top-full mt-3";
+
+    return (
+        <div className="relative group w-full cursor-pointer">
+            {children}
+            {/* 💡 기획 요건 반영: 눈이 편안한 다크 그레이 배경(#1e293b)과 부드러운 흰색 텍스트(#f1f5f9) 적용 */}
+            <div className={`absolute z-[9999] left-0 ${positionClasses} w-full max-w-[500px] p-6 bg-slate-800 text-slate-100 text-[13px] font-medium leading-relaxed rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.25)] border border-slate-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 pointer-events-none break-keep`}>
+                {content}
+            </div>
+        </div>
+    );
+}
+
+
+============================================================
 FILE PATH: frontend/src/components/common/BookCover.tsx
 ============================================================
 //frontend/src/components/common/BookCover.tsx
@@ -19964,6 +20062,54 @@ export function BookRecordCard({
                     <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 rounded-full z-20">{footerRight}</div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+
+============================================================
+FILE PATH: frontend/src/components/common/AuthorAvatar.tsx
+============================================================
+// 파일 경로: src/components/common/AuthorAvatar.tsx
+// 역할 및 기능: BoooknTalk 서비스 전역에서 사용되는 작가, 번역가 등의 프로필 이미지를 렌더링하는 공통 컴포넌트입니다. 사진 데이터가 없을 경우 일관된 Fallback(대체) 아이콘을 제공합니다.
+
+import React from 'react';
+import { PenTool, User } from 'lucide-react';
+
+interface AuthorAvatarProps {
+    src?: string | null;
+    alt?: string;
+    size?: number;         // px 단위 (기본값 36)
+    fallbackType?: 'pen' | 'user'; // 대체 아이콘 타입
+    className?: string;    // 추가적인 Tailwind 클래스 (hover 효과 등)
+}
+
+// 함수 기능: 전달받은 이미지 URL(src)이 유효하면 원형 프로필 사진을 렌더링하고, 데이터가 없으면 fallbackType에 맞춰 펜 또는 유저 아이콘을 일관된 규격으로 출력합니다.
+export function AuthorAvatar({ 
+    src, 
+    alt = "Author Profile", 
+    size = 36, 
+    fallbackType = 'pen',
+    className = "" 
+}: AuthorAvatarProps) {
+    return (
+        <div 
+            className={`shrink-0 flex items-center justify-center overflow-hidden bg-[#EEF2F7] border border-[#E7E2D9] rounded-full ${className}`}
+            style={{ width: size, height: size }}
+        >
+            {src ? (
+                <img 
+                    src={src} 
+                    alt={alt} 
+                    className="w-full h-full object-cover" 
+                />
+            ) : (
+                fallbackType === 'pen' ? (
+                    <PenTool size={size * 0.45} className="text-[#A0AABF]" />
+                ) : (
+                    <User size={size * 0.45} className="text-[#A0AABF]" />
+                )
+            )}
         </div>
     );
 }
@@ -20568,6 +20714,7 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Text, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+from datetime import datetime
 
 # ===================================================================
 # [1] 참여자(작가/옮긴이) 정보 마스터 테이블 (수정 완료)
@@ -21043,6 +21190,23 @@ class GlobalTrendingAuthor(Base):
     
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+# 기능: 외부 Open API(네이버, 도서관 정보나루)에서 수집한 도서 데이터를 저장하는 캐시 테이블
+class ExternalBookCache(Base):
+    __tablename__ = "external_book_cache"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String, index=True) # 'library_popular' (도서관 인기), 'naver_new' (네이버 신간)
+    title = Column(String, nullable=False)
+    author = Column(String)
+    cover = Column(String)
+    isbn = Column(String, index=True) # 💡 연결고리를 위해 index 추가
+    
+    # 💡 [핵심] 우리 BoooknTalk 내부 서재에 이미 등록된 책일 경우 내부 work_id를 저장!
+    internal_work_id = Column(String, nullable=True, index=True) 
+    
+    rank = Column(Integer) # 노출 순위
+    cached_at = Column(DateTime, default=datetime.utcnow) # 캐싱 업데이트 시간
+
 
 ============================================================
 FILE PATH: backend/requirements.txt
@@ -21494,6 +21658,7 @@ from utils.genre_parser import map_to_standard_genre # ▼▼▼ [NEW] 공통 �
 from services.author_service import get_or_create_contributor
 from utils.global_category_mapper import get_category_hierarchy # ▼▼▼ [NEW] 글로벌 장르 파서 임포트 ▼▼▼
 from services.trending_service import update_global_trending_authors
+from services.external_api_service import update_external_book_cache
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 import subprocess
@@ -23836,7 +24001,6 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
 
     if edition_ids:
         # 3. 통합 통계 (총 담긴 횟수, 평균 별점)
-        # Record 테이블에서 edition_id가 해당 작품의 판본들인 것만 필터링
         stats = db.query(
             func.count(models.Record.id).label('total_added'),
             func.avg(models.Record.rating).label('avg_rating')
@@ -23857,9 +24021,27 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
             popular_edition = db.query(models.Edition).filter(models.Edition.id == popular_edition_stat.edition_id).first()
             best_cover = popular_edition.cover_image if popular_edition else None
             
-        # 서재에 담긴 기록이 하나도 없다면, 그냥 첫 번째 판본의 표지를 사용
         if not best_cover and editions:
             best_cover = editions[0].cover_image
+
+    # 💡 [NEW] 5. 작가(Contributor) 상세 정보 및 사진 조회
+    # WorkContributor 테이블을 통해 실제 Contributor 객체를 찾습니다.
+    work_contributor = db.query(models.WorkContributor).filter(
+        models.WorkContributor.work_id == work_id,
+        models.WorkContributor.role == 'AUTHOR'
+    ).first()
+
+    author_info = None
+    if work_contributor and work_contributor.contributor:
+        author = work_contributor.contributor
+        author_info = {
+            "id": str(author.id),
+            "name": author.name,
+            # 💡 바로 이 값이 어드민에서 업로드한 로컬 경로(예: /static/uploads/...)입니다!
+            "photo": author.profile_image, 
+            "bio": author.description,
+            "role": work_contributor.role
+        }
 
     return {
         "work_id": work.id,
@@ -23871,7 +24053,10 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
         "best_cover": best_cover,
         "total_added": total_added,
         "average_rating": avg_rating,
-        "edition_count": len(editions) # 이 작품에 엮인 판본(출판사/개정판)의 총 개수
+        "edition_count": len(editions),
+        
+        # 💡 [NEW] 프론트엔드가 기다리던 작가 상세 객체를 최종 응답에 포함시킵니다.
+        "authorInfo": author_info 
     }
 
 @app.get("/api/works/{work_id}/editions")
@@ -24314,6 +24499,14 @@ async def execute_master_cleanup(db: Session = Depends(get_db)):
     
     return {"status": "success", "message": "마스터 클린업 완료! BoooknTalk의 모든 작가 데이터가 완벽하게 정제되었습니다."}
 
+# 기능: 외부 도서 API 데이터를 수동으로 즉시 갱신하는 어드민용 트리거
+@app.post("/api/admin/refresh-discovery", tags=["Admin"])
+def refresh_discovery_data(db: Session = Depends(get_db)):
+    success = update_external_book_cache(db)
+    if success:
+        return {"message": "디스커버리 도서 데이터가 성공적으로 갱신되었습니다."}
+    raise HTTPException(status_code=500, detail="데이터 수집에 실패했거나 가져올 데이터가 없습니다.")
+
 
 ============================================================
 FILE PATH: backend/routers/library.py
@@ -24499,6 +24692,7 @@ from datetime import datetime, timedelta  # ▼ 날짜 계산을 위해 추가�
 from models import GlobalTrendingAuthor, Tag, RecordTag
 from services.trending_service import update_global_trending_authors
 from schemas import TrendingAuthorResponse
+from services.external_api_service import get_cached_external_books
 
 import models
 
@@ -24966,26 +25160,49 @@ def get_trending_authors(db: Session = Depends(get_db)):
 # ==========================================
 @router.get("/dashboard")
 def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(get_db)):
-    """
-    [성능 최적화] 프론트엔드에서 9번 통신하던 것을 단 1번의 요청으로 압축합니다.
-    내부 함수 호출 시 의존성 에러(Depends object)를 막기 위해 반드시 db=db를 넘깁니다.
-    """
     try:
+        # 💡 [추가] DB에 저장된 외부 API 캐시 데이터 로드
+        library_popular = get_cached_external_books(db=db, category="library_popular")
+        naver_new = get_cached_external_books(db=db, category="naver_new")
+
         return {
             "stats": get_home_statistics(db=db),
-            "ugcFeeds": get_recent_ugc_feeds(limit=6, db=db),
-            "newArrivals": get_new_arrivals(days=3, db=db),
             "heroSentences": get_today_sentences(user_email=user_email, db=db),
-            "editorPick": get_editor_pick(db=db), # 👈 프론트엔드 에러 방지용 에디터픽 추가!
             "readersChoice": get_readers_choice(db=db),
-            "coverFlowBooks": get_cover_flow_books(db=db),
             "bestLongReviews": get_best_long_reviews(limit=2, db=db), 
+            "coverFlowBooks": get_cover_flow_books(db=db),
             "trendingTags": get_trending_tags(db=db), 
-            "inspiringAuthors": get_inspiring_authors(db=db)
+            "inspiringAuthors": get_inspiring_authors(db=db),
+            
+            # 💡 [추가] 디스커버리 허브를 위한 데이터 반환
+            "libraryPopular": library_popular,
+            "naverNewArrivals": naver_new, 
+            "newArrivals": get_new_arrivals(days=3, db=db), # 기존 서재 최신 도서
         }
     except Exception as e:
         print(f"대시보드 통합 데이터 생성 실패: {e}")
-        raise HTTPException(status_code=500, detail="대시보드 데이터를 구성하는 중 서버 에러가 발생했습니다.")
+        raise HTTPException(status_code=500, detail="대시보드 데이터를 구성하는 중 에러가 발생했습니다.")
+
+# ==========================================
+# [NEW] 메인 대시보드 통합 API (BFF 패턴 적용)
+# ==========================================
+@router.get("/dashboard")
+def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(get_db)):
+    try:
+        # 도서관 인기 및 신간 도서 로드 (이제 내부에 등록된 책은 internal_work_id를 달고 나옵니다)
+        library_popular = get_cached_external_books(db=db, category="library_popular")
+        naver_new = get_cached_external_books(db=db, category="naver_new")
+
+        return {
+            "stats": get_home_statistics(db=db),
+            "ugcFeeds": get_recent_ugc_feeds(limit=6, db=db),
+            "naverNewArrivals": naver_new, 
+            "libraryPopular": library_popular,
+            # ... (나머지 지표들)
+        }
+    except Exception as e:
+        print(f"대시보드 통합 데이터 생성 실패: {e}")
+        raise HTTPException(status_code=500, detail="대시보드 데이터를 구성하는 중 에러가 발생했습니다.")
 
 
 ============================================================
@@ -26420,6 +26637,136 @@ async def get_user_contributors(user_id: int, role: str, db: Session):
 
     print(f"🟢 [DB 조회 완료] 유저 {user_id}의 서재에서 {role} {len(author_list)}명 발견!")
     return author_list
+
+
+============================================================
+FILE PATH: backend/services/external_api_service.py
+============================================================
+# 경로: services/external_api_service.py
+# 역할 및 기능: 네이버 및 도서관 정보나루 API를 호출하여 데이터를 수집하고, BoooknTalk 내부 서재와 ISBN을 대조하여 캐싱하는 서비스
+
+import os
+import requests
+from datetime import datetime
+from sqlalchemy.orm import Session
+from models import ExternalBookCache, Edition  # 💡 절대 경로 에러 방지를 위해 'backend.' 제거
+
+# 환경변수 로드
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+NARU_AUTH_KEY = os.getenv("NARU_AUTH_KEY")
+
+# 기능: 네이버 도서 검색 API를 호출하여 '소설' 카테고리의 최신 출간 도서를 수집합니다.
+def fetch_naver_new_releases(limit: int = 15):
+    if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
+        print("🚨 네이버 API 키가 설정되지 않았습니다.")
+        return []
+
+    url = f"https://openapi.naver.com/v1/search/book.json?query=소설&display={limit}&sort=date"
+    headers = {
+        "X-Naver-Client-Id": NAVER_CLIENT_ID,
+        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET
+    }
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        items = response.json().get("items", [])
+        
+        books = []
+        for idx, item in enumerate(items):
+            # 네이버 ISBN은 "10자리 13자리" 형태이므로 마지막 13자리만 추출
+            raw_isbn = item.get("isbn", "")
+            clean_isbn = raw_isbn.split()[-1] if raw_isbn else ""
+            
+            books.append({
+                "category": "naver_new",
+                "title": item.get("title", "").replace("<b>", "").replace("</b>", ""),
+                "author": item.get("author", "").replace("^", ", "),
+                "cover": item.get("image", ""),
+                "isbn": clean_isbn,
+                "rank": idx + 1
+            })
+        return books
+    except Exception as e:
+        print(f"네이버 API 호출 실패: {e}")
+        return []
+
+# 기능: 공공데이터포털 도서관 정보나루 API를 호출하여 전국 도서관 인기 대출 도서를 수집합니다.
+def fetch_library_popular_books(limit: int = 15):
+    if not NARU_AUTH_KEY:
+        print("🚨 도서관 정보나루 API 키가 설정되지 않았습니다.")
+        return []
+    
+    url = f"http://data4library.kr/api/loanItemSrch?authKey={NARU_AUTH_KEY}&format=json&pageSize={limit}"
+    
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        docs = response.json().get("response", {}).get("docs", [])
+        
+        books = []
+        for idx, doc in enumerate(docs):
+            item = doc.get("doc", {})
+            books.append({
+                "category": "library_popular",
+                "title": item.get("bookname", ""),
+                "author": item.get("authors", ""),
+                "cover": item.get("bookImageURL", ""),
+                "isbn": item.get("isbn13", ""),
+                "rank": idx + 1
+            })
+        return books
+    except Exception as e:
+        print(f"도서관 정보나루 API 호출 실패: {e}")
+        return []
+
+# 기능: 수집한 외부 API 도서 데이터를 내부 DB와 ISBN 대조 후, 캐시 테이블을 갱신합니다.
+def update_external_book_cache(db: Session):
+    naver_books = fetch_naver_new_releases(15)
+    naru_books = fetch_library_popular_books(15)
+    all_books = naver_books + naru_books
+    
+    if not all_books:
+        return False
+        
+    # 💡 [핵심] 수집된 데이터의 ISBN을 모아서 내부 Edition 테이블과 한 번에 대조 (N+1 성능 최적화)
+    isbns = [book["isbn"] for book in all_books if book["isbn"]]
+    internal_editions = db.query(Edition.isbn, Edition.work_id).filter(Edition.isbn.in_(isbns)).all()
+    isbn_to_work_id = {ed.isbn: ed.work_id for ed in internal_editions}
+    
+    # 기존 캐시 초기화
+    db.query(ExternalBookCache).delete()
+    
+    # 새 데이터 및 내부 릴레이션 키(internal_work_id) 저장
+    new_cache_records = [
+        ExternalBookCache(
+            category=book["category"],
+            title=book["title"],
+            author=book["author"],
+            cover=book["cover"],
+            isbn=book["isbn"],
+            internal_work_id=isbn_to_work_id.get(book["isbn"]), # 서재에 있으면 work_id 세팅
+            rank=book["rank"]
+        )
+        for book in all_books
+    ]
+    
+    db.add_all(new_cache_records)
+    db.commit()
+    return True
+
+# 기능: 메인 대시보드에서 호출할 수 있도록 카테고리별로 캐시된 데이터를 반환합니다.
+def get_cached_external_books(db: Session, category: str):
+    records = db.query(ExternalBookCache).filter(ExternalBookCache.category == category).order_by(ExternalBookCache.rank.asc()).all()
+    return [{
+        "title": r.title, 
+        "author": r.author, 
+        "cover": r.cover, 
+        "isbn": r.isbn, 
+        "internal_work_id": r.internal_work_id, 
+        "rank": r.rank
+    } for r in records]
 
 
 ============================================================

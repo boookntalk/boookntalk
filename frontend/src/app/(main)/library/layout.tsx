@@ -1,34 +1,13 @@
-// src/app/(main)/library/layout.tsx
-'use client';
+// 경로: frontend/src/app/(main)/library/layout.tsx
 import React from 'react';
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { LibrarySidebar } from '@/components/library/LibrarySidebar';
-import Footer from '@/components/layout/Footer';
 
 export default function LibraryLayout({ children }: { children: React.ReactNode }) {
+    // 💡 [핵심] 최상위 글로벌 layout.tsx에서 이미 사이드바와 레이아웃을 잡아주고 있으므로,
+    // 이 파일에서는 어떠한 껍데기(div, aside 등)도 추가하지 않고 자식(page.tsx)만 100% 통과시킵니다.
+    // 이렇게 하면 사이드바 공간이 이중으로 잡히는 문제가 즉시 사라집니다.
     return (
-        <SidebarProvider defaultOpen={true}>
-            {/* 부모 레이아웃이 지정한 영역을 꽉 채움 */}
-            <div className="flex w-full h-full bg-[#F5F5F7] overflow-hidden">
-                
-                {/* [1] 좌측: 사이드바 */}
-                <aside className="hidden md:block w-64 flex-none border-r border-gray-300 bg-white h-full">
-                    <LibrarySidebar />
-                </aside>
-                
-                {/* [2] 우측 영역: 콘텐츠(위) + 푸터(아래) 스택 */}
-                <div className="flex-1 flex flex-col h-full overflow-hidden">
-                    {/* 콘텐츠 영역: 독립적인 스크롤 적용  */}
-                    <main className="flex-1 overflow-y-auto bg-[#F5F5F7] scrollbar-hide">
-                        {children}
-                    </main>
-
-                    {/* [3] 푸터 */}
-                    <footer className="flex-none bg-white border-t border-gray-200">
-                        <Footer />
-                    </footer>
-                </div>
-            </div>
-        </SidebarProvider>
+        <>
+            {children}
+        </>
     );
 }

@@ -1505,6 +1505,17 @@ async def get_work_short_reviews(work_id: int, db: Session = Depends(get_db)):
             "short_review": r.short_review,
             "created_at": r.added_at.isoformat() if r.added_at else ""
         })
+    # ▼▼▼ [핵심 수정] 데이터가 0개일 때 빈 화면 대신 에디터 가이드를 반환합니다. ▼▼▼
+    if not results:
+        return [{
+            "id": 0,  # 가상의 ID
+            "user_name": "BoooknTalk 에디터",
+            "user_image": "", # 기본 아바타 노출
+            "rating": 5,      # 에디터의 추천 점수
+            "short_review": "이 책의 첫 번째 페이지를 넘긴 당신, 어떤 문장이 마음에 닿았나요? 당신만의 첫 번째 사색을 기록해 보세요.",
+            "created_at": ""
+        }]
+
     return results
 
 # ▼▼▼ 2. 신규 긴줄평 API 추가 ▼▼▼
@@ -1542,6 +1553,21 @@ async def get_work_long_reviews(work_id: int, db: Session = Depends(get_db)):
             "rating": lr.record.rating,
             "created_at": lr.created_at.isoformat() if lr.created_at else ""
         })
+    # ▼▼▼ [여기서부터 추가!] 데이터가 0개일 때 빈 화면을 막아주는 콜드스타트 데이터 ▼▼▼
+    if not results:
+        return [{
+            "id": 0,
+            "record_id": 0,
+            "user_id": 0,
+            "user_email": "",
+            "title": "첫 번째 사색을 기다립니다",
+            "content_preview": "아직 기록되지 않은 세계가 당신의 시선을 기다리고 있습니다. 이 책을 읽으며 느꼈던 감정의 결을 BoooknTalkers와 함께 나누어 주세요. 누군가에게는 당신의 기록이 새로운 영감이 됩니다.",
+            "user_name": "BoooknTalk 에디터",
+            "user_image": "",
+            "rating": 5.0, # 에디터 별점
+            "created_at": ""
+        }]
+
     return results
 
 @app.get("/api/users/{user_email}/short-reviews")

@@ -322,6 +322,7 @@ def get_cover_flow_books(db: Session = Depends(get_db)):
         seen_isbn.add(edition.isbn)
         
         results.append({
+            "work_id": work.id,
             "id": edition.isbn,
             "isbn": edition.isbn,
             "title": work.title,
@@ -477,7 +478,7 @@ def get_trending_authors(db: Session = Depends(get_db)):
 @router.get("/dashboard")
 def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(get_db)):
     try:
-        # 💡 [추가] DB에 저장된 외부 API 캐시 데이터 로드
+        # 도서관 인기 및 신간 도서 로드
         library_popular = get_cached_external_books(db=db, category="library_popular")
         naver_new = get_cached_external_books(db=db, category="naver_new")
 
@@ -489,32 +490,10 @@ def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(g
             "coverFlowBooks": get_cover_flow_books(db=db),
             "trendingTags": get_trending_tags(db=db), 
             "inspiringAuthors": get_inspiring_authors(db=db),
-            
-            # 💡 [추가] 디스커버리 허브를 위한 데이터 반환
+            "ugcFeeds": get_recent_ugc_feeds(limit=6, db=db), # 아래쪽 함수에 있던 내용 통합
             "libraryPopular": library_popular,
             "naverNewArrivals": naver_new, 
-            "newArrivals": get_new_arrivals(days=3, db=db), # 기존 서재 최신 도서
-        }
-    except Exception as e:
-        print(f"대시보드 통합 데이터 생성 실패: {e}")
-        raise HTTPException(status_code=500, detail="대시보드 데이터를 구성하는 중 에러가 발생했습니다.")
-
-# ==========================================
-# [NEW] 메인 대시보드 통합 API (BFF 패턴 적용)
-# ==========================================
-@router.get("/dashboard")
-def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(get_db)):
-    try:
-        # 도서관 인기 및 신간 도서 로드 (이제 내부에 등록된 책은 internal_work_id를 달고 나옵니다)
-        library_popular = get_cached_external_books(db=db, category="library_popular")
-        naver_new = get_cached_external_books(db=db, category="naver_new")
-
-        return {
-            "stats": get_home_statistics(db=db),
-            "ugcFeeds": get_recent_ugc_feeds(limit=6, db=db),
-            "naverNewArrivals": naver_new, 
-            "libraryPopular": library_popular,
-            # ... (나머지 지표들)
+            "newArrivals": get_new_arrivals(days=3, db=db),
         }
     except Exception as e:
         print(f"대시보드 통합 데이터 생성 실패: {e}")
