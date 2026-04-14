@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { 
-    Home, ChevronRight, Bookmark, Loader2, BookOpen, MoreVertical, Edit, Trash2
+    Home, ChevronRight, Bookmark, Loader2, BookOpen, MoreVertical, Edit, Trash2, Search
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ export default function WishlistPage() {
     
     const [wishBooks, setWishBooks] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState(''); // 💡 검색 상태 추가
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedBook, setSelectedBook] = useState<any>(null);
@@ -59,6 +60,12 @@ export default function WishlistPage() {
             setIsLoading(false);
         }
     };
+
+    // 💡 검색 필터링 로직 추가
+    const filteredWishBooks = wishBooks.filter(book => 
+        book.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        book.author.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     const handleBookClick = (libraryId: number) => {
         router.push(`/library/${libraryId}`);
@@ -108,24 +115,38 @@ export default function WishlistPage() {
                     </span>
                 </>
             }
+            // 💡 [핵심] 내 서재와 동일한 밑줄형 검색 메뉴 적용
+            actionArea={
+                <>
+                    <Search className="absolute left-1 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#0066cc] transition-colors" size={16} />
+                    <input 
+                        type="text" 
+                        placeholder="위시리스트 내 검색..." 
+                        value={searchTerm} 
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-8 pr-4 py-1.5 bg-transparent border-0 border-b-2 border-gray-200 rounded-none text-[14px] text-[#1d1d1f] placeholder:text-gray-400 transition-all outline-none focus:border-[#0066cc] focus:ring-0"
+                    />
+                </>
+            }
             titleOrTabs={
-                <div className="flex items-center gap-3 pb-2 w-full">
-                    <h1 className="text-[20px] md:text-[22px] font-black text-[#1d1d1f] flex items-center gap-2">
+                // 💡 1. 폰트 크기 차이를 상쇄하기 위해 컨테이너의 하단 여백(pb-2)을 없앱니다 (pb-0)
+                <div className="flex items-center gap-3 pb-0 w-full">
+                    {/* 💡 2. h1 태그에 'leading-none'을 추가하여 폰트 상하의 불필요한 기본 공백을 완전히 깎아냅니다 */}
+                    <h1 className="text-[20px] md:text-[22px] font-black leading-none text-[#1d1d1f] flex items-center gap-2">
                         <Bookmark size={22} className="text-rose-500 fill-rose-100" />
                         위시리스트
                     </h1>
-                    <Badge variant="secondary" className="bg-gray-100 text-gray-500 text-[12px] font-bold px-2 py-0.5">
-                        {wishBooks.length}권
+                    <Badge variant="secondary" className="bg-gray-100 text-gray-500 text-[12px] font-bold px-2 py-0.5 mt-1">
+                        {filteredWishBooks.length}권
                     </Badge>
                 </div>
             }
         >
             <div className="flex flex-col gap-10">
-                {wishBooks.length > 0 ? (
+                {filteredWishBooks.length > 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
-                        {wishBooks.map((book, index) => (
+                        {filteredWishBooks.map((book, index) => (
                             <div key={book.library_id || index} className="relative h-full group/wish">
-                                
                                 <div className="absolute top-3 right-3 z-20 opacity-0 group-hover/wish:opacity-100 transition-opacity">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -166,12 +187,14 @@ export default function WishlistPage() {
                 ) : (
                     <div className="flex flex-col items-center justify-center py-32 text-gray-400 bg-white rounded-3xl border border-dashed border-[#E7E2D9] mt-4">
                         <BookOpen size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-rose-500" />
-                        <p className="font-bold text-[14px] text-gray-500 mb-1">아직 읽고 싶은 책으로 담은 도서가 없습니다.</p>
-                        <p className="text-[12px] text-gray-400">광장이나 검색을 통해 흥미로운 책을 담아보세요!</p>
+                        <p className="font-bold text-[14px] text-gray-500 mb-1">
+                            {searchTerm ? "검색 결과가 없습니다." : "아직 읽고 싶은 책으로 담은 도서가 없습니다."}
+                        </p>
                     </div>
                 )}
             </div>
 
+            {/* 상태 변경 모달은 기존과 동일하게 유지 */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden rounded-[28px] border-none shadow-2xl">
                     <DialogTitle className="sr-only">도서 기록 변경</DialogTitle>
