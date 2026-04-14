@@ -24,7 +24,8 @@ PROJECT ROOT: boookntalk
 │   │   ├── book_service_org.py
 │   │   ├── external_api_service.py
 │   │   ├── insight_service.py
-│   │   └── trending_service.py
+│   │   ├── trending_service.py
+│   │   └── work_service.py
 │   ├── static
 │   │   ├── covers
 │   │   │   ├── 04825fcc-4fb5-4c95-810e-3ad13e1a78d2.jpg
@@ -1396,6 +1397,7 @@ PROJECT ROOT: boookntalk
 │   ├── src
 │   │   ├── app
 │   │   │   ├── (main)
+│   │   │   │   ├── community
 │   │   │   │   ├── layout.tsx
 │   │   │   │   ├── library
 │   │   │   │   │   ├── BookDetailForm.tsx
@@ -1447,7 +1449,8 @@ PROJECT ROOT: boookntalk
 │   │   │   │   │   └── page.tsx
 │   │   │   │   ├── square
 │   │   │   │   │   └── page.tsx
-│   │   │   │   └── work
+│   │   │   │   ├── statistics
+│   │   │   │   └── works
 │   │   │   │       └── [id]
 │   │   │   │           └── page.tsx
 │   │   │   ├── api
@@ -1495,7 +1498,8 @@ PROJECT ROOT: boookntalk
 │   │   │   ├── layout
 │   │   │   │   ├── Container.tsx
 │   │   │   │   ├── Footer.tsx
-│   │   │   │   └── Header.tsx
+│   │   │   │   ├── Header.tsx
+│   │   │   │   └── StandardContainer.tsx
 │   │   │   ├── library
 │   │   │   │   ├── LibrarySidebar.tsx
 │   │   │   │   ├── LongReviewSection_org.tsx
@@ -7524,9 +7528,18 @@ FILE PATH: frontend/src/app/globals.css
 @tailwind components;
 @tailwind utilities;
 
-:root { /* BoooknTalk 표준 배경색 */
-  --header-height: 56px; /* Header h-14와 일치 */
-  --content-gap: 20px;   /* 사용자 요청 여백 */
+:root {
+  --header-height: 64px;
+  --sidebar-width: 260px;
+  
+  /* 💡 폭 사이즈를 기존의 시원한 느낌으로 확장 (1200px -> 1440px) */
+  --max-content-width: 1440px;
+  
+  /* 1cm 간격 규칙 고정 */
+  --spacing-1cm: 38px;
+
+  --bg-main: #F7F5F1;
+  --border-light: #E7E2D9;
 }
 
 html, body {
@@ -7534,7 +7547,8 @@ html, body {
   margin: 0;
   padding: 0;
   /* overflow: hidden; <-- 16번 줄: ❌ 삭제 필수! (이게 스크롤을 막고 있음) */
-  background-color: var(--background);
+  /* background-color: var(--background); */
+  background-color: var(--bg-main);
 }
 
 * {
@@ -7626,7 +7640,8 @@ html, body {
 ============================================================
 FILE PATH: frontend/src/app/api/auth/[...nextauth]/route.ts
 ============================================================
-import NextAuth from "next-auth";
+// frontend/src/app/api/auth/[...nextauth]/route.ts
+import NextAuth from "next-auth/next";
 import { authOptions } from "@/lib/auth"; // 👈 방금 작성한 파일에서 옵션 가져오기
 
 const handler = NextAuth(authOptions);
@@ -7637,25 +7652,61 @@ export { handler as GET, handler as POST };
 ============================================================
 FILE PATH: frontend/src/app/(main)/layout.tsx
 ============================================================
+// 경로: src/app/(main)/layout.tsx
+// 기능: BoooknTalk 메인 레이아웃으로 헤더를 최상단 전체 너비로 확장하고, 하단에 사이드바 및 컨텐츠를 배치합니다.
 'use client';
 
-import React from 'react';
-import Header from '@/components/layout/Header';
+import { Sidebar, SidebarProvider } from '@/components/ui/sidebar'; 
+import { LibrarySidebar } from '@/components/library/LibrarySidebar';
+import Header from '@/components/layout/Header'; 
+import Footer from '@/components/layout/Footer';
+import { usePathname } from 'next/navigation';
 
+/**
+ * MainLayout 컴포넌트
+ * 전체 화면 너비의 헤더를 최상단에 고정하고, 그 아래에 사이드바와 메인 컨텐츠를 동적으로 렌더링합니다.
+ */
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-    return (
-        <div className="flex flex-col h-screen w-full overflow-hidden bg-[#F5F5F7]">
-            {/* [복구] 모든 화면에서 글로벌 헤더를 항상 렌더링하여 앱의 일관성 유지 */}
-            <header className="flex-none h-14 bg-white border-b border-gray-200 z-50 relative">
-                <Header />
-            </header>
+  const pathname = usePathname();
+  
+  const isHomePage = pathname === '/'; 
+  const isLibraryPage = pathname?.startsWith('/library');
 
-            {/* 메인 콘텐츠 영역 */}
-            <main className="flex-1 flex overflow-hidden relative">
-                {children}
-            </main>
+  return (
+    <SidebarProvider>
+      {/* 💡 전체를 감싸는 컨테이너를 flex-col로 설정하여 헤더가 상단 전체 너비를 차지하게 합니다. */}
+      <div className="flex flex-col min-h-screen w-full bg-[var(--bg-main)]">
+        
+        {/* 1. 최상단 고정 헤더 영역 (전체 너비) */}
+        <div className="sticky top-0 z-[60] w-full">
+          <Header />
         </div>
-    );
+
+        {/* 2. 하단 영역 (사이드바 + 메인 콘텐츠) */}
+        <div className="flex flex-1 w-full min-w-0">
+          
+          {/* 사이드바 영역 */}
+          {!isHomePage && (
+            <aside className="w-[var(--sidebar-width)] shrink-0 border-r border-[var(--border-light)] bg-white hidden lg:block z-40 relative">
+              {isLibraryPage ? <LibrarySidebar /> : <Sidebar />}
+            </aside>
+          )}
+
+          {/* 메인 콘텐츠 영역 */}
+          <div className="flex flex-col flex-1 min-w-0 relative">
+            <main className={`flex-1 w-full flex flex-col ${isHomePage ? '' : 'py-[var(--spacing-1cm)]'}`}>
+              {children}
+            </main>
+
+            <footer className="w-full mt-auto bg-white border-t border-[var(--border-light)]">
+              <Footer />
+            </footer>
+          </div>
+          
+        </div>
+      </div>
+    </SidebarProvider>
+  );
 }
 
 
@@ -7677,17 +7728,19 @@ import {
     ChevronLeft, Star, Loader2, TrendingUp, Flame, HelpCircle, 
     PenTool, Crown, Search, AlignLeft
 } from 'lucide-react';
-import Container from '@/components/layout/Container';
-import Footer from '@/components/layout/Footer';
+
 import { useSession, signIn } from "next-auth/react";
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+
+import StandardContainer from '@/components/layout/StandardContainer';
 
 // 공통 컴포넌트 Import
 import { FloatingCover } from '@/components/common/FloatingCover';
 import { InsightCard } from '@/components/common/InsightCard';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
 import { AuthorAvatar } from '@/components/common/AuthorAvatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; // 경로를 프로젝트 설정에 맞게 확인해주세요
 
 // Next.js 환경에서 ECharts WordCloud SSR 충돌을 완벽 방지하는 다이나믹 임포트
 const WordCloudChart = dynamic(() => import('@/components/common/WordCloudChart'), { ssr: false });
@@ -7725,8 +7778,12 @@ export default function Home() {
     const isDragging = useRef<boolean>(false);
     const isInitialized = useRef<boolean>(false);
    
-    const { data: session, status } = useSession();
     const router = useRouter();
+    const { data: session, status } = useSession();
+
+    // [추가] 비로그인 사용자 모달 제어 상태
+    const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+    const [selectedBookForModal, setSelectedBookForModal] = useState<any>(null); // 실제 Book 타입으로 변경 권장
 
     useEffect(() => {
         const savedCoverIndex = sessionStorage.getItem('bnt_coverIndex');
@@ -7810,11 +7867,16 @@ export default function Home() {
     };
 
     const handleCoverClick = (idx: number, offset: number) => {
-        if (isDragging.current) return; 
-        if (offset === 0) {
-            if (coverFlowBooks[idx]?.isbn) router.push(`/search?q=${coverFlowBooks[idx].isbn}`);
+        if (offset !== 0) return;
+
+        const clickedBook = coverFlowBooks[idx];
+
+        if (status === "authenticated") {
+            router.push(`/works/${clickedBook.work_id || clickedBook.id}`); 
+        } else {
+            setSelectedBookForModal(clickedBook);
+            setIsGuestModalOpen(true);
         }
-        else setActiveCoverflowIndex(idx);
     };
 
     // 💡 슬라이더 타이머 로직들
@@ -7921,17 +7983,19 @@ export default function Home() {
     const indexChars = ['All', 'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#'];
 
     return (
-        <div className="w-full h-full overflow-y-auto bg-[#F7F5F1] scrollbar-hide flex flex-col font-sans selection:bg-[#1F3A5F] selection:text-white">
+        <div className="w-full flex flex-col font-sans selection:bg-[#1F3A5F] selection:text-white pb-20">
             
-            {/* ▼ Section 0: 인덱스 커버 플로우 ▼ */}
-            <section className="w-full pt-[32px]">
+            {/* ============================================================ */}
+            {/* ▼ Section 0: Type C (Full Bleed) - 인덱스 커버 플로우 ▼ */}
+            {/* ============================================================ */}
+            <section className="w-full pt-8">
                 {isLoading ? (
                     <div className="flex justify-center items-center py-12 h-[380px]">
                         <Loader2 className="animate-spin text-[#1F3A5F]" size={32} />
                     </div>
                 ) : coverFlowBooks.length > 0 ? (
                     <div 
-                        className="relative w-full h-[380px] flex justify-center items-center mt-4 cursor-grab active:cursor-grabbing select-none touch-pan-y"
+                        className="relative w-full h-[380px] flex justify-center items-center cursor-grab active:cursor-grabbing select-none touch-pan-y"
                         style={{ perspective: '1200px', transformStyle: 'preserve-3d' }}
                         onPointerDown={(e) => handlePointerDown(e.clientX)}
                         onPointerMove={(e) => handlePointerMove(e.clientX)}
@@ -7987,31 +8051,81 @@ export default function Home() {
                 ) : (
                     <div className="text-[#A0AABF] text-center py-20 font-medium h-[380px] flex items-center justify-center">등록된 책이 없습니다.</div>
                 )}
-
-                <Container>
-                    <div className="w-full overflow-x-auto scrollbar-hide mt-0 pb-2 max-w-4xl mx-auto">
-                        <div className="flex items-center justify-between w-full border-t border-[#E7E2D9] pt-6 px-1 min-w-max gap-x-1">
-                            {indexChars.map((char) => (
-                                <button 
-                                    key={char} 
-                                    onClick={() => handleIndexClick(char)}
-                                    className={`flex-shrink-0 transition-all duration-200 text-[10px] md:text-[11px] tracking-tighter font-medium ${selectedGenre === char ? 'text-[#1F3A5F] font-black scale-110 translate-y-[-1px]' : 'text-[#A0AABF] hover:text-[#1D2433] hover:font-bold'}`}
-                                >
-                                    {char}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </Container>
             </section>
 
-            {/* ▼ Section 1: 오늘의 문장 (메모) & 유저 리뷰 (5:5 분할) ▼ */}
-            <section className="w-full pt-[32px]">
-                <Container>
-                    {/* 💡 카드의 기본 높이를 살짝 키워(300px) 3줄 텍스트가 안정적으로 들어가게 최적화 */}
+            {/* ▼ 비로그인 사용자용 도서 정보 모달 ▼ */}
+            <Dialog open={isGuestModalOpen} onOpenChange={setIsGuestModalOpen}>
+                <DialogContent className="sm:max-w-md bg-white border border-[#E7E2D9] rounded-xl outline-none">
+                    <DialogHeader className="mb-2">
+                        <DialogTitle className="text-xl font-bold text-[#1F3A5F] text-center truncate">
+                            {selectedBookForModal?.title}
+                        </DialogTitle>
+                        <DialogDescription className="text-[#A0AABF] text-center text-sm truncate">
+                            {selectedBookForModal?.author}
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="flex flex-col items-center justify-center pb-4">
+                        <div className="w-[140px] h-[205px] relative rounded-sm overflow-hidden shadow-[0_8px_30px_rgba(29,36,51,0.15)] border border-[#E7E2D9]">
+                            {selectedBookForModal?.cover ? (
+                                <Image 
+                                    src={selectedBookForModal.cover} 
+                                    alt={selectedBookForModal.title} 
+                                    fill 
+                                    className="object-cover" 
+                                    unoptimized 
+                                    draggable={false} 
+                                />
+                            ) : (
+                                <div className="w-full h-full bg-[#F7F5F1] flex flex-col items-center justify-center text-xs text-[#A0AABF]">
+                                    <BookOpen className="opacity-30 mb-2" size={32} />
+                                    <span>No Cover</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-6 text-center">
+                            <p className="text-[13px] text-[#4B5E76] font-medium leading-relaxed">
+                                로그인하시면 이 책의<br />깊이 있는 리뷰와 사색을 확인할 수 있습니다.
+                            </p>
+                        </div>
+
+                        <button 
+                            onClick={() => router.push('/login')} 
+                            className="mt-5 w-full py-3 bg-[#1F3A5F] text-white rounded-lg text-[14px] font-bold tracking-tight hover:bg-[#1D2433] transition-colors"
+                        >
+                            BoooknTalk 로그인하기
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* ============================================================ */}
+            {/* 🚀 Type B (Standard Container) - 콘텐츠 영역 전체 묶음 */}
+            {/* 💡 폭을 시원하게 확장하는 size="wide" 적용 완료! */}
+            {/* ============================================================ */}
+            <StandardContainer size="wide" className="mt-4">
+                
+                {/* A-Z 인덱스 탭 */}
+                <div className="w-full overflow-x-auto scrollbar-hide pb-2">
+                    <div className="flex items-center justify-between w-full border-t border-[#E7E2D9] pt-6 px-1 min-w-max gap-x-1">
+                        {indexChars.map((char) => (
+                            <button 
+                                key={char} 
+                                onClick={() => handleIndexClick(char)}
+                                className={`flex-shrink-0 transition-all duration-200 text-[10px] md:text-[11px] tracking-tighter font-medium ${selectedGenre === char ? 'text-[#1F3A5F] font-black scale-110 translate-y-[-1px]' : 'text-[#A0AABF] hover:text-[#1D2433] hover:font-bold'}`}
+                            >
+                                {char}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* ▼ Section 1: 오늘의 문장 (메모) & 유저 리뷰 ▼ */}
+                <section className="w-full">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch h-auto lg:h-[300px]">
                         
-                        {/* 1. 좌측 (50%): 오늘의 문장 (메모) */}
+                        {/* 1. 좌측 (50%): 오늘의 문장 */}
                         <div className="lg:col-span-6 relative rounded-sm overflow-hidden shadow-[0_4px_24px_rgba(29,36,51,0.06)] group bg-[#162335] flex flex-col border border-[#1F3A5F]/20 h-full min-h-[280px]">
                             {heroSentences.length > 0 ? (
                                 <>
@@ -8023,16 +8137,12 @@ export default function Home() {
                                                     <div className="absolute inset-0 bg-gradient-to-t from-[#162335] via-[#162335]/80 to-transparent"></div>
                                                 </div>
                                                 
-                                                {/* 💡 카드 내부 패딩과 구조 최적화 */}
                                                 <div className="relative z-10 flex flex-col w-full h-full p-6 md:p-8">
-                                                    
-                                                    {/* 상단 타이틀 (고정) */}
                                                     <div className="flex items-center gap-2 mb-4 shrink-0">
                                                         <Quote size={14} className="text-[#C89B3C]" />
                                                         <span className="text-[12px] font-black tracking-widest text-[#C89B3C] uppercase">Today's Sentence</span>
                                                     </div>
 
-                                                    {/* 💡 [핵심] 중앙 텍스트 영역: 최대 3줄 제한(line-clamp-3) 적용 및 flex-1로 공간 확보 */}
                                                     <div className="relative flex-1 min-h-0 flex flex-col justify-center" onClick={(e) => { e.stopPropagation(); handleSentenceClick(sentence); }}>
                                                         <SmartTruncatedText 
                                                             content={`${sentence.text} ${sentence.page ? `- ${sentence.page}p` : ''}`} 
@@ -8041,7 +8151,6 @@ export default function Home() {
                                                         />
                                                     </div>
 
-                                                    {/* 하단 책 및 유저 정보 (shrink-0으로 절대 밀려나지 않게 고정) */}
                                                     <div className="flex items-end justify-between w-full mt-4 pt-4 border-t border-white/10 shrink-0">
                                                         <div className="flex items-center gap-4 min-w-0 flex-1">
                                                             <FloatingCover src={sentence.cover} className="w-[36px] h-[52px]" iconSize={14} />
@@ -8073,12 +8182,10 @@ export default function Home() {
                             )}
                         </div>
 
-                        {/* 2. 우측 (50%): 유저 리뷰 탭 (한줄평 & 긴줄평) */}
+                        {/* 2. 우측 (50%): 유저 리뷰 탭 */}
                         <div className="lg:col-span-6 flex flex-col h-full min-h-[280px]">
                             <InsightCard className="flex-1 flex flex-col relative overflow-hidden group hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow duration-300 !p-6 h-full bg-[#FFFFFF]">
                                 <div className="relative z-10 flex flex-col h-full">
-                                    
-                                    {/* 💡 [네이밍 수정 적용] 리뷰 탭 영역 */}
                                     <div className="flex items-center gap-6 mb-4 shrink-0 border-b border-[#EEF2F7] pb-3">
                                         <button 
                                             onClick={() => { setReviewTab('short'); setRcReviewIndex(0); }} 
@@ -8100,7 +8207,7 @@ export default function Home() {
                                         <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF] h-full"><Loader2 className="animate-spin text-[#C89B3C] mb-3" size={24} /></div>
                                     ) : (
                                         <>
-                                            {/* 탭 1: 한줄평 (Short Review) 렌더링 */}
+                                            {/* 탭 1: 한줄평 (Short Review) */}
                                             {reviewTab === 'short' && readersChoice && readersChoice.length > 0 && readersChoice[rcReviewIndex] && (
                                                 <div className="flex-1 flex flex-col h-full animate-in fade-in duration-500 min-h-0">
                                                     <div onClick={() => handleSentenceClick({ work_id: readersChoice[rcReviewIndex].work_id, book: readersChoice[rcReviewIndex].title })} className="flex items-center gap-3 mb-4 cursor-pointer shrink-0 group/mini">
@@ -8115,19 +8222,13 @@ export default function Home() {
                                                                 {readersChoice[rcReviewIndex].rating > 0 && (
                                                                     <div className="flex items-center gap-0.5 text-[#C89B3C]">
                                                                         {[...Array(5)].map((_, i) => (
-                                                                            <Star 
-                                                                                key={`star-${i}`} 
-                                                                                size={10} 
-                                                                                fill={i < Math.floor(readersChoice[rcReviewIndex].rating) ? "currentColor" : "none"} 
-                                                                                className={i < Math.floor(readersChoice[rcReviewIndex].rating) ? "" : "text-[#EEF2F7]"} 
-                                                                            />
+                                                                            <Star key={`star-${i}`} size={10} fill={i < Math.floor(readersChoice[rcReviewIndex].rating) ? "currentColor" : "none"} className={i < Math.floor(readersChoice[rcReviewIndex].rating) ? "" : "text-[#EEF2F7]"} />
                                                                         ))}
                                                                     </div>
                                                                 )}
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    {/* 한줄평 컨텐츠 */}
                                                     <div className="flex-1 relative flex flex-col justify-center bg-[#F7F5F1]/50 rounded-md p-4 border border-[#EEF2F7]">
                                                         <div className="h-full flex flex-col justify-center relative">
                                                             <Quote size={16} className="text-[#C89B3C]/20 absolute -top-1 -left-1" />
@@ -8146,7 +8247,7 @@ export default function Home() {
                                                 </div>
                                             )}
 
-                                            {/* 탭 2: 긴줄평 (Long Review) 렌더링 */}
+                                            {/* 탭 2: 긴줄평 (Long Review) */}
                                             {reviewTab === 'long' && bestLongReviews && bestLongReviews.length > 0 && bestLongReviews[lrReviewIndex] && (
                                                 <div className="flex-1 flex flex-col h-full animate-in fade-in duration-500 min-h-0">
                                                     <div onClick={() => handleSentenceClick(bestLongReviews[lrReviewIndex])} className="flex gap-4 cursor-pointer group/mini h-full">
@@ -8165,7 +8266,6 @@ export default function Home() {
                                                                 <div className="relative mt-2">
                                                                     <Quote size={12} className="text-[#E7E2D9] absolute -top-1 -left-1.5 z-0" />
                                                                     <div className="pl-3 relative z-10 w-full pt-0.5">
-                                                                        {/* 긴줄평 텍스트 처리 */}
                                                                         <SmartTruncatedText content={bestLongReviews[lrReviewIndex].text?.replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ')} textClassName="text-[13px] leading-[1.6] text-[#667085] font-serif line-clamp-4" />
                                                                     </div>
                                                                 </div>
@@ -8185,7 +8285,7 @@ export default function Home() {
                                                 </div>
                                             )}
 
-                                            {/* 탭 공통 데이터 없음 Fallback */}
+                                            {/* 데이터 없음 Fallback */}
                                             {((reviewTab === 'short' && (!readersChoice || readersChoice.length === 0)) || 
                                               (reviewTab === 'long' && (!bestLongReviews || bestLongReviews.length === 0))) && (
                                                 <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF] gap-2 border border-dashed border-[#EEF2F7] rounded-md bg-[#F7F5F1]/30">
@@ -8199,14 +8299,10 @@ export default function Home() {
                             </InsightCard>
                         </div>
                     </div>
-                </Container>
-            </section>
+                </section>
 
-            {/* ============================================================ */}
-            {/* 🚀 [NEW] Section 2: 북앤톡 디스커버리 (Netflix형 가로 스크롤 다이어트) */}
-            {/* ============================================================ */}
-            <section className="w-full mt-[32px]">
-                <Container>
+                {/* ▼ Section 2: 북앤톡 디스커버리 ▼ */}
+                <section className="w-full">
                     <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 border-b border-[#E7E2D9] pb-4 gap-4">
                         <div>
                             <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-2 block">Discovery Hub</span>
@@ -8226,7 +8322,6 @@ export default function Home() {
                         </div>
                     </div>
 
-                    {/* 💡 [핵심] 가로 스크롤(Swipe) 컨테이너: 세로 높이를 1줄로 확 줄임 */}
                     <div className="w-full relative">
                         {isLoading ? (
                             <div className="flex justify-center items-center py-20 h-[240px]"><Loader2 className="animate-spin text-[#1F3A5F]" size={32} /></div>
@@ -8255,29 +8350,19 @@ export default function Home() {
                                                 key={`discovery-${i}`} 
                                                 onClick={() => {
                                                     if (isInternal) {
-                                                        // 1. 우리 사이트에 있는 경우: 광장(상세) 페이지로 이동
                                                         router.push(`/works/${book.internal_work_id || book.work_id}`);
                                                     } else {
-                                                        // 2. 없는 경우: 구글 도서 ISBN 검색 결과로 아웃링크 (새 창)
                                                         if (book.isbn) {
                                                             window.open(`https://books.google.co.kr/books?vid=ISBN${book.isbn}`, '_blank', 'noopener,noreferrer');
                                                         } else {
-                                                            // ISBN이 없는 예외 케이스는 제목으로 검색
                                                             window.open(`https://www.google.co.kr/search?tbm=bks&q=${encodeURIComponent(book.title)}`, '_blank', 'noopener,noreferrer');
                                                         }
                                                     }
                                                 }} 
                                                 className="w-[120px] md:w-[150px] shrink-0 snap-start group cursor-pointer flex flex-col relative min-w-0">
                                                 
-                                                {/* 💡 [수정] 하드코딩된 img 태그를 걷어내고 공통 컴포넌트인 FloatingCover 적용 */}
                                                 <div className="relative mb-3 w-full">
-                                                    <FloatingCover 
-                                                        src={book.cover} 
-                                                        className="w-full aspect-[1/1.45]" 
-                                                        iconSize={24} 
-                                                    />
-                                                    
-                                                    {/* 서재 연결 배지 (FloatingCover 위에 절대 위치로 띄움) */}
+                                                    <FloatingCover src={book.cover} className="w-full aspect-[1/1.45]" iconSize={24} />
                                                     {isInternal && (
                                                         <div className="absolute top-1.5 right-1.5 bg-[#1F3A5F]/90 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded-sm shadow-sm flex items-center gap-0.5 z-10 pointer-events-none">
                                                             <BookOpen size={8} /> 서재
@@ -8296,12 +8381,10 @@ export default function Home() {
                             </div>
                         )}
                     </div>
-                </Container>
-            </section>
+                </section>
 
-            {/* ▼ Section 3: 동적 워드 클라우드 & 사색 작가들 ▼ */}
-            <section className="w-full mt-[32px]">
-                <Container>
+                {/* ▼ Section 3: 동적 워드 클라우드 & 사색 작가들 ▼ */}
+                <section className="w-full">
                     <div className="mb-6">
                         <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-1.5 block">Trending Thoughts</span>
                         <h2 className="text-[24px] font-black text-[#1D2433] mb-1.5 tracking-tight">BnTalkers Tag</h2>
@@ -8360,7 +8443,6 @@ export default function Home() {
                                                     className="flex items-center gap-2.5 group cursor-pointer p-2 hover:bg-[#F7F5F1] rounded-lg transition-all"
                                                     onClick={() => router.push(`/author/${authorId || ''}`)}
                                                 >
-                                                    {/* 💡 공통 AuthorAvatar 컴포넌트로 교체 완료 */}
                                                     <AuthorAvatar 
                                                         src={profileImg} 
                                                         alt={authorName} 
@@ -8387,12 +8469,10 @@ export default function Home() {
                             </div>
                         </InsightCard>
                     </div>
-                </Container>
-            </section>
+                </section>
 
-            {/* ▼ Section 4: 하단 통계 대시보드 ▼ */}
-            <section className="w-full mt-[32px] mb-20">
-                <Container>
+                {/* ▼ Section 4: 하단 통계 대시보드 ▼ */}
+                <section className="w-full">
                     <InsightCard className="grid grid-cols-1 md:grid-cols-3 gap-8 !p-10">
                         <div className="flex flex-col items-center justify-center text-center md:border-r border-[#EEF2F7] md:pr-8">
                             <span className="text-[13px] font-bold text-[#667085] tracking-widest uppercase mb-3">누적 사색 기록</span>
@@ -8407,10 +8487,9 @@ export default function Home() {
                             <span className="text-[36px] font-black text-[#1D2433] tracking-tight">{isLoading ? "-" : stats.reading_books.toLocaleString()}<span className="text-[16px] font-bold text-[#A0AABF] ml-1">권</span></span>
                         </div>
                     </InsightCard>
-                </Container>
-            </section>
-            
-            <Footer />
+                </section>
+
+            </StandardContainer>
         </div>
     );
 }
@@ -10329,11 +10408,13 @@ export default function BookDetailView({ book, open, onOpenChange }: BookDetailV
 ============================================================
 FILE PATH: frontend/src/app/(main)/library/LibraryClient.tsx
 ============================================================
+// 경로: frontend/src/app/(main)/library/LibraryClient.tsx
+// 역할 및 기능: BoooknTalk 내 서재 클라이언트 화면. 라운드 형태의 검색창을 모던한 밑줄(Underline) 형태로 디자인을 개편했습니다.
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -10354,8 +10435,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { formatCardAuthor } from '@/utils/formatters';
 import { BookItemCard } from '@/components/common/BookItemCard';
+import StandardContainer from '@/components/layout/StandardContainer'; 
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"; 
 
@@ -10370,12 +10451,11 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
     const [isAddBookOpen, setIsAddBookOpen] = useState(false);
     const [selectedBook, setSelectedBook] = useState<any>(null);
 
-    // ▼▼▼ [수정 1] 소장 중 탭 추가 및 완독 상태값(FINISHED) 백엔드 동기화 ▼▼▼
     const menuItems = [
         { label: '전체 도서', code: 'ALL' },
-        { label: '읽기 전', code: 'UNREAD' },   // 💡 [NEW] 
+        { label: '읽기 전', code: 'UNREAD' },
         { label: '읽는 중', code: 'READING' },
-        { label: '완독', code: 'COMPLETED' },    // 💡 [FIX] COMPLETED -> FINISHED
+        { label: '완독', code: 'COMPLETED' },
     ];
 
     useEffect(() => {
@@ -10392,7 +10472,6 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
         if (activeTab === 'ALL') {
             return book.status !== 'WISH' && matchesSearch;
         }
-        // 💡 [핵심] 완독 탭 클릭 시 두 상태의 데이터 모두 노출!
         if (activeTab === 'COMPLETED') {
             return (book.status === 'COMPLETED' || book.status === 'FINISHED') && matchesSearch;
         }
@@ -10434,12 +10513,17 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
         }
     };
 
-    if (!mounted) return <div className="w-full h-full bg-[#F5F5F7]" />;
+    if (!mounted) return <div className="w-full h-full bg-[var(--bg-main)]" />;
 
     return (
-        <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
-            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0 transition-all">
-                <div className="flex items-center justify-between mb-4">
+        <StandardContainer size="wide" className="relative min-h-screen pb-32 -mt-[var(--spacing-1cm)] pt-4">
+            
+            {/* 상단 래퍼 */}
+            <div className="border-b border-gray-200 transition-all">
+                
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 min-h-[40px]">
+                    
+                    {/* 좌측: 브레드크럼 */}
                     <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
                         <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors">
                             <Home size={15} /> <span>홈</span>
@@ -10448,39 +10532,57 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                         <span className="text-[#1d1d1f]">내 서재</span>
                     </div>
 
-                    <div className="relative">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    {/* 💡 [핵심 수정] 검색 필터를 라운드에서 밑줄(Underline) 형태로 변경했습니다. */}
+                    <div className="relative w-full sm:w-[260px] group focus-within:w-[300px] transition-all duration-300">
+                        {/* 아이콘을 왼쪽 끝으로 밀착 (left-3.5 -> left-1) */}
+                        <Search className="absolute left-1 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#0066cc] transition-colors" size={16} />
                         <input 
-                            type="text" placeholder="책, 저자 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-full text-[14px] w-56 focus:w-72 transition-all duration-300 outline-none focus:border-[#0066cc] focus:ring-1 focus:ring-[#0066cc] shadow-sm"
+                            type="text" 
+                            placeholder="책, 저자 검색..." 
+                            value={searchTerm} 
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            // bg-white, border-gray-200, rounded-full 제거 -> bg-transparent, border-0, border-b-2 적용
+                            className="w-full pl-8 pr-4 py-1.5 bg-transparent border-0 border-b-2 border-gray-200 rounded-none text-[14px] text-[#1d1d1f] placeholder:text-gray-400 transition-all outline-none focus:border-[#0066cc] focus:ring-0"
                         />
                     </div>
                 </div>
 
-                <div className="flex items-center gap-6 overflow-x-auto scrollbar-hide -mb-[1px]">
-                    {menuItems.map((item) => (
-                        <button
-                            key={item.code} onClick={() => setActiveTab(item.code)}
-                            className={`pb-2 text-[15px] font-bold transition-all whitespace-nowrap border-b-2 ${
-                                activeTab === item.code ? 'text-[#0066cc] border-[#0066cc]' : 'text-gray-400 border-transparent hover:text-[#1d1d1f]'
-                            }`}
-                        >
-                            {item.label}
-                            <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded-full ${activeTab === item.code ? 'bg-blue-50 text-[#0066cc]' : 'bg-gray-100 text-gray-400'}`}>
-                                {item.code === 'ALL' 
-                                    ? books.filter(b => b.status !== 'WISH').length 
-                                    : item.code === 'COMPLETED'
-                                        ? books.filter(b => b.status === 'COMPLETED' || b.status === 'FINISHED').length
-                                        : books.filter(b => b.status === item.code).length}
-                            </span>
-                        </button>
-                    ))}
-                </div>
+                {/* 탭 네비게이션 */}
+                <nav className="flex items-center gap-6 overflow-x-auto scrollbar-hide -mb-[1px]">
+                    {menuItems.map((item) => {
+                        const isActive = activeTab === item.code;
+                        const count = item.code === 'ALL' 
+                            ? books.filter(b => b.status !== 'WISH').length 
+                            : item.code === 'COMPLETED'
+                                ? books.filter(b => b.status === 'COMPLETED' || b.status === 'FINISHED').length
+                                : books.filter(b => b.status === item.code).length;
+
+                        return (
+                            <button
+                                key={item.code} 
+                                onClick={() => setActiveTab(item.code)}
+                                className={`pb-2 text-[15px] font-bold transition-all whitespace-nowrap border-b-2 ${
+                                    isActive 
+                                    ? 'text-[#0066cc] border-[#0066cc]' 
+                                    : 'text-gray-400 border-transparent hover:text-[#1d1d1f]'
+                                }`}
+                            >
+                                {item.label}
+                                {count > 0 && (
+                                    <span className={`ml-1.5 text-[12px] ${isActive ? 'text-[#0066cc]' : 'text-gray-400'}`}>
+                                        {count}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </nav>
             </div>
 
-            <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <div className="p-[var(--spacing-1cm,32px)] pt-6 pb-32">
-                    <main className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
+            {/* 본문: 도서 그리드 (이전에 맞춘 pt-6 간격 유지) */}
+            <div className="pt-6">
+                {filteredBooks.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
                         {filteredBooks.map((book, index) => (
                             <div key={book.library_id || index} className="relative h-full group/lib">
                                 
@@ -10490,18 +10592,14 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                             <Button 
                                                 variant="secondary" 
                                                 size="icon" 
-                                                className="h-7 w-7 rounded-full bg-white/90 shadow-sm hover:bg-white focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0" 
+                                                className="h-7 w-7 rounded-full bg-white/90 shadow-sm hover:bg-white focus:outline-none" 
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 <MoreVertical size={14} className="text-gray-500" />
                                             </Button>
                                         </DropdownMenuTrigger>
                                         
-                                        <DropdownMenuContent 
-                                            align="end" 
-                                            className="w-44"
-                                            onCloseAutoFocus={(e) => e.preventDefault()}
-                                        >
+                                        <DropdownMenuContent align="end" className="w-44" onCloseAutoFocus={(e) => e.preventDefault()}>
                                             <DropdownMenuItem onClick={(e) => openEditModal(e, book)}>
                                                 <Edit size={14} className="mr-2" /> 상태 변경
                                             </DropdownMenuItem>
@@ -10533,18 +10631,16 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
                                 />
                             </div>
                         ))}
-                    </main>
-
-                    {filteredBooks.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-32 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200 mt-4">
-                            <BookOpen size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-[#0066cc]" />
-                            <p className="font-bold text-[14px] text-gray-500">조건에 맞는 도서가 없습니다.</p>
-                        </div>
-                    )}
-                </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-32 text-gray-400 bg-white rounded-3xl border border-dashed border-[#E7E2D9] mt-4">
+                        <BookOpen size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-[#1F3A5F]" />
+                        <p className="font-bold text-[14px] text-gray-500">조건에 맞는 도서가 없습니다.</p>
+                    </div>
+                )}
             </div>
             
-            <button onClick={() => setIsAddBookOpen(true)} className="fixed bottom-8 right-8 w-14 h-14 bg-[#1d1d1f] hover:bg-[#0066cc] text-white rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.2)] flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 z-40">
+            <button onClick={() => setIsAddBookOpen(true)} className="fixed bottom-8 right-8 w-14 h-14 bg-[#1d1d1f] hover:bg-[#1F3A5F] text-white rounded-full shadow-[0_8px_30px_rgba(29,36,51,0.3)] flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 z-40">
                 <Plus size={24} />
             </button>
 
@@ -10572,24 +10668,23 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
             {isAddBookOpen && (
                 <AddBookModal isOpen={isAddBookOpen} onClose={() => { setIsAddBookOpen(false); fetchLibrarySilently(); }} userEmail={user?.email} />
             )}
-        </div>
+        </StandardContainer>
     );
 }
 
-// ▼▼▼ [수정 2] UNREAD 뱃지 디자인(보라색) 및 FINISHED 호환성 추가 ▼▼▼
 function BadgeByStatus({ status }: { status: string }) {
     switch (status) {
         case 'UNREAD':
-            return <Badge className="bg-violet-50 text-violet-600 hover:bg-violet-50 border-0 h-5 px-1.5 text-[10px] font-bold">읽기 전</Badge>;
+            return <Badge className="bg-violet-50 text-violet-600 hover:bg-violet-50 border-0 h-5 px-1.5 text-[10px] font-bold shadow-none">읽기 전</Badge>;
         case 'READING':
-            return <Badge className="bg-blue-50 text-[#0066cc] hover:bg-blue-50 border-0 h-5 px-1.5 text-[10px] font-bold">읽는 중</Badge>;
+            return <Badge className="bg-blue-50 text-[#0066cc] hover:bg-blue-50 border-0 h-5 px-1.5 text-[10px] font-bold shadow-none">읽는 중</Badge>;
         case 'FINISHED':
-        case 'COMPLETED': // 구버전 데이터 호환성을 위해 남겨둠
-            return <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-50 border-0 h-5 px-1.5 text-[10px] font-bold">완독</Badge>;
+        case 'COMPLETED': 
+            return <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-50 border-0 h-5 px-1.5 text-[10px] font-bold shadow-none">완독</Badge>;
         case 'WISH':
-            return <Badge className="bg-rose-50 text-rose-500 hover:bg-rose-50 border-0 h-5 px-1.5 text-[10px] font-bold">읽고 싶음</Badge>;
+            return <Badge className="bg-rose-50 text-rose-500 hover:bg-rose-50 border-0 h-5 px-1.5 text-[10px] font-bold shadow-none">읽고 싶음</Badge>;
         default:
-            return <Badge variant="outline" className="text-gray-400 border-gray-200 h-5 px-1.5 text-[10px]">{status}</Badge>;
+            return <Badge variant="outline" className="text-gray-400 border-[#E7E2D9] h-5 px-1.5 text-[10px] shadow-none">{status}</Badge>;
     }
 }
 
@@ -10597,38 +10692,17 @@ function BadgeByStatus({ status }: { status: string }) {
 ============================================================
 FILE PATH: frontend/src/app/(main)/library/layout.tsx
 ============================================================
-// src/app/(main)/library/layout.tsx
-'use client';
+// 경로: frontend/src/app/(main)/library/layout.tsx
 import React from 'react';
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { LibrarySidebar } from '@/components/library/LibrarySidebar';
-import Footer from '@/components/layout/Footer';
 
 export default function LibraryLayout({ children }: { children: React.ReactNode }) {
+    // 💡 [핵심] 최상위 글로벌 layout.tsx에서 이미 사이드바와 레이아웃을 잡아주고 있으므로,
+    // 이 파일에서는 어떠한 껍데기(div, aside 등)도 추가하지 않고 자식(page.tsx)만 100% 통과시킵니다.
+    // 이렇게 하면 사이드바 공간이 이중으로 잡히는 문제가 즉시 사라집니다.
     return (
-        <SidebarProvider defaultOpen={true}>
-            {/* 부모 레이아웃이 지정한 영역을 꽉 채움 */}
-            <div className="flex w-full h-full bg-[#F5F5F7] overflow-hidden">
-                
-                {/* [1] 좌측: 사이드바 */}
-                <aside className="hidden md:block w-64 flex-none border-r border-gray-300 bg-white h-full">
-                    <LibrarySidebar />
-                </aside>
-                
-                {/* [2] 우측 영역: 콘텐츠(위) + 푸터(아래) 스택 */}
-                <div className="flex-1 flex flex-col h-full overflow-hidden">
-                    {/* 콘텐츠 영역: 독립적인 스크롤 적용  */}
-                    <main className="flex-1 overflow-y-auto bg-[#F5F5F7] scrollbar-hide">
-                        {children}
-                    </main>
-
-                    {/* [3] 푸터 */}
-                    <footer className="flex-none bg-white border-t border-gray-200">
-                        <Footer />
-                    </footer>
-                </div>
-            </div>
-        </SidebarProvider>
+        <>
+            {children}
+        </>
     );
 }
 
@@ -10636,24 +10710,29 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
 ============================================================
 FILE PATH: frontend/src/app/(main)/library/page.tsx
 ============================================================
-// src/app/(main)/library/page.tsx
+// 경로: frontend/src/app/(main)/library/page.tsx
+// 역할 및 기능: 내 서재의 데이터를 서버에서 가져와 클라이언트 컴포넌트로 전달하는 진입점입니다.
+
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import LibraryClient from "./LibraryClient";
 import { redirect } from "next/navigation";
+import StandardContainer from '@/components/layout/StandardContainer';
 
 export const dynamic = 'force-dynamic';
 
 export default async function LibraryPage() {
   const session = await getServerSession(authOptions);
 
+  // 세션이 없거나 이메일 정보가 없으면 홈으로 리다이렉트
   if (!session?.user?.email) {
     redirect("/"); 
   }
 
   let initialBooks = [];
-  // 초기 데이터 로딩 부분 (이 부분은 유지)
+  
   try {
+    // 백엔드 API로부터 해당 유저의 서재 도서 목록 조회
     const res = await fetch(`http://localhost:8000/api/my-library/${session.user.email}`, {
       cache: "no-store",
     });
@@ -10665,10 +10744,8 @@ export default async function LibraryPage() {
   }
 
   return (
-    <div>
-      {/* ▼▼▼ [수정] user={session.user}를 반드시 추가해야 합니다! ▼▼▼ */}
-      <LibraryClient initialBooks={initialBooks} user={session.user} />
-    </div>
+    // 💡 [핵심] LibraryClient 내부에서 StandardContainer를 사용하여 레이아웃을 잡습니다.
+    <LibraryClient initialBooks={initialBooks} user={session.user} />
   );
 }
 
@@ -11058,6 +11135,9 @@ export default function UserLibraryPage() {
 ============================================================
 FILE PATH: frontend/src/app/(main)/library/tags/page.tsx
 ============================================================
+// 경로: frontend/src/app/(main)/library/tags/page.tsx (또는 TagsClient.tsx)
+// 역할 및 기능: BoooknTalk 나의 태그 클라이언트 화면. 내 서재(도서 메뉴)의 검색바 높이와 픽셀을 강제로 동기화하여 메뉴 전환 시 발생하는 덜컹거림(레이아웃 시프트)을 완벽하게 제거했습니다.
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -11067,8 +11147,8 @@ import { useRouter } from 'next/navigation';
 import { Tags, Home, ChevronRight, Loader2, Hash } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 
-// ▼ [핵심] 우리가 만든 도서 전용 공통 카드 임포트
 import { BookItemCard } from '@/components/common/BookItemCard';
+import StandardContainer from '@/components/layout/StandardContainer'; 
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -11112,17 +11192,20 @@ export default function MyTagsPage() {
 
     if (isLoading) {
         return (
-            <div className="w-full h-full bg-[#F5F5F7] flex justify-center items-center">
+            <StandardContainer size="wide" className="min-h-screen flex justify-center items-center">
                 <Loader2 className="animate-spin text-[#0066cc]" size={40} />
-            </div>
+            </StandardContainer>
         );
     }
 
     return (
-        <div className="w-full h-full flex flex-col bg-[#F5F5F7]">
-            {/* 상단 네비게이션 및 태그 필터 영역 */}
-            <div className="flex-none bg-[#F5F5F7]/90 backdrop-blur-md z-30 pt-4 px-[var(--spacing-1cm,32px)] border-b border-gray-200 sticky top-0 transition-all">
-                <div className="flex items-center justify-between mb-4">
+        <StandardContainer size="wide" className="relative min-h-screen pb-32 -mt-[var(--spacing-1cm)] pt-4">
+            
+            {/* 상단 래퍼 */}
+            <div className="border-b border-gray-200 transition-all">
+                
+                {/* 💡 [핵심 1] min-h-[40px] 추가! 내 서재의 '검색바'가 차지하는 높이 공간을 투명하게 확보하여 높이 덜컹거림 방지 */}
+                <div className="flex items-center justify-between mb-4 min-h-[40px]">
                     <div className="flex items-center gap-2 text-[13px] font-bold text-gray-400">
                         <Link href="/" className="flex items-center gap-1.5 hover:text-[#0066cc] transition-colors"><Home size={15} /> <span>홈</span></Link>
                         <ChevronRight size={14} className="opacity-50" />
@@ -11132,56 +11215,64 @@ export default function MyTagsPage() {
                     </div>
                 </div>
 
-                {/* 태그 칩(Chip) 가로 스크롤 메뉴 유지 */}
+                {/* 💡 [핵심 2] pb-3을 pb-2로 수정! 내 서재의 텍스트 탭(pb-2)과 칩 버튼의 시각적 하단 여백을 일치시킴 */}
                 {tagsData.length > 0 && (
-                    <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-4">
-                        <button onClick={() => setActiveTag('ALL')} className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-all whitespace-nowrap border ${activeTag === 'ALL' ? 'bg-[#1d1d1f] text-white border-[#1d1d1f] shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>전체 보기</button>
+                    <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide pb-2 -mb-[1px]">
+                        <button 
+                            onClick={() => setActiveTag('ALL')} 
+                            className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-all whitespace-nowrap border ${activeTag === 'ALL' ? 'bg-[#1d1d1f] text-white border-[#1d1d1f] shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}
+                        >
+                            전체 보기
+                        </button>
                         {tagsData.map((tag) => (
-                            <button key={tag.tag_name} onClick={() => setActiveTag(tag.tag_name)} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-bold transition-all whitespace-nowrap border ${activeTag === tag.tag_name ? 'bg-[#0066cc] text-white border-[#0066cc] shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-[#0066cc]/50 hover:text-[#0066cc]'}`}>
+                            <button 
+                                key={tag.tag_name} 
+                                onClick={() => setActiveTag(tag.tag_name)} 
+                                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-bold transition-all whitespace-nowrap border ${activeTag === tag.tag_name ? 'bg-[#0066cc] text-white border-[#0066cc] shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-[#0066cc]/50 hover:text-[#0066cc]'}`}
+                            >
                                 <Hash size={12} className={activeTag === tag.tag_name ? "text-white/70" : "text-gray-400"} /> {tag.tag_name}
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ml-1 ${activeTag === tag.tag_name ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'}`}>{tag.count}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ml-1 ${activeTag === tag.tag_name ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                    {tag.count}
+                                </span>
                             </button>
                         ))}
                     </div>
                 )}
             </div>
 
-            {/* 본문: 태그별 도서 목록 렌더링 영역 */}
-            <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <div className="p-[var(--spacing-1cm,32px)] pt-6 pb-32 flex flex-col gap-12">
-                    {displayedTags.length > 0 ? (
-                        displayedTags.map((group) => (
-                            <section key={group.tag_name} className="flex flex-col gap-4">
-                                <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
-                                    <h2 className="text-[20px] font-black text-[#1d1d1f] flex items-center gap-1.5"><Hash size={20} className="text-[#0066cc]" /> {group.tag_name}</h2>
-                                    <Badge variant="secondary" className="bg-gray-100 text-gray-500 text-[11px] font-bold">{group.count}권</Badge>
-                                </div>
+            {/* 본문: 태그별 도서 목록 (내 서재와 동일한 pt-6 시작점 유지) */}
+            <div className="pt-6 flex flex-col gap-10">
+                {displayedTags.length > 0 ? (
+                    displayedTags.map((group) => (
+                        <section key={group.tag_name} className="flex flex-col gap-4">
+                            <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+                                <h2 className="text-[20px] font-black text-[#1d1d1f] flex items-center gap-1.5"><Hash size={20} className="text-[#0066cc]" /> {group.tag_name}</h2>
+                                <Badge variant="secondary" className="bg-gray-100 text-gray-500 text-[11px] font-bold">{group.count}권</Badge>
+                            </div>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-8">
-                                    {group.books.map((book: any, index: number) => (
-                                        // ▼▼▼ [적용 완료] 예전 div를 지우고 BookItemCard 하나로 깔끔하게 교체 ▼▼▼
-                                        // 이제 카드 자체는 움직이지 않고, 내장된 로직에 의해 표지만 둥실 떠오릅니다!
-                                        <BookItemCard 
-                                            key={book.library_id || index}
-                                            onClick={() => handleBookClick(book.library_id)}
-                                            cover={book.cover}
-                                            title={book.title}
-                                            author={book.author}
-                                        />
-                                    ))}
-                                </div>
-                            </section>
-                        ))
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-32 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200 mt-4">
-                            <Tags size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-[#0066cc]" />
-                            <p className="font-bold text-[14px] text-gray-500 mb-1">아직 등록된 태그가 없습니다.</p>
-                            <p className="text-[12px] text-gray-400">도서를 서재에 담고 나만의 태그를 추가해 보세요!</p>
-                        </div>
-                    )}
-                </div>
+                            {/* 도서 그리드 */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+                                {group.books.map((book: any, index: number) => (
+                                    <BookItemCard 
+                                        key={book.library_id || index}
+                                        onClick={() => handleBookClick(book.library_id)}
+                                        cover={book.cover}
+                                        title={book.title}
+                                        author={book.author}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    ))
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-32 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200 mt-4">
+                        <Tags size={40} strokeWidth={1.5} className="mb-3 opacity-30 text-[#0066cc]" />
+                        <p className="font-bold text-[14px] text-gray-500 mb-1">아직 등록된 태그가 없습니다.</p>
+                        <p className="text-[12px] text-gray-400">도서를 서재에 담고 나만의 태그를 추가해 보세요!</p>
+                    </div>
+                )}
             </div>
-        </div>
+        </StandardContainer>
     );
 }
 
@@ -12655,6 +12746,265 @@ export default function MyPage() {
 
 
 ============================================================
+FILE PATH: frontend/src/app/(main)/works/[id]/page.tsx
+============================================================
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
+import { useSession, signIn } from "next-auth/react";
+import Container from '@/components/layout/Container';
+import Footer from '@/components/layout/Footer';
+import { Loader2, Star, Users, ChevronLeft, BookCopy, Plus, MessageSquare, PenTool } from 'lucide-react';
+import { toast } from 'sonner';
+import { User } from 'lucide-react';
+import { formatDetailAuthor } from '@/utils/formatters';
+
+// 방금 만든 판본 선택 모달을 불러옵니다
+import EditionSelectModal from '@/components/work/EditionSelectModal';
+// 완벽한 긴줄평 목록 컴포넌트 불러오기
+import LongReviewListSection from '@/components/book-detail/LongReviewListSection';
+import StandardContainer from '@/components/layout/StandardContainer';
+
+export default function WorkHubPage() {
+    const params = useParams();
+    const router = useRouter();
+    const searchParams = useSearchParams(); 
+    const workId = params.id as string;
+    const { data: session, status } = useSession();
+
+    const [work, setWork] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    
+    // 모달 열림/닫힘 상태 관리
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const [shortReviews, setShortReviews] = useState<any[]>([]);
+    const [longReviews, setLongReviews] = useState<any[]>([]);
+    const [isReviewsLoading, setIsReviewsLoading] = useState(false);
+    
+    // URL 쿼리를 읽어 초기 탭 상태 설정
+    const initialTab = searchParams.get('tab') === 'long_review' ? 'long_reviews' : 'short_reviews';
+    const [activeTab, setActiveTab] = useState(initialTab);
+
+    useEffect(() => {
+        if (!workId) return;
+
+        const fetchReviews = async () => {
+            setIsReviewsLoading(true);
+            try {
+                if (activeTab === 'short_reviews') {
+                    const res = await fetch(`http://localhost:8000/api/works/${workId}/short-reviews`);
+                    if (res.ok) setShortReviews(await res.json());
+                } else if (activeTab === 'long_reviews') {
+                    const res = await fetch(`http://localhost:8000/api/work/${workId}/long-reviews`);
+                    if (res.ok) setLongReviews(await res.json());
+                }
+            } catch (error) {
+                console.error("리뷰 로딩 에러:", error);
+            } finally {
+                setIsReviewsLoading(false);
+            }
+        };
+
+        fetchReviews();
+    }, [workId, activeTab]);
+
+    useEffect(() => {
+        if (!workId) return;
+
+        const fetchWorkDetail = async () => {
+            setIsLoading(true);
+            try {
+                const res = await fetch(`http://localhost:8000/api/works/${workId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setWork(data);
+                } else {
+                    toast.error("작품 정보를 불러올 수 없습니다.");
+                    router.back();
+                }
+            } catch (error) {
+                console.error("작품 조회 에러:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchWorkDetail();
+    }, [workId, router]);
+
+    if (isLoading) {
+        return (
+            <div className="w-full h-[calc(100vh-64px)] bg-[#F5F5F7] flex justify-center items-center">
+                <Loader2 className="animate-spin text-[#0066cc]" size={40} />
+            </div>
+        );
+    }
+
+    if (!work) return null;
+
+    return (
+        <StandardContainer>
+            <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col">
+                <Container className="pt-[var(--spacing-1cm,32px)] pb-20">
+                    {/* 2. 작품 마스터 영역 (상단) */}
+                    {/* ▼▼▼ 핵심 수정 1: 최상위 카드에 w-full을 추가하여 무조건 전체 폭을 채우도록 강제 ▼▼▼ */}
+                    <div className="w-full bg-white rounded-sm p-[var(--spacing-1cm,32px)] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-10 mb-8 relative overflow-hidden">
+                        
+                        {/* 좌측: 대표 표지 */}
+                        <div className="w-40 md:w-56 shrink-0 relative aspect-[1/1.4] rounded-sm shadow-md border border-gray-100 bg-gray-50 flex items-center justify-center z-10">
+                            {work.best_cover ? (
+                                <Image src={work.best_cover} alt={work.title} fill className="object-cover" priority />
+                            ) : (
+                                <span className="text-gray-400 font-bold text-sm">No Cover</span>
+                            )}
+                        </div>
+
+                        {/* 우측: 통합 정보 및 통계 */}
+                        {/* ▼▼▼ 핵심 수정 2: flex-1과 함께 w-full, min-w-0을 추가하여 내부 텍스트 밀림 완벽 방어 ▼▼▼ */}
+                        <div className="flex flex-col flex-1 w-full min-w-0 z-10 pt-2">
+                            {work.category && <span className="text-[12px] font-bold text-[#0066cc] mb-2">{work.category}</span>}
+                            
+                            {/* ▼▼▼ 수정 3: 매우 긴 제목이나 작가명으로 인해 레이아웃이 터지지 않도록 truncate(말줄임) 추가 ▼▼▼ */}
+                            <h1 className="text-[28px] md:text-[36px] font-black text-[#1d1d1f] leading-tight tracking-tight mb-2 truncate">
+                                {work.title}
+                            </h1>
+                            <p className="text-[16px] text-gray-500 font-medium mb-6 truncate">
+                                {formatDetailAuthor(work.author)}
+                            </p>
+                            
+                            {/* 통합 통계 뱃지 */}
+                            {/* ▼▼▼ 수정 4: w-full 및 overflow 방어 코드 추가 ▼▼▼ */}
+                            <div className="flex items-center gap-6 mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100 w-full overflow-x-auto scrollbar-hide">
+                                <div className="flex flex-col shrink-0">
+                                    <span className="text-[11px] text-gray-400 font-bold mb-1">통합 평점</span>
+                                    <div className="flex items-center gap-1.5 text-amber-400">
+                                        <Star size={18} fill="currentColor" />
+                                        <span className="text-[18px] font-black text-[#1d1d1f]">{work.average_rating}</span>
+                                    </div>
+                                </div>
+                                <div className="w-[1px] h-10 bg-gray-200 shrink-0"></div>
+                                <div className="flex flex-col shrink-0">
+                                    <span className="text-[11px] text-gray-400 font-bold mb-1">담은 사람</span>
+                                    <div className="flex items-center gap-1.5 text-emerald-500">
+                                        <Users size={18} />
+                                        <span className="text-[18px] font-black text-[#1d1d1f]">{work.total_added}<span className="text-[13px] font-medium text-gray-500 ml-1">명</span></span>
+                                    </div>
+                                </div>
+                                <div className="w-[1px] h-10 bg-gray-200 shrink-0"></div>
+                                <div className="flex flex-col shrink-0">
+                                    <span className="text-[11px] text-gray-400 font-bold mb-1">등록된 판본</span>
+                                    <div className="flex items-center gap-1.5 text-[#0066cc]">
+                                        <BookCopy size={18} />
+                                        <span className="text-[18px] font-black text-[#1d1d1f]">{work.edition_count}<span className="text-[13px] font-medium text-gray-500 ml-1">개</span></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 작품 소개글 */}
+                            {/* ▼▼▼ 수정 5: 텍스트가 짧아도 카드의 최소 높이를 유지하도록 min-h-[100px] 추가 ▼▼▼ */}
+                            <div className="text-[14px] text-gray-600 leading-relaxed break-keep min-h-[100px]">
+                                {work.description || "이 작품에 대한 상세 소개가 아직 없습니다."}
+                            </div>
+
+                            {/* 액션 버튼 */}
+                            <div className="mt-auto pt-8 flex">
+                                <button 
+                                    onClick={() => {
+                                        if (status === 'unauthenticated') return signIn('google');
+                                        setIsModalOpen(true);
+                                    }}
+                                    className="flex items-center justify-center gap-2 w-full md:w-fit px-8 py-3.5 bg-[#1d1d1f] text-white rounded-lg font-bold hover:bg-black transition-transform active:scale-95 shadow-lg shrink-0"
+                                >
+                                    <Plus size={18} /> 내 서재에 담을 판본 선택하기
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. 통합 소셜 라운지 영역 (하단) */}
+                    <div className="mt-12">
+                        <h2 className="text-[20px] font-black text-[#1d1d1f] mb-6">BoooknTalkers의 사색</h2>
+                        
+                        <div className="flex items-center gap-6 border-b border-gray-200 mb-8">
+                            <button 
+                                onClick={() => setActiveTab('short_reviews')}
+                                className={`pb-3 text-[15px] font-bold transition-all border-b-2 flex items-center gap-1.5 ${activeTab === 'short_reviews' ? 'text-[#0066cc] border-[#0066cc]' : 'text-gray-400 border-transparent hover:text-[#1d1d1f]'}`}
+                            >
+                                <MessageSquare size={16} /> 통합 한줄평
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('long_reviews')}
+                                className={`pb-3 text-[15px] font-bold transition-all border-b-2 flex items-center gap-1.5 ${activeTab === 'long_reviews' ? 'text-[#0066cc] border-[#0066cc]' : 'text-gray-400 border-transparent hover:text-[#1d1d1f]'}`}
+                            >
+                                <PenTool size={16} /> 리뷰 (긴줄평)
+                            </button>
+                        </div>
+
+                        {/* 실제 데이터가 렌더링되는 리스트 영역 */}
+                        {isReviewsLoading ? (
+                            <div className="py-20 flex justify-center items-center bg-white rounded-lg border border-gray-100 border-dashed">
+                                <Loader2 className="animate-spin text-[#0066cc]" size={32} />
+                            </div>
+                        ) : activeTab === 'short_reviews' ? (
+                            shortReviews.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {shortReviews.map(review => (
+                                        <div key={review.id} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                                            <div className="flex items-start gap-4 mb-3">
+                                                <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 relative overflow-hidden flex items-center justify-center border border-gray-200">
+                                                    {review.user_image ? (
+                                                        <Image src={review.user_image} alt="profile" fill className="object-cover" />
+                                                    ) : (
+                                                        <User size={20} className="text-gray-400" />
+                                                    )}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-[14px] text-[#1d1d1f]">{review.user_name}</span>
+                                                        <span className="text-[12px] text-gray-400">{review.created_at.substring(0, 10)}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 mt-0.5 text-amber-400">
+                                                        <Star size={12} fill="currentColor" />
+                                                        <span className="text-[12px] font-bold text-gray-600 pt-[1px]">{review.rating}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p className="text-[14px] text-gray-700 leading-relaxed break-keep">{review.short_review}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="py-20 flex flex-col items-center justify-center bg-white rounded-lg border border-gray-100 border-dashed">
+                                    <MessageSquare size={40} strokeWidth={1.5} className="mb-4 text-gray-300" />
+                                    <span className="text-gray-400 font-medium text-[14px]">아직 작성된 한줄평이 없습니다. 첫 번째 기록을 남겨보세요!</span>
+                                </div>
+                            )
+                        ) : (
+                            /* ▼▼▼ [핵심] 기존 코드를 날리고 우리가 만든 컴포넌트로 통째로 교체 ▼▼▼ */
+                            <LongReviewListSection workId={Number(workId)} currentUser={session?.user} />
+                        )}
+                    </div>
+                </Container>
+
+                {/* 모달 컴포넌트 마운트 */}
+                <EditionSelectModal 
+                    isOpen={isModalOpen} 
+                    onClose={() => setIsModalOpen(false)} 
+                    workId={workId} 
+                    workTitle={work.title} 
+                    userEmail={session?.user?.email || ''} 
+                />
+                <Footer />
+            </div>
+        </StandardContainer>
+    );
+}
+
+
+============================================================
 FILE PATH: frontend/src/app/(main)/review/[review_id]/page.tsx
 ============================================================
 'use client';
@@ -12762,255 +13112,6 @@ export default function ReviewDetailPage() {
                 </article>
 
             </Container>
-            <Footer />
-        </div>
-    );
-}
-
-
-============================================================
-FILE PATH: frontend/src/app/(main)/work/[id]/page.tsx
-============================================================
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
-import { useSession, signIn } from "next-auth/react";
-import Container from '@/components/layout/Container';
-import Footer from '@/components/layout/Footer';
-import { Loader2, Star, Users, ChevronLeft, BookCopy, Plus, MessageSquare, PenTool } from 'lucide-react';
-import { toast } from 'sonner';
-import { User } from 'lucide-react';
-import { formatDetailAuthor } from '@/utils/formatters';
-
-// 방금 만든 판본 선택 모달을 불러옵니다
-import EditionSelectModal from '@/components/work/EditionSelectModal';
-// 완벽한 긴줄평 목록 컴포넌트 불러오기
-import LongReviewListSection from '@/components/book-detail/LongReviewListSection';
-
-export default function WorkHubPage() {
-    const params = useParams();
-    const router = useRouter();
-    const searchParams = useSearchParams(); 
-    const workId = params.id as string;
-    const { data: session, status } = useSession();
-
-    const [work, setWork] = useState<any>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    
-    // 모달 열림/닫힘 상태 관리
-    const [isModalOpen, setIsModalOpen] = useState(false);
-
-    const [shortReviews, setShortReviews] = useState<any[]>([]);
-    const [longReviews, setLongReviews] = useState<any[]>([]);
-    const [isReviewsLoading, setIsReviewsLoading] = useState(false);
-    
-    // URL 쿼리를 읽어 초기 탭 상태 설정
-    const initialTab = searchParams.get('tab') === 'long_review' ? 'long_reviews' : 'short_reviews';
-    const [activeTab, setActiveTab] = useState(initialTab);
-
-    useEffect(() => {
-        if (!workId) return;
-
-        const fetchReviews = async () => {
-            setIsReviewsLoading(true);
-            try {
-                if (activeTab === 'short_reviews') {
-                    const res = await fetch(`http://localhost:8000/api/works/${workId}/short-reviews`);
-                    if (res.ok) setShortReviews(await res.json());
-                } else if (activeTab === 'long_reviews') {
-                    const res = await fetch(`http://localhost:8000/api/work/${workId}/long-reviews`);
-                    if (res.ok) setLongReviews(await res.json());
-                }
-            } catch (error) {
-                console.error("리뷰 로딩 에러:", error);
-            } finally {
-                setIsReviewsLoading(false);
-            }
-        };
-
-        fetchReviews();
-    }, [workId, activeTab]);
-
-    useEffect(() => {
-        if (!workId) return;
-
-        const fetchWorkDetail = async () => {
-            setIsLoading(true);
-            try {
-                const res = await fetch(`http://localhost:8000/api/works/${workId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setWork(data);
-                } else {
-                    toast.error("작품 정보를 불러올 수 없습니다.");
-                    router.back();
-                }
-            } catch (error) {
-                console.error("작품 조회 에러:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchWorkDetail();
-    }, [workId, router]);
-
-    if (isLoading) {
-        return (
-            <div className="w-full h-[calc(100vh-64px)] bg-[#F5F5F7] flex justify-center items-center">
-                <Loader2 className="animate-spin text-[#0066cc]" size={40} />
-            </div>
-        );
-    }
-
-    if (!work) return null;
-
-    return (
-        <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col">
-            <Container className="pt-[var(--spacing-1cm,32px)] pb-20">
-                {/* 2. 작품 마스터 영역 (상단) */}
-                <div className="bg-white rounded-sm p-[var(--spacing-1cm,32px)] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-10 mb-8 relative overflow-hidden">
-                    
-                    {/* 좌측: 대표 표지 */}
-                    <div className="w-40 md:w-56 shrink-0 relative aspect-[1/1.4] rounded-sm shadow-md border border-gray-100 bg-gray-50 flex items-center justify-center z-10">
-                        {work.best_cover ? (
-                            <Image src={work.best_cover} alt={work.title} fill className="object-cover" priority />
-                        ) : (
-                            <span className="text-gray-400 font-bold text-sm">No Cover</span>
-                        )}
-                    </div>
-
-                    {/* 우측: 통합 정보 및 통계 */}
-                    <div className="flex flex-col flex-1 z-10 pt-2">
-                        {work.category && <span className="text-[12px] font-bold text-[#0066cc] mb-2">{work.category}</span>}
-                        <h1 className="text-[28px] md:text-[36px] font-black text-[#1d1d1f] leading-tight tracking-tight mb-2">
-                            {work.title}
-                        </h1>
-                        <p className="text-[16px] text-gray-500 font-medium mb-6">
-                            {formatDetailAuthor(work.author)}
-                        </p>
-                        
-                        {/* 통합 통계 뱃지 */}
-                        <div className="inline-flex items-center gap-6 mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                            <div className="flex flex-col">
-                                <span className="text-[11px] text-gray-400 font-bold mb-1">통합 평점</span>
-                                <div className="flex items-center gap-1.5 text-amber-400">
-                                    <Star size={18} fill="currentColor" />
-                                    <span className="text-[18px] font-black text-[#1d1d1f]">{work.average_rating}</span>
-                                </div>
-                            </div>
-                            <div className="w-[1px] h-10 bg-gray-200"></div>
-                            <div className="flex flex-col">
-                                <span className="text-[11px] text-gray-400 font-bold mb-1">담은 사람</span>
-                                <div className="flex items-center gap-1.5 text-emerald-500">
-                                    <Users size={18} />
-                                    <span className="text-[18px] font-black text-[#1d1d1f]">{work.total_added}<span className="text-[13px] font-medium text-gray-500 ml-1">명</span></span>
-                                </div>
-                            </div>
-                            <div className="w-[1px] h-10 bg-gray-200"></div>
-                            <div className="flex flex-col">
-                                <span className="text-[11px] text-gray-400 font-bold mb-1">등록된 판본</span>
-                                <div className="flex items-center gap-1.5 text-[#0066cc]">
-                                    <BookCopy size={18} />
-                                    <span className="text-[18px] font-black text-[#1d1d1f]">{work.edition_count}<span className="text-[13px] font-medium text-gray-500 ml-1">개</span></span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="text-[14px] text-gray-600 leading-relaxed break-keep line-clamp-4">
-                            {work.description || "이 작품에 대한 상세 소개가 아직 없습니다."}
-                        </div>
-
-                        {/* 액션 버튼 */}
-                        <div className="mt-auto pt-8">
-                            <button 
-                                onClick={() => {
-                                    if (status === 'unauthenticated') return signIn('google');
-                                    setIsModalOpen(true);
-                                }}
-                                className="flex items-center justify-center gap-2 w-full md:w-auto px-8 py-3.5 bg-[#1d1d1f] text-white rounded-lg font-bold hover:bg-black transition-transform active:scale-95 shadow-lg"
-                            >
-                                <Plus size={18} /> 내 서재에 담을 판본 선택하기
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 3. 통합 소셜 라운지 영역 (하단) */}
-                <div className="mt-12">
-                    <h2 className="text-[20px] font-black text-[#1d1d1f] mb-6">BoooknTalkers의 사색</h2>
-                    
-                    <div className="flex items-center gap-6 border-b border-gray-200 mb-8">
-                        <button 
-                            onClick={() => setActiveTab('short_reviews')}
-                            className={`pb-3 text-[15px] font-bold transition-all border-b-2 flex items-center gap-1.5 ${activeTab === 'short_reviews' ? 'text-[#0066cc] border-[#0066cc]' : 'text-gray-400 border-transparent hover:text-[#1d1d1f]'}`}
-                        >
-                            <MessageSquare size={16} /> 통합 한줄평
-                        </button>
-                        <button 
-                            onClick={() => setActiveTab('long_reviews')}
-                            className={`pb-3 text-[15px] font-bold transition-all border-b-2 flex items-center gap-1.5 ${activeTab === 'long_reviews' ? 'text-[#0066cc] border-[#0066cc]' : 'text-gray-400 border-transparent hover:text-[#1d1d1f]'}`}
-                        >
-                            <PenTool size={16} /> 리뷰 (긴줄평)
-                        </button>
-                    </div>
-
-                    {/* 실제 데이터가 렌더링되는 리스트 영역 */}
-                    {isReviewsLoading ? (
-                        <div className="py-20 flex justify-center items-center bg-white rounded-lg border border-gray-100 border-dashed">
-                            <Loader2 className="animate-spin text-[#0066cc]" size={32} />
-                        </div>
-                    ) : activeTab === 'short_reviews' ? (
-                        shortReviews.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {shortReviews.map(review => (
-                                    <div key={review.id} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="flex items-start gap-4 mb-3">
-                                            <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 relative overflow-hidden flex items-center justify-center border border-gray-200">
-                                                {review.user_image ? (
-                                                    <Image src={review.user_image} alt="profile" fill className="object-cover" />
-                                                ) : (
-                                                    <User size={20} className="text-gray-400" />
-                                                )}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-bold text-[14px] text-[#1d1d1f]">{review.user_name}</span>
-                                                    <span className="text-[12px] text-gray-400">{review.created_at.substring(0, 10)}</span>
-                                                </div>
-                                                <div className="flex items-center gap-1 mt-0.5 text-amber-400">
-                                                    <Star size={12} fill="currentColor" />
-                                                    <span className="text-[12px] font-bold text-gray-600 pt-[1px]">{review.rating}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <p className="text-[14px] text-gray-700 leading-relaxed break-keep">{review.short_review}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="py-20 flex flex-col items-center justify-center bg-white rounded-lg border border-gray-100 border-dashed">
-                                <MessageSquare size={40} strokeWidth={1.5} className="mb-4 text-gray-300" />
-                                <span className="text-gray-400 font-medium text-[14px]">아직 작성된 한줄평이 없습니다. 첫 번째 기록을 남겨보세요!</span>
-                            </div>
-                        )
-                    ) : (
-                        /* ▼▼▼ [핵심] 기존 코드를 날리고 우리가 만든 컴포넌트로 통째로 교체 ▼▼▼ */
-                        <LongReviewListSection workId={Number(workId)} currentUser={session?.user} />
-                    )}
-                </div>
-            </Container>
-
-            {/* 모달 컴포넌트 마운트 */}
-            <EditionSelectModal 
-                isOpen={isModalOpen} 
-                onClose={() => setIsModalOpen(false)} 
-                workId={workId} 
-                workTitle={work.title} 
-                userEmail={session?.user?.email || ''} 
-            />
             <Footer />
         </div>
     );
@@ -14652,6 +14753,9 @@ export { Badge, badgeVariants }
 ============================================================
 FILE PATH: frontend/src/components/ui/sidebar.tsx
 ============================================================
+// 경로: src/components/ui/sidebar.tsx
+// 역할 및 기능: BoooknTalk 전역 사이드바 컨텍스트 및 UI를 관리하는 뼈대(엔진) 컴포넌트로, 모바일 반응형 시트 변환, 쿠키 기반 상태 유지, 단축키 처리 기능을 제공합니다.
+
 "use client"
 
 import * as React from "react"
@@ -14698,15 +14802,20 @@ type SidebarContextProps = {
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
 
+/**
+ * 함수 기능: 사이드바의 전역 상태(컨텍스트)를 가져오기 위한 커스텀 훅입니다.
+ */
 function useSidebar() {
   const context = React.useContext(SidebarContext)
   if (!context) {
     throw new Error("useSidebar must be used within a SidebarProvider.")
   }
-
   return context
 }
 
+/**
+ * 함수 기능: 사이드바 상태(열림/닫힘)를 관리하고 하위 컴포넌트에 컨텍스트를 제공하는 최상위 프로바이더 컴포넌트입니다.
+ */
 const SidebarProvider = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
@@ -14730,8 +14839,6 @@ const SidebarProvider = React.forwardRef<
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
 
-    // This is the internal state of the sidebar.
-    // We use openProp and setOpenProp for control from outside the component.
     const [_open, _setOpen] = React.useState(defaultOpen)
     const open = openProp ?? _open
     const setOpen = React.useCallback(
@@ -14742,21 +14849,17 @@ const SidebarProvider = React.forwardRef<
         } else {
           _setOpen(openState)
         }
-
-        // This sets the cookie to keep the sidebar state.
         document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
       },
       [setOpenProp, open]
     )
 
-    // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
       return isMobile
         ? setOpenMobile((open) => !open)
         : setOpen((open) => !open)
     }, [isMobile, setOpen, setOpenMobile])
 
-    // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
         if (
@@ -14767,13 +14870,10 @@ const SidebarProvider = React.forwardRef<
           toggleSidebar()
         }
       }
-
       window.addEventListener("keydown", handleKeyDown)
       return () => window.removeEventListener("keydown", handleKeyDown)
     }, [toggleSidebar])
 
-    // We add a state so that we can do data-state="expanded" or "collapsed".
-    // This makes it easier to style the sidebar with Tailwind classes.
     const state = open ? "expanded" : "collapsed"
 
     const contextValue = React.useMemo<SidebarContextProps>(
@@ -14816,6 +14916,9 @@ const SidebarProvider = React.forwardRef<
 )
 SidebarProvider.displayName = "SidebarProvider"
 
+/**
+ * 함수 기능: 실제 사이드바 컨테이너 UI를 렌더링하며, 데스크톱 및 모바일 환경에 맞춰 레이아웃(고정, 닫힘, 모바일 시트 등)을 전환합니다.
+ */
 const Sidebar = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
@@ -14885,7 +14988,6 @@ const Sidebar = React.forwardRef<
         data-variant={variant}
         data-side={side}
       >
-        {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
             "relative w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-linear",
@@ -14898,11 +15000,11 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
+            // 💡 [수정됨] top-14(헤더 높이 56px 회피)와 h-[calc(100svh-3.5rem)]를 적용하여 헤더를 가리지 않는 레이아웃 구현
+            "fixed top-14 bottom-0 z-10 hidden h-[calc(100svh-3.5rem)] w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-            // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
@@ -14923,6 +15025,7 @@ const Sidebar = React.forwardRef<
 )
 Sidebar.displayName = "Sidebar"
 
+// (이하 나머지 컴포넌트들은 UI 모듈로 원본 코드를 그대로 사용합니다.)
 const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
@@ -15125,7 +15228,6 @@ const SidebarGroupAction = React.forwardRef<
       data-sidebar="group-action"
       className={cn(
         "absolute right-3 top-3.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
-        // Increases the hit area of the button on mobile.
         "after:absolute after:-inset-2 after:md:hidden",
         "group-data-[collapsible=icon]:hidden",
         className
@@ -15271,7 +15373,6 @@ const SidebarMenuAction = React.forwardRef<
       data-sidebar="menu-action"
       className={cn(
         "absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
-        // Increases the hit area of the button on mobile.
         "after:absolute after:-inset-2 after:md:hidden",
         "peer-data-[size=sm]/menu-button:top-1",
         "peer-data-[size=default]/menu-button:top-1.5",
@@ -15314,7 +15415,6 @@ const SidebarMenuSkeleton = React.forwardRef<
     showIcon?: boolean
   }
 >(({ className, showIcon = false, ...props }, ref) => {
-  // Random width between 50 to 90%.
   const width = React.useMemo(() => {
     return `${Math.floor(Math.random() * 40) + 50}%`
   }, [])
@@ -15425,7 +15525,6 @@ export {
   SidebarTrigger,
   useSidebar,
 }
-
 
 
 ============================================================
@@ -16131,6 +16230,39 @@ export default function HeroEditorialSection() {
             </div>
         </section>
     );
+}
+
+
+============================================================
+FILE PATH: frontend/src/components/layout/StandardContainer.tsx
+============================================================
+// 경로: frontend/src/components/layout/StandardContainer.tsx
+import React from 'react';
+
+// ▼▼▼ 여기에 size 속성이 정의되어 있어야 에러가 나지 않습니다! ▼▼▼
+interface StandardContainerProps {
+  children: React.ReactNode;
+  className?: string;
+  size?: 'default' | 'wide' | 'full'; 
+}
+
+export default function StandardContainer({ 
+  children, 
+  className = "", 
+  size = "default" 
+}: StandardContainerProps) {
+  
+  // 사이즈에 따른 max-width 클래스 결정
+  const maxWidthClass = 
+    size === 'wide' ? 'max-w-[var(--max-content-wide)]' : 
+    size === 'full' ? 'max-w-full' : 
+    'max-w-[var(--max-content-width)]';
+
+  return (
+    <div className={`w-full ${maxWidthClass} mx-auto px-4 md:px-[var(--spacing-1cm)] flex flex-col gap-[var(--spacing-1cm)] ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 
@@ -18835,8 +18967,8 @@ export default function LongReviewSection() {
 ============================================================
 FILE PATH: frontend/src/components/library/LibrarySidebar.tsx
 ============================================================
-// 파일 경로: src/components/layout/LibrarySidebar.tsx
-// 역할 및 기능: BoooknTalk 서비스의 좌측 네비게이션(LNB) 컴포넌트로, 사용자가 서재, 기록, 작가(및 옮긴이), 인사이트 등의 주요 기능으로 이동할 수 있도록 라우팅 메뉴를 제공합니다.
+// 파일 경로: src/components/library/LibrarySidebar.tsx
+// 역할 및 기능: BoooknTalk 서비스의 내 서재 전용 좌측 네비게이션(LNB) 컴포넌트로, 사용자가 서재, 기록, 작가(및 옮긴이), 인사이트 등의 주요 기능으로 이동할 수 있도록 라우팅 메뉴를 제공합니다.
 
 'use client';
 
@@ -18844,31 +18976,14 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-    Library, 
-    Edit3, 
-    MessageSquare, 
-    ScrollText, 
-    BarChart2, 
-    Globe,
-    BookOpen,
-    Tags,
-    Bookmark,
-    PenTool,
-    PieChart,
-    Users, 
-    Clock,
-    Languages // ▼ '옮긴이 타임라인' 하위 메뉴용 아이콘 추가
+    Library, Edit3, MessageSquare, ScrollText, 
+    BarChart2, Globe, BookOpen, Tags, Bookmark,
+    PenTool, PieChart, Users, Clock, Languages
 } from 'lucide-react';
 import {
-    Sidebar,
-    SidebarContent,
-    SidebarGroup,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    SidebarMenuSub,
-    SidebarMenuSubItem,
-    SidebarMenuSubButton,
+    Sidebar, SidebarContent, SidebarGroup, SidebarMenu,
+    SidebarMenuButton, SidebarMenuItem, SidebarMenuSub,
+    SidebarMenuSubItem, SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 
 const navItems = [
@@ -18891,9 +19006,7 @@ const navItems = [
     {
         title: "나의 작가", icon: Users,
         subItems: [
-            // ▼ 우리가 합의한 URL(writer)과 아이콘 적용!
             { title: '작가', href: '/my-authors/writer', icon: Clock },
-            // ▼ 옮긴이도 my-authors 하위의 translator로 통일하고 오타 수정!
             { title: '옮긴이(번역)', href: '/my-authors/translator', icon: Languages },
         ]
     },
@@ -18906,22 +19019,17 @@ const navItems = [
     { title: "사색 라운지", href: "/community", icon: Globe }
 ];
 
-// 함수 기능: 현재 URL 경로(pathname)와 메뉴의 href를 비교하여 해당 메뉴가 활성화 상태인지 판별합니다.
 export function LibrarySidebar() {
     const pathname = usePathname();
 
     const isActiveRoute = (href: string) => {
         if (!href) return false;
         if (href === '/' && pathname !== '/') return false;
-        
-        // '도서(/library)' 메뉴 예외 처리: 하위 메뉴인 tags, wish로 이동했을 때는 도서 메뉴의 활성화를 강제로 끕니다.
         if (href === '/library') {
             if (pathname.startsWith('/library/tags') || pathname.startsWith('/library/wish')) {
                 return false;
             }
         }
-        
-        // 정확히 일치하거나, 해당 경로의 하위 상세 페이지일 때만 활성화
         return pathname === href || pathname.startsWith(`${href}/`);
     };
 
@@ -20379,64 +20487,38 @@ export function cn(...inputs: ClassValue[]) {
 ============================================================
 FILE PATH: frontend/src/lib/auth.ts
 ============================================================
-// 파일 경로: src/auth.ts (또는 lib/auth.ts)
-// 역할 및 기능: Google 로그인이 성공하면 백엔드 API를 호출하여 DB 유저 정보를 동기화(조회 또는 회원가입)하고, DB에서 부여된 실제 role 값을 JWT 토큰에 영구적으로 새겨 넣습니다.
+// 경로: frontend/src/lib/auth.ts (또는 authOptions가 정의된 파일)
 
-import GoogleProvider from "next-auth/providers/google";
+import { NextAuthOptions } from "next-auth"; // 👈 1. 반드시 최상단에서 타입을 불러와야 합니다.
+import GoogleProvider from "next-auth/providers/google"; // (사용 중이신 프로바이더)
 
-export const authOptions = {
-    providers: [
-        GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID as string,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-        }),
-    ],
-    callbacks: {
-        // 함수 기능: 로그인 성공 직후 JWT 토큰을 생성할 때, 백엔드와 통신하여 실제 DB의 role을 가져옵니다.
-        async jwt({ token, user, account }) {
-            // user와 account는 사용자가 최초로 로그인하는 그 순간에만 존재합니다!
-            if (account && user) {
-                try {
-                    // 💡 [핵심 브릿지] 우리 백엔드 서버의 '로그인/가입 동기화 API'를 호출!
-                    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-                    const res = await fetch(`${apiUrl}/api/auth/sync`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            email: user.email,
-                            nickname: user.name,
-                            profile_image: user.image
-                        })
-                    });
-
-                    if (res.ok) {
-                        const dbUser = await res.json();
-                        // 백엔드 DB에서 응답받은 진짜 권한(role)을 토큰에 저장!
-                        token.role = dbUser.role; 
-                    } else {
-                        // 통신 실패 시 방어 코드
-                        token.role = 'USER';
-                    }
-                } catch (error) {
-                    console.error("백엔드 유저 동기화 실패:", error);
-                    token.role = 'USER';
-                }
-            }
-            return token;
-        },
-
-        // 함수 기능: 토큰에 담긴 진짜 role을 프론트엔드 브라우저(세션)로 전달합니다.
-        async session({ session, token }) {
-            if (session.user) {
-                // 토큰의 role을 세션 객체에 주입! (이후 프론트엔드에서 session.user.role로 확인 가능)
-                session.user.role = token.role as string;
-            }
-            return session;
-        }
+// ▼▼▼ 2. [핵심] 변수명 뒤에 ': NextAuthOptions'를 반드시 붙여주세요! ▼▼▼
+export const authOptions: NextAuthOptions = { 
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    }),
+    // 기타 사용 중인 프로바이더...
+  ],
+  session: {
+    // 💡 3. 위에서 타입을 지정했기 때문에, 이제 "jwt"라고만 적어도 TypeScript가 정확히 인식합니다.
+    strategy: "jwt", 
+  },
+  callbacks: {
+    async jwt({ token, user, account }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
     },
-    session: {
-        strategy: "jwt",
-    },
+    async session({ session, token }) {
+      if (session.user) {
+        (session.user as any).id = token.id;
+      }
+      return session;
+    }
+  }
 };
 
 
@@ -20947,30 +21029,38 @@ class ExternalBookCache(Base):
 ============================================================
 FILE PATH: backend/requirements.txt
 ============================================================
-# 기존 유지 패키지
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
+certifi==2026.2.25
+charset-normalizer==3.4.7
 click==8.1.8
 exceptiongroup==1.3.1
 fastapi==0.128.0
+greenlet==3.4.0
 h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
 idna==3.11
+joblib==1.5.3
+numpy==2.4.4
+psycopg2-binary==2.9.10
 pydantic==2.12.5
+pydantic-settings==2.8.0
 pydantic_core==2.41.5
+python-dotenv==1.0.1
+python-multipart==0.0.26
+requests==2.33.1
+scikit-learn==1.8.0
+scipy==1.17.1
+SQLAlchemy==2.0.38
 starlette==0.49.3
+threadpoolctl==3.6.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+urllib3==2.6.3
 uvicorn==0.39.0
 
-# [추가] DB 및 환경 설정 (BoooknTalk 필수 패키지)
-sqlalchemy==2.0.38
-psycopg2-binary==2.9.10
-pydantic-settings==2.8.0
-python-dotenv==1.0.1
-
-# [신규 추가] 외부 API 통신 (위키피디아 작가 프로필 이미지 수집)
-requests
 
 
 ============================================================
@@ -22878,6 +22968,17 @@ async def get_work_short_reviews(work_id: int, db: Session = Depends(get_db)):
             "short_review": r.short_review,
             "created_at": r.added_at.isoformat() if r.added_at else ""
         })
+    # ▼▼▼ [핵심 수정] 데이터가 0개일 때 빈 화면 대신 에디터 가이드를 반환합니다. ▼▼▼
+    if not results:
+        return [{
+            "id": 0,  # 가상의 ID
+            "user_name": "BoooknTalk 에디터",
+            "user_image": "", # 기본 아바타 노출
+            "rating": 5,      # 에디터의 추천 점수
+            "short_review": "이 책의 첫 번째 페이지를 넘긴 당신, 어떤 문장이 마음에 닿았나요? 당신만의 첫 번째 사색을 기록해 보세요.",
+            "created_at": ""
+        }]
+
     return results
 
 # ▼▼▼ 2. 신규 긴줄평 API 추가 ▼▼▼
@@ -22915,6 +23016,21 @@ async def get_work_long_reviews(work_id: int, db: Session = Depends(get_db)):
             "rating": lr.record.rating,
             "created_at": lr.created_at.isoformat() if lr.created_at else ""
         })
+    # ▼▼▼ [여기서부터 추가!] 데이터가 0개일 때 빈 화면을 막아주는 콜드스타트 데이터 ▼▼▼
+    if not results:
+        return [{
+            "id": 0,
+            "record_id": 0,
+            "user_id": 0,
+            "user_email": "",
+            "title": "첫 번째 사색을 기다립니다",
+            "content_preview": "아직 기록되지 않은 세계가 당신의 시선을 기다리고 있습니다. 이 책을 읽으며 느꼈던 감정의 결을 BoooknTalkers와 함께 나누어 주세요. 누군가에게는 당신의 기록이 새로운 영감이 됩니다.",
+            "user_name": "BoooknTalk 에디터",
+            "user_image": "",
+            "rating": 5.0, # 에디터 별점
+            "created_at": ""
+        }]
+
     return results
 
 @app.get("/api/users/{user_email}/short-reviews")
@@ -24742,6 +24858,7 @@ def get_cover_flow_books(db: Session = Depends(get_db)):
         seen_isbn.add(edition.isbn)
         
         results.append({
+            "work_id": work.id,
             "id": edition.isbn,
             "isbn": edition.isbn,
             "title": work.title,
@@ -24897,7 +25014,7 @@ def get_trending_authors(db: Session = Depends(get_db)):
 @router.get("/dashboard")
 def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(get_db)):
     try:
-        # 💡 [추가] DB에 저장된 외부 API 캐시 데이터 로드
+        # 도서관 인기 및 신간 도서 로드
         library_popular = get_cached_external_books(db=db, category="library_popular")
         naver_new = get_cached_external_books(db=db, category="naver_new")
 
@@ -24909,32 +25026,10 @@ def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(g
             "coverFlowBooks": get_cover_flow_books(db=db),
             "trendingTags": get_trending_tags(db=db), 
             "inspiringAuthors": get_inspiring_authors(db=db),
-            
-            # 💡 [추가] 디스커버리 허브를 위한 데이터 반환
+            "ugcFeeds": get_recent_ugc_feeds(limit=6, db=db), # 아래쪽 함수에 있던 내용 통합
             "libraryPopular": library_popular,
             "naverNewArrivals": naver_new, 
-            "newArrivals": get_new_arrivals(days=3, db=db), # 기존 서재 최신 도서
-        }
-    except Exception as e:
-        print(f"대시보드 통합 데이터 생성 실패: {e}")
-        raise HTTPException(status_code=500, detail="대시보드 데이터를 구성하는 중 에러가 발생했습니다.")
-
-# ==========================================
-# [NEW] 메인 대시보드 통합 API (BFF 패턴 적용)
-# ==========================================
-@router.get("/dashboard")
-def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(get_db)):
-    try:
-        # 도서관 인기 및 신간 도서 로드 (이제 내부에 등록된 책은 internal_work_id를 달고 나옵니다)
-        library_popular = get_cached_external_books(db=db, category="library_popular")
-        naver_new = get_cached_external_books(db=db, category="naver_new")
-
-        return {
-            "stats": get_home_statistics(db=db),
-            "ugcFeeds": get_recent_ugc_feeds(limit=6, db=db),
-            "naverNewArrivals": naver_new, 
-            "libraryPopular": library_popular,
-            # ... (나머지 지표들)
+            "newArrivals": get_new_arrivals(days=3, db=db),
         }
     except Exception as e:
         print(f"대시보드 통합 데이터 생성 실패: {e}")
@@ -26151,6 +26246,125 @@ def sync_insight_on_status_change(
         monthly = db.query(models.InsightMonthly).filter_by(user_id=user_id, year=finish_date.year, month=finish_date.month).first()
         if monthly:
             monthly.read_count = max(0, (monthly.read_count or 0) - 1)
+
+
+============================================================
+FILE PATH: backend/services/work_service.py
+============================================================
+# 경로: backend/services/work_service.py
+# 역할 및 기능: BoooknTalk 소셜 광장의 작품 기준 상세 정보 집계 및 관련 공개 리뷰 리스트를 추출하는 비즈니스 로직(서비스 계층)입니다.
+# (최신 업데이트: 리뷰가 0개일 때 빈 화면을 방지하고 유저 작성을 유도하는 '콜드스타트 폴백 로직' 적용 완료)
+
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
+from fastapi import HTTPException
+from models import Work, Edition, Record, User, LongReview
+
+# 함수 기능: 특정 작품의 마스터 정보 및 커뮤니티 통계(평균 별점, 담은 사람 수, 판본 수)를 집계하여 반환합니다.
+def get_work_detail_stats(db: Session, work_id: int):
+    # 1. 작품 기본 정보 조회
+    work = db.query(Work).filter(Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="작품을 찾을 수 없습니다.")
+
+    # 2. 판본 수 및 대표 커버 이미지 추출
+    editions = db.query(Edition).filter(Edition.work_id == work_id).all()
+    edition_count = len(editions)
+    best_cover = None
+    if editions:
+        cover_edition = next((e for e in editions if e.cover_image), None)
+        best_cover = cover_edition.cover_image if cover_edition else None
+
+    # 3. 담은 사람 수 및 평균 별점 집계
+    stats = db.query(
+        func.count(Record.id).label("total_added"),
+        func.avg(Record.rating).label("average_rating")
+    ).join(Edition, Record.edition_id == Edition.id)\
+     .filter(Edition.work_id == work_id).first()
+
+    total_added = stats.total_added or 0
+    average_rating = round(stats.average_rating, 1) if stats.average_rating else 0.0
+
+    return {
+        "id": work.id,
+        "title": work.title,
+        "author": work.author,
+        "category": work.category,
+        "description": work.description,
+        "best_cover": best_cover,
+        "edition_count": edition_count,
+        "total_added": total_added,
+        "average_rating": average_rating
+    }
+
+# 함수 기능: 특정 작품에 대해 유저들이 '공개'로 설정한 한줄평 목록을 반환합니다. (데이터가 없으면 에디터 가이드 반환)
+def get_work_short_reviews(db: Session, work_id: int):
+    records = db.query(Record, User).join(User, Record.user_id == User.id)\
+        .join(Edition, Record.edition_id == Edition.id)\
+        .filter(
+            Edition.work_id == work_id,
+            Record.short_review != None,
+            Record.short_review != "",
+            Record.is_short_review_public == True # 공개 설정된 데이터만 필터링
+        ).order_by(Record.added_at.desc()).all()
+
+    result = []
+    for record, user in records:
+        result.append({
+            "id": record.id,
+            "user_name": user.nickname or "이름 없음",
+            "user_image": user.profile_image,
+            "rating": record.rating,
+            "short_review": record.short_review,
+            "created_at": record.added_at.isoformat() if record.added_at else ""
+        })
+
+    # ▼▼▼ [핵심 적용] 데이터가 0개일 때 빈 화면을 막아주는 콜드스타트 폴백 데이터 ▼▼▼
+    if not result:
+        return [{
+            "id": 0, # 클릭 이벤트를 막기 위해 0으로 세팅
+            "user_name": "BoooknTalk 에디터",
+            "user_image": "", # 빈 문자열을 주면 프론트엔드의 <AuthorAvatar />가 기본 아이콘을 띄웁니다.
+            "rating": 0,
+            "short_review": "이 책의 첫 번째 페이지를 넘긴 당신, 어떤 문장이 마음에 닿았나요? 당신만의 첫 번째 사색을 기록해 보세요.",
+            "created_at": ""
+        }]
+
+    return result
+
+# 함수 기능: 특정 작품에 대해 작성된 발행 완료 긴줄평 목록을 반환합니다. (데이터가 없으면 에디터 가이드 반환)
+def get_work_long_reviews(db: Session, work_id: int):
+    reviews = db.query(LongReview, User).join(User, LongReview.user_id == User.id)\
+        .filter(
+            LongReview.work_id == work_id,
+            LongReview.is_draft == False # 임시저장 상태 제외
+        ).order_by(LongReview.created_at.desc()).all()
+
+    result = []
+    for review, user in reviews:
+        result.append({
+            "id": review.id,
+            "title": review.title,
+            "content": review.content, 
+            "user_name": user.nickname or "이름 없음",
+            "user_image": user.profile_image,
+            "is_spoiler": review.is_spoiler,
+            "created_at": review.created_at.isoformat() if review.created_at else ""
+        })
+
+    # ▼▼▼ [핵심 적용] 데이터가 0개일 때 빈 화면을 막아주는 콜드스타트 폴백 데이터 ▼▼▼
+    if not result:
+        return [{
+            "id": 0,
+            "title": "첫 번째 사색을 기다립니다",
+            "content": "아직 기록되지 않은 세계가 당신의 시선을 기다리고 있습니다. 이 책을 읽으며 느꼈던 감정의 결을 BoooknTalkers와 함께 나누어 주세요. 누군가에게는 당신의 기록이 새로운 영감이 됩니다.",
+            "user_name": "BoooknTalk 에디터",
+            "user_image": "",
+            "is_spoiler": False,
+            "created_at": ""
+        }]
+
+    return result
 
 
 ============================================================

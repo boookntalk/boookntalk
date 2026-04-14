@@ -1,3 +1,6 @@
+npx shadcn@latest add tabs card
+
+
 📚 [BoooknTalk] Project Master Context (AI 리마인드용)
 1. Project Identity (프로젝트 정체성)
 서비스명: BoooknTalk (절대 한글 표기 '북앤톡'을 혼용하지 않으며, 반드시 영문 BoooknTalk으로 표기)

@@ -1,8 +1,4 @@
-// 경로: frontend/src/app/[(main)]/page.tsx
-// 역할 및 기능: BoooknTalk 비로그인(Guest) 사용자 및 전체 사용자를 위한 메인 랜딩 페이지. 
-// 에디토리얼 무드를 바탕으로 차분하고 고급스러운 디지털 서재 경험을 제공합니다. 
-// (최신 업데이트: 상단 5:5 탭 레이아웃 적용, Discovery Hub 가로 스크롤(스와이프) 다이어트 적용)
-
+// 경로: frontend/src/app/(main)/page.tsx
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -18,16 +14,19 @@ import { useSession, signIn } from "next-auth/react";
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 
-import StandardContainer from '@/components/layout/StandardContainer';
+import HomeLayout from '@/components/layout/HomeLayout'; // 💡 공통 레이아웃 적용
 
-// 공통 컴포넌트 Import
+// 공통 컴포넌트
 import { FloatingCover } from '@/components/common/FloatingCover';
 import { InsightCard } from '@/components/common/InsightCard';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
 import { AuthorAvatar } from '@/components/common/AuthorAvatar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; // 경로를 프로젝트 설정에 맞게 확인해주세요
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; 
 
-// Next.js 환경에서 ECharts WordCloud SSR 충돌을 완벽 방지하는 다이나믹 임포트
+// 💡 shadcn/ui 컴포넌트
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+
 const WordCloudChart = dynamic(() => import('@/components/common/WordCloudChart'), { ssr: false });
 
 let memoryCache: any = null;
@@ -37,27 +36,22 @@ export default function Home() {
     const [isLoading, setIsLoading] = useState(true);
     const [stats, setStats] = useState({ total_sentences: 0, total_pages: 0, reading_books: 0 });
     
-    // 섹션 1 (5:5 레이아웃) 상태
     const [heroSentences, setHeroSentences] = useState<any[]>([]);
     const [currentSlide, setCurrentSlide] = useState(0);
-    const [readersChoice, setReadersChoice] = useState<any>(null); // 한줄평 데이터
-    const [bestLongReviews, setBestLongReviews] = useState<any[]>([]); // 긴줄평 데이터
-    const [reviewTab, setReviewTab] = useState<'short' | 'long'>('short'); // 리뷰 탭 상태
-    const [rcReviewIndex, setRcReviewIndex] = useState(0); // 한줄평 슬라이드 인덱스
-    const [lrReviewIndex, setLrReviewIndex] = useState(0); // 긴줄평 슬라이드 인덱스
+    const [readersChoice, setReadersChoice] = useState<any>(null); 
+    const [bestLongReviews, setBestLongReviews] = useState<any[]>([]); 
+    const [rcReviewIndex, setRcReviewIndex] = useState(0); 
+    const [lrReviewIndex, setLrReviewIndex] = useState(0); 
     
-    // 커버플로우 및 작가, 태그 상태
     const [coverFlowBooks, setCoverFlowBooks] = useState<any[]>([]);
     const [activeCoverflowIndex, setActiveCoverflowIndex] = useState(0);
     const [selectedGenre, setSelectedGenre] = useState<string>('All');
     const [trendingTags, setTrendingTags] = useState<any[]>([]);
     const [inspiringAuthors, setInspiringAuthors] = useState<any[]>([]);
 
-    // 💡 Discovery Hub 탭 상태 및 외부 API 데이터 상태
-    const [discoveryTab, setDiscoveryTab] = useState<'library' | 'naver' | 'bntalk'>('library');
     const [libraryPopular, setLibraryPopular] = useState<any[]>([]);
     const [naverNewArrivals, setNaverNewArrivals] = useState<any[]>([]);
-    const [newArrivals, setNewArrivals] = useState<any[]>([]); // BoooknTalk 내부 신간
+    const [newArrivals, setNewArrivals] = useState<any[]>([]); 
 
     const dragStartX = useRef<number | null>(null);
     const isDragging = useRef<boolean>(false);
@@ -66,9 +60,8 @@ export default function Home() {
     const router = useRouter();
     const { data: session, status } = useSession();
 
-    // [추가] 비로그인 사용자 모달 제어 상태
     const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
-    const [selectedBookForModal, setSelectedBookForModal] = useState<any>(null); // 실제 Book 타입으로 변경 권장
+    const [selectedBookForModal, setSelectedBookForModal] = useState<any>(null);
 
     useEffect(() => {
         const savedCoverIndex = sessionStorage.getItem('bnt_coverIndex');
@@ -76,20 +69,18 @@ export default function Home() {
         isInitialized.current = true;
     }, []);
 
-    useEffect(() => { if (isInitialized.current) sessionStorage.setItem('bnt_coverIndex', activeCoverflowIndex.toString()); cachedCoverIdx = activeCoverflowIndex; }, [activeCoverflowIndex]);
+    useEffect(() => { 
+        if (isInitialized.current) {
+            sessionStorage.setItem('bnt_coverIndex', activeCoverflowIndex.toString()); 
+            cachedCoverIdx = activeCoverflowIndex; 
+        }
+    }, [activeCoverflowIndex]);
 
-    // 💡 [NEW] 작가 이름에 붙은 불필요한 장르명, 역할어 찌꺼기를 안전하게 제거하는 함수
     const cleanAuthorName = (name: string) => {
         if (!name) return '';
-        // 1. 쉼표, 괄호, 파이프 등으로 첫 번째(메인) 작가만 분리
         let clean = name.split(',')[0].split('(')[0].split(';')[0].split('|')[0];
-        
-        // 2. 이름의 '끝'에 붙어있는 역할어나 장르명 찌꺼기 제거 (공백 유무 상관없이 모두 처리)
         clean = clean.replace(/\s*(장편소설|장소설|소설|지음|옮김|저자|편자|그림|글|지은이|옮긴이)\s*$/g, '');
-        
-        // 3. 한 번 더 치환 (혹시 '조엘 디케르 장소설 지음' 처럼 두 개가 연달아 붙어있을 경우를 대비)
         clean = clean.replace(/\s*(장편소설|장소설|소설|지음|옮김|저자|편자|그림|글|지은이|옮긴이)\s*$/g, '');
-
         return clean.trim();
     };
 
@@ -153,9 +144,7 @@ export default function Home() {
 
     const handleCoverClick = (idx: number, offset: number) => {
         if (offset !== 0) return;
-
         const clickedBook = coverFlowBooks[idx];
-
         if (status === "authenticated") {
             router.push(`/works/${clickedBook.work_id || clickedBook.id}`); 
         } else {
@@ -164,7 +153,6 @@ export default function Home() {
         }
     };
 
-    // 💡 슬라이더 타이머 로직들
     useEffect(() => {
         if (heroSentences.length === 0) return;
         const timer = setInterval(() => setCurrentSlide((prev) => (prev + 1) % heroSentences.length), 5000);
@@ -172,21 +160,17 @@ export default function Home() {
     }, [heroSentences.length]);
 
     useEffect(() => {
-        if (!readersChoice || readersChoice.length <= 1 || reviewTab !== 'short') return;
+        if (!readersChoice || readersChoice.length <= 1) return;
         const timer = setInterval(() => setRcReviewIndex((prev) => (prev + 1) % readersChoice.length), 5000);
         return () => clearInterval(timer);
-    }, [readersChoice, reviewTab]);
+    }, [readersChoice]);
 
     useEffect(() => {
-        if (!bestLongReviews || bestLongReviews.length <= 1 || reviewTab !== 'long') return;
+        if (!bestLongReviews || bestLongReviews.length <= 1) return;
         const timer = setInterval(() => setLrReviewIndex((prev) => (prev + 1) % bestLongReviews.length), 5000);
         return () => clearInterval(timer);
-    }, [bestLongReviews, reviewTab]);
+    }, [bestLongReviews]);
 
-
-    // ============================================================
-    // 🚀 [메인 데이터 패칭 및 캐시 복구 로직]
-    // ============================================================
     useEffect(() => {
         const safetyTimer = setTimeout(() => { setIsLoading(false); }, 2500);
 
@@ -198,27 +182,22 @@ export default function Home() {
             setCoverFlowBooks(memoryCache.coverFlowBooks);
             setTrendingTags(memoryCache.trendingTags);
             setInspiringAuthors(memoryCache.inspiringAuthors);
-            
             setLibraryPopular(memoryCache.libraryPopular);
             setNaverNewArrivals(memoryCache.naverNewArrivals);
             setNewArrivals(memoryCache.newArrivals);
-            
             setActiveCoverflowIndex(cachedCoverIdx);
             setIsLoading(false); 
             clearTimeout(safetyTimer); 
             return; 
         }
 
-        if (status === "loading") {
-            return () => clearTimeout(safetyTimer);
-        }
+        if (status === "loading") return () => clearTimeout(safetyTimer);
 
         const fetchHomeData = async () => {
             setIsLoading(true);
             try {
                 const emailQuery = session?.user?.email ? `?user_email=${encodeURIComponent(session.user.email)}` : '';
                 const res = await fetch(`http://localhost:8000/api/home/dashboard${emailQuery}`);
-                
                 if (!res.ok) throw new Error("대시보드 통신 에러");
                 const data = await res.json();
                 
@@ -230,11 +209,9 @@ export default function Home() {
                     coverFlowBooks: data.coverFlowBooks || [],
                     trendingTags: data.trendingTags || [],
                     inspiringAuthors: data.inspiringAuthors || [],
-                    
                     libraryPopular: data.libraryPopular || [],
                     naverNewArrivals: data.naverNewArrivals || [],
                     newArrivals: data.newArrivals || [],
-                    
                     sessionEmail: session?.user?.email || null
                 };
 
@@ -245,7 +222,6 @@ export default function Home() {
                 setCoverFlowBooks(newData.coverFlowBooks);
                 setTrendingTags(newData.trendingTags);
                 setInspiringAuthors(newData.inspiringAuthors);
-                
                 setLibraryPopular(newData.libraryPopular);
                 setNaverNewArrivals(newData.naverNewArrivals);
                 setNewArrivals(newData.newArrivals);
@@ -260,7 +236,6 @@ export default function Home() {
                 clearTimeout(safetyTimer);
             }
         };
-        
         fetchHomeData();
         return () => clearTimeout(safetyTimer);
     }, [session, status]);
@@ -268,13 +243,9 @@ export default function Home() {
     const indexChars = ['All', 'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#'];
 
     return (
-        <div className="w-full flex flex-col font-sans selection:bg-[#1F3A5F] selection:text-white pb-20">
-            
-            {/* ============================================================ */}
-            {/* ▼ Section 0: Type C (Full Bleed) - 인덱스 커버 플로우 ▼ */}
-            {/* ============================================================ */}
-            <section className="w-full pt-8">
-                {isLoading ? (
+        <HomeLayout 
+            heroSection={
+                isLoading ? (
                     <div className="flex justify-center items-center py-12 h-[380px]">
                         <Loader2 className="animate-spin text-[#1F3A5F]" size={32} />
                     </div>
@@ -335,10 +306,10 @@ export default function Home() {
                     </div>
                 ) : (
                     <div className="text-[#A0AABF] text-center py-20 font-medium h-[380px] flex items-center justify-center">등록된 책이 없습니다.</div>
-                )}
-            </section>
-
-            {/* ▼ 비로그인 사용자용 도서 정보 모달 ▼ */}
+                )
+            }
+        >
+            {/* 비로그인 안내 모달 */}
             <Dialog open={isGuestModalOpen} onOpenChange={setIsGuestModalOpen}>
                 <DialogContent className="sm:max-w-md bg-white border border-[#E7E2D9] rounded-xl outline-none">
                     <DialogHeader className="mb-2">
@@ -349,432 +320,213 @@ export default function Home() {
                             {selectedBookForModal?.author}
                         </DialogDescription>
                     </DialogHeader>
-                    
                     <div className="flex flex-col items-center justify-center pb-4">
-                        <div className="w-[140px] h-[205px] relative rounded-sm overflow-hidden shadow-[0_8px_30px_rgba(29,36,51,0.15)] border border-[#E7E2D9]">
+                        <div className="w-[140px] h-[205px] relative rounded-sm overflow-hidden shadow-sm border border-[#E7E2D9]">
                             {selectedBookForModal?.cover ? (
-                                <Image 
-                                    src={selectedBookForModal.cover} 
-                                    alt={selectedBookForModal.title} 
-                                    fill 
-                                    className="object-cover" 
-                                    unoptimized 
-                                    draggable={false} 
-                                />
+                                <Image src={selectedBookForModal.cover} alt={selectedBookForModal.title} fill className="object-cover" unoptimized draggable={false} />
                             ) : (
                                 <div className="w-full h-full bg-[#F7F5F1] flex flex-col items-center justify-center text-xs text-[#A0AABF]">
-                                    <BookOpen className="opacity-30 mb-2" size={32} />
-                                    <span>No Cover</span>
+                                    <BookOpen className="opacity-30 mb-2" size={32} /><span>No Cover</span>
                                 </div>
                             )}
                         </div>
-
                         <div className="mt-6 text-center">
                             <p className="text-[13px] text-[#4B5E76] font-medium leading-relaxed">
                                 로그인하시면 이 책의<br />깊이 있는 리뷰와 사색을 확인할 수 있습니다.
                             </p>
                         </div>
-
-                        <button 
-                            onClick={() => router.push('/login')} 
-                            className="mt-5 w-full py-3 bg-[#1F3A5F] text-white rounded-lg text-[14px] font-bold tracking-tight hover:bg-[#1D2433] transition-colors"
-                        >
+                        <button onClick={() => router.push('/login')} className="mt-5 w-full py-3 bg-[#1F3A5F] text-white rounded-lg text-[14px] font-bold tracking-tight hover:bg-[#1D2433] transition-colors">
                             BoooknTalk 로그인하기
                         </button>
                     </div>
                 </DialogContent>
             </Dialog>
 
-            {/* ============================================================ */}
-            {/* 🚀 Type B (Standard Container) - 콘텐츠 영역 전체 묶음 */}
-            {/* 💡 폭을 시원하게 확장하는 size="wide" 적용 완료! */}
-            {/* ============================================================ */}
-            <StandardContainer size="wide" className="mt-4">
-                
-                {/* A-Z 인덱스 탭 */}
-                <div className="w-full overflow-x-auto scrollbar-hide pb-2">
-                    <div className="flex items-center justify-between w-full border-t border-[#E7E2D9] pt-6 px-1 min-w-max gap-x-1">
-                        {indexChars.map((char) => (
-                            <button 
-                                key={char} 
-                                onClick={() => handleIndexClick(char)}
-                                className={`flex-shrink-0 transition-all duration-200 text-[10px] md:text-[11px] tracking-tighter font-medium ${selectedGenre === char ? 'text-[#1F3A5F] font-black scale-110 translate-y-[-1px]' : 'text-[#A0AABF] hover:text-[#1D2433] hover:font-bold'}`}
-                            >
-                                {char}
-                            </button>
-                        ))}
-                    </div>
+            {/* A-Z 인덱스 탭 */}
+            <div className="w-full overflow-x-auto scrollbar-hide pb-2">
+                <div className="flex items-center justify-between w-full border-t border-[#E7E2D9] pt-6 px-1 min-w-max gap-x-1 mb-4">
+                    {indexChars.map((char) => (
+                        <button key={char} onClick={() => handleIndexClick(char)} className={`flex-shrink-0 transition-all duration-200 text-[10px] md:text-[11px] tracking-tighter font-medium ${selectedGenre === char ? 'text-[#1F3A5F] font-black scale-110 translate-y-[-1px]' : 'text-[#A0AABF] hover:text-[#1D2433] hover:font-bold'}`}>
+                            {char}
+                        </button>
+                    ))}
                 </div>
+            </div>
 
-                {/* ▼ Section 1: 오늘의 문장 (메모) & 유저 리뷰 ▼ */}
-                <section className="w-full">
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch h-auto lg:h-[300px]">
-                        
-                        {/* 1. 좌측 (50%): 오늘의 문장 */}
-                        <div className="lg:col-span-6 relative rounded-sm overflow-hidden shadow-[0_4px_24px_rgba(29,36,51,0.06)] group bg-[#162335] flex flex-col border border-[#1F3A5F]/20 h-full min-h-[280px]">
-                            {heroSentences.length > 0 ? (
-                                <>
-                                    <div className="flex w-full h-full transition-transform duration-700 ease-in-out flex-1" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
-                                        {heroSentences.map((sentence, idx) => (
-                                            <div key={sentence.id || idx} onClick={handleSquareNavigation} className="w-full h-full flex-shrink-0 relative cursor-pointer overflow-hidden flex flex-col">
-                                                <div className="absolute inset-0 z-0">
-                                                    {sentence.cover ? <Image src={sentence.cover} alt="Background" fill className="object-cover blur-[50px] scale-125 opacity-40 mix-blend-overlay" unoptimized /> : <div className="w-full h-full bg-[#162335]"></div>}
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-[#162335] via-[#162335]/80 to-transparent"></div>
+            {/* Section 1: 오늘의 문장 & 리뷰 (shadcn Tabs 적용) */}
+            <section className="w-full mb-10">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch lg:h-[300px]">
+                    <div className="lg:col-span-6 relative rounded-sm overflow-hidden shadow-sm group bg-[#162335] flex flex-col border border-[#1F3A5F]/20 h-full min-h-[280px]">
+                        {heroSentences.length > 0 ? (
+                            <>
+                                <div className="flex w-full h-full transition-transform duration-700 ease-in-out flex-1" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
+                                    {heroSentences.map((sentence, idx) => (
+                                        <div key={sentence.id || idx} onClick={handleSquareNavigation} className="w-full h-full flex-shrink-0 relative cursor-pointer overflow-hidden flex flex-col">
+                                            <div className="absolute inset-0 z-0">
+                                                {sentence.cover ? <Image src={sentence.cover} alt="Background" fill className="object-cover blur-[50px] scale-125 opacity-40 mix-blend-overlay" unoptimized /> : <div className="w-full h-full bg-[#162335]"></div>}
+                                                <div className="absolute inset-0 bg-gradient-to-t from-[#162335] via-[#162335]/80 to-transparent"></div>
+                                            </div>
+                                            <div className="relative z-10 flex flex-col w-full h-full p-6 md:p-8">
+                                                <div className="flex items-center gap-2 mb-4 shrink-0">
+                                                    <Quote size={14} className="text-[#C89B3C]" />
+                                                    <span className="text-[12px] font-black tracking-widest text-[#C89B3C] uppercase">Today's Sentence</span>
                                                 </div>
-                                                
-                                                <div className="relative z-10 flex flex-col w-full h-full p-6 md:p-8">
-                                                    <div className="flex items-center gap-2 mb-4 shrink-0">
-                                                        <Quote size={14} className="text-[#C89B3C]" />
-                                                        <span className="text-[12px] font-black tracking-widest text-[#C89B3C] uppercase">Today's Sentence</span>
-                                                    </div>
-
-                                                    <div className="relative flex-1 min-h-0 flex flex-col justify-center" onClick={(e) => { e.stopPropagation(); handleSentenceClick(sentence); }}>
-                                                        <SmartTruncatedText 
-                                                            content={`${sentence.text} ${sentence.page ? `- ${sentence.page}p` : ''}`} 
-                                                            textClassName="text-[18px] md:text-[20px] font-serif font-medium leading-[1.6] break-keep tracking-tight text-white drop-shadow-md line-clamp-3"
-                                                            wrapQuotes={true}
-                                                        />
-                                                    </div>
-
-                                                    <div className="flex items-end justify-between w-full mt-4 pt-4 border-t border-white/10 shrink-0">
-                                                        <div className="flex items-center gap-4 min-w-0 flex-1">
-                                                            <FloatingCover src={sentence.cover} className="w-[36px] h-[52px]" iconSize={14} />
-                                                            <div className="flex flex-col text-left justify-center min-w-0 pr-2">
-                                                                <p className="text-[14px] font-bold text-white mb-0.5 line-clamp-1">{sentence.book}</p>
-                                                                <p className="text-[11px] text-[#A0AABF] font-medium mb-1 line-clamp-1">저자 : {cleanAuthorName(sentence.author)}</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <span className="text-[12px] text-white/80 font-medium truncate bg-white/5 px-2 py-1 rounded-sm border border-white/10 max-w-[100px]">{sentence.user || 'BnTalker'}</span>
+                                                <div className="relative flex-1 min-h-0 flex flex-col justify-center" onClick={(e) => { e.stopPropagation(); handleSentenceClick(sentence); }}>
+                                                    <SmartTruncatedText content={`${sentence.text} ${sentence.page ? `- ${sentence.page}p` : ''}`} textClassName="text-[18px] md:text-[20px] font-serif font-medium leading-[1.6] break-keep tracking-tight text-white drop-shadow-md line-clamp-3" wrapQuotes={true}/>
+                                                </div>
+                                                <div className="flex items-end justify-between w-full mt-4 pt-4 border-t border-white/10 shrink-0">
+                                                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                        <FloatingCover src={sentence.cover} className="w-[36px] h-[52px]" iconSize={14} />
+                                                        <div className="flex flex-col text-left justify-center min-w-0 pr-2">
+                                                            <p className="text-[14px] font-bold text-white mb-0.5 line-clamp-1">{sentence.book}</p>
+                                                            <p className="text-[11px] text-[#A0AABF] font-medium mb-1 line-clamp-1">저자 : {cleanAuthorName(sentence.author)}</p>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {heroSentences.length > 1 && (
+                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                                        {heroSentences.map((_, idx) => (
+                                            <button key={idx} onClick={(e) => { e.stopPropagation(); setCurrentSlide(idx); }} className={`h-1.5 rounded-sm transition-all duration-300 ${currentSlide === idx ? 'w-6 bg-[#C89B3C]' : 'w-2 bg-white/30 hover:bg-white/50'}`} />
                                         ))}
                                     </div>
-                                    {heroSentences.length > 1 && (
-                                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
-                                            {heroSentences.map((_, idx) => (
-                                                <button key={idx} onClick={(e) => { e.stopPropagation(); setCurrentSlide(idx); }} className={`h-1.5 rounded-sm transition-all duration-300 ${currentSlide === idx ? 'w-6 bg-[#C89B3C]' : 'w-2 bg-white/30 hover:bg-white/50'}`} />
-                                            ))}
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center min-h-[250px]">
-                                    <Loader2 className="animate-spin text-[#C89B3C]" size={28} />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 2. 우측 (50%): 유저 리뷰 탭 */}
-                        <div className="lg:col-span-6 flex flex-col h-full min-h-[280px]">
-                            <InsightCard className="flex-1 flex flex-col relative overflow-hidden group hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow duration-300 !p-6 h-full bg-[#FFFFFF]">
-                                <div className="relative z-10 flex flex-col h-full">
-                                    <div className="flex items-center gap-6 mb-4 shrink-0 border-b border-[#EEF2F7] pb-3">
-                                        <button 
-                                            onClick={() => { setReviewTab('short'); setRcReviewIndex(0); }} 
-                                            className={`text-[13px] font-extrabold tracking-tight transition-all flex items-center gap-1.5 relative pb-1 ${reviewTab === 'short' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}
-                                        >
-                                            <MessageCircle size={14} className={reviewTab === 'short' ? 'text-[#C89B3C]' : ''}/> 한줄평(Short Review)
-                                            {reviewTab === 'short' && <span className="absolute bottom-[-13px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
-                                        </button>
-                                        <button 
-                                            onClick={() => { setReviewTab('long'); setLrReviewIndex(0); }} 
-                                            className={`text-[13px] font-extrabold tracking-tight transition-all flex items-center gap-1.5 relative pb-1 ${reviewTab === 'long' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}
-                                        >
-                                            <AlignLeft size={14} className={reviewTab === 'long' ? 'text-[#C89B3C]' : ''} /> 긴줄평(Review)
-                                            {reviewTab === 'long' && <span className="absolute bottom-[-13px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
-                                        </button>
-                                    </div>
-                                    
-                                    {isLoading ? (
-                                        <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF] h-full"><Loader2 className="animate-spin text-[#C89B3C] mb-3" size={24} /></div>
-                                    ) : (
-                                        <>
-                                            {/* 탭 1: 한줄평 (Short Review) */}
-                                            {reviewTab === 'short' && readersChoice && readersChoice.length > 0 && readersChoice[rcReviewIndex] && (
-                                                <div className="flex-1 flex flex-col h-full animate-in fade-in duration-500 min-h-0">
-                                                    <div onClick={() => handleSentenceClick({ work_id: readersChoice[rcReviewIndex].work_id, book: readersChoice[rcReviewIndex].title })} className="flex items-center gap-3 mb-4 cursor-pointer shrink-0 group/mini">
-                                                        <FloatingCover src={readersChoice[rcReviewIndex].cover} className="w-[32px] h-[46px]" iconSize={14} />
-                                                        <div className="flex flex-col justify-center flex-1 min-w-0">
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <span className="text-[13px] font-bold text-[#1D2433] line-clamp-1 group-hover/mini:text-[#1F3A5F] transition-colors">{readersChoice[rcReviewIndex].title}</span>
-                                                                <span className="text-[11px] font-medium text-[#A0AABF] shrink-0 truncate ml-2 max-w-[80px]">{readersChoice[rcReviewIndex].user}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2 mt-0.5">
-                                                                <span className="text-[11px] text-[#667085] line-clamp-1">{cleanAuthorName(readersChoice[rcReviewIndex].author)}</span>
-                                                                {readersChoice[rcReviewIndex].rating > 0 && (
-                                                                    <div className="flex items-center gap-0.5 text-[#C89B3C]">
-                                                                        {[...Array(5)].map((_, i) => (
-                                                                            <Star key={`star-${i}`} size={10} fill={i < Math.floor(readersChoice[rcReviewIndex].rating) ? "currentColor" : "none"} className={i < Math.floor(readersChoice[rcReviewIndex].rating) ? "" : "text-[#EEF2F7]"} />
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex-1 relative flex flex-col justify-center bg-[#F7F5F1]/50 rounded-md p-4 border border-[#EEF2F7]">
-                                                        <div className="h-full flex flex-col justify-center relative">
-                                                            <Quote size={16} className="text-[#C89B3C]/20 absolute -top-1 -left-1" />
-                                                            <div className="pl-4 relative z-10 w-full h-full flex items-center">
-                                                                <SmartTruncatedText content={readersChoice[rcReviewIndex].text} textClassName="text-[14px] font-medium text-[#1D2433] font-serif" />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    {readersChoice.length > 1 && (
-                                                        <div className="flex items-center justify-center gap-2 mt-4 shrink-0">
-                                                            {readersChoice.map((_: any, i: number) => (
-                                                                <button key={`rc-dot-${i}`} onClick={() => setRcReviewIndex(i)} className={`h-1.5 rounded-sm transition-all duration-300 ${rcReviewIndex === i ? 'w-4 bg-[#1F3A5F]' : 'w-1.5 bg-[#E7E2D9] hover:bg-[#A0AABF]'}`} />
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* 탭 2: 긴줄평 (Long Review) */}
-                                            {reviewTab === 'long' && bestLongReviews && bestLongReviews.length > 0 && bestLongReviews[lrReviewIndex] && (
-                                                <div className="flex-1 flex flex-col h-full animate-in fade-in duration-500 min-h-0">
-                                                    <div onClick={() => handleSentenceClick(bestLongReviews[lrReviewIndex])} className="flex gap-4 cursor-pointer group/mini h-full">
-                                                        <div className="w-[80px] shrink-0">
-                                                            <FloatingCover src={bestLongReviews[lrReviewIndex].cover} className="w-full aspect-[1/1.45]" iconSize={20} />
-                                                            <div className="mt-2 flex justify-center text-[#C89B3C]">
-                                                                {[...Array(5)].map((_, i) => <Star key={i} size={8} fill={i < Math.floor(bestLongReviews[lrReviewIndex].rating || 5) ? "currentColor" : "none"} className={i < Math.floor(bestLongReviews[lrReviewIndex].rating || 5) ? "" : "text-[#EEF2F7]"} />)}
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex-1 flex flex-col justify-between overflow-hidden">
-                                                            <div>
-                                                                <div className="flex items-center justify-between w-full mb-1">
-                                                                    <h3 className="text-[14px] font-bold text-[#1D2433] line-clamp-1 group-hover/mini:text-[#1F3A5F] transition-colors">{bestLongReviews[lrReviewIndex].title}</h3>
-                                                                    <span className="text-[11px] font-medium text-[#A0AABF] shrink-0 truncate ml-2 max-w-[80px]">{bestLongReviews[lrReviewIndex].user}</span>
-                                                                </div>
-                                                                <div className="relative mt-2">
-                                                                    <Quote size={12} className="text-[#E7E2D9] absolute -top-1 -left-1.5 z-0" />
-                                                                    <div className="pl-3 relative z-10 w-full pt-0.5">
-                                                                        <SmartTruncatedText content={bestLongReviews[lrReviewIndex].text?.replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ')} textClassName="text-[13px] leading-[1.6] text-[#667085] font-serif line-clamp-4" />
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="mt-2 flex justify-end shrink-0">
-                                                                <span className="text-[11px] font-bold text-[#1F3A5F] flex items-center gap-1 group-hover/mini:translate-x-1 transition-transform">전문 읽기 <ArrowRight size={12} /></span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    {bestLongReviews.length > 1 && (
-                                                        <div className="flex items-center justify-center gap-2 mt-4 shrink-0 border-t border-[#EEF2F7] pt-3">
-                                                            {bestLongReviews.map((_: any, i: number) => (
-                                                                <button key={`lr-dot-${i}`} onClick={() => setLrReviewIndex(i)} className={`h-1.5 rounded-sm transition-all duration-300 ${lrReviewIndex === i ? 'w-4 bg-[#1F3A5F]' : 'w-1.5 bg-[#E7E2D9] hover:bg-[#A0AABF]'}`} />
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* 데이터 없음 Fallback */}
-                                            {((reviewTab === 'short' && (!readersChoice || readersChoice.length === 0)) || 
-                                              (reviewTab === 'long' && (!bestLongReviews || bestLongReviews.length === 0))) && (
-                                                <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF] gap-2 border border-dashed border-[#EEF2F7] rounded-md bg-[#F7F5F1]/30">
-                                                    <MessageCircle className="mb-1 opacity-30" size={24} />
-                                                    <span className="text-[12px]">등록된 {reviewTab === 'short' ? '한줄평' : '긴줄평'}이 없습니다.</span>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            </InsightCard>
-                        </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center"><Loader2 className="animate-spin text-[#C89B3C]" size={28} /></div>
+                        )}
                     </div>
-                </section>
 
-                {/* ▼ Section 2: 북앤톡 디스커버리 ▼ */}
-                <section className="w-full">
+                    <Card className="lg:col-span-6 h-full flex flex-col border-[#EEF2F7] shadow-sm rounded-sm">
+                        <CardContent className="p-6 h-full flex flex-col">
+                            <Tabs defaultValue="short" className="w-full h-full flex flex-col">
+                                <TabsList className="bg-transparent border-b border-[#EEF2F7] w-full justify-start rounded-none p-0 h-auto mb-4">
+                                    <TabsTrigger value="short" className="data-[state=active]:border-b-2 data-[state=active]:border-[#1F3A5F] data-[state=active]:text-[#1F3A5F] rounded-none px-4 pb-2 bg-transparent shadow-none text-[13px] font-extrabold text-[#A0AABF]">
+                                        <MessageCircle size={14} className="mr-1.5" /> 한줄평
+                                    </TabsTrigger>
+                                    <TabsTrigger value="long" className="data-[state=active]:border-b-2 data-[state=active]:border-[#1F3A5F] data-[state=active]:text-[#1F3A5F] rounded-none px-4 pb-2 bg-transparent shadow-none text-[13px] font-extrabold text-[#A0AABF]">
+                                        <AlignLeft size={14} className="mr-1.5" /> 긴줄평
+                                    </TabsTrigger>
+                                </TabsList>
+
+                                <TabsContent value="short" className="flex-1 mt-0 outline-none flex flex-col min-h-0">
+                                    {readersChoice && readersChoice.length > 0 && readersChoice[rcReviewIndex] ? (
+                                        <div className="flex-1 flex flex-col h-full animate-in fade-in duration-500">
+                                            <div onClick={() => handleSentenceClick({ work_id: readersChoice[rcReviewIndex].work_id, book: readersChoice[rcReviewIndex].title })} className="flex items-center gap-3 mb-4 cursor-pointer shrink-0 group/mini">
+                                                <FloatingCover src={readersChoice[rcReviewIndex].cover} className="w-[32px] h-[46px]" iconSize={14} />
+                                                <div className="flex flex-col justify-center flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between w-full">
+                                                        <span className="text-[13px] font-bold text-[#1D2433] line-clamp-1">{readersChoice[rcReviewIndex].title}</span>
+                                                        <span className="text-[11px] font-medium text-[#A0AABF]">{readersChoice[rcReviewIndex].user}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 relative flex flex-col justify-center bg-[#F7F5F1]/50 rounded-md p-4 border border-[#EEF2F7]">
+                                                <div className="pl-4 relative z-10 w-full h-full flex items-center">
+                                                    <Quote size={16} className="text-[#C89B3C]/20 absolute -top-1 -left-4" />
+                                                    <SmartTruncatedText content={readersChoice[rcReviewIndex].text} textClassName="text-[14px] font-medium text-[#1D2433] font-serif" />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-center gap-2 mt-4 shrink-0">
+                                                {readersChoice.map((_: any, i: number) => (
+                                                    <button key={i} onClick={() => setRcReviewIndex(i)} className={`h-1.5 rounded-sm ${rcReviewIndex === i ? 'w-4 bg-[#1F3A5F]' : 'w-1.5 bg-[#E7E2D9]'}`} />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF] text-[12px]"><Loader2 className="animate-spin mb-2"/>한줄평 로딩중...</div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="long" className="flex-1 mt-0 outline-none flex flex-col min-h-0">
+                                    {bestLongReviews && bestLongReviews.length > 0 && bestLongReviews[lrReviewIndex] ? (
+                                        <div className="flex-1 flex flex-col h-full animate-in fade-in duration-500">
+                                            <div onClick={() => handleSentenceClick(bestLongReviews[lrReviewIndex])} className="flex gap-4 cursor-pointer h-full">
+                                                <div className="w-[80px] shrink-0">
+                                                    <FloatingCover src={bestLongReviews[lrReviewIndex].cover} className="w-full aspect-[1/1.45]" iconSize={20} />
+                                                </div>
+                                                <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                                                    <h3 className="text-[14px] font-bold text-[#1D2433] line-clamp-1">{bestLongReviews[lrReviewIndex].title}</h3>
+                                                    <SmartTruncatedText content={bestLongReviews[lrReviewIndex].text?.replace(/<[^>]*>?/gm, '')} textClassName="text-[13px] leading-[1.6] text-[#667085] font-serif line-clamp-4 mt-2" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center text-[#A0AABF] text-[12px]"><Loader2 className="animate-spin mb-2"/>긴줄평 로딩중...</div>
+                                    )}
+                                </TabsContent>
+                            </Tabs>
+                        </CardContent>
+                    </Card>
+                </div>
+            </section>
+
+            {/* Section 2: 디스커버리 허브 (shadcn Tabs) */}
+            <section className="w-full mb-10">
+                <Tabs defaultValue="library" className="w-full">
                     <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 border-b border-[#E7E2D9] pb-4 gap-4">
                         <div>
                             <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-2 block">Discovery Hub</span>
-                            <h2 className="text-[24px] font-black text-[#1D2433] flex items-center gap-2 tracking-tight">새로운 영감을 발견하세요</h2>
+                            <h2 className="text-[24px] font-black text-[#1D2433]">새로운 영감을 발견하세요</h2>
                         </div>
-
-                        <div className="flex items-center gap-6 overflow-x-auto scrollbar-hide shrink-0">
-                            <button onClick={() => setDiscoveryTab('library')} className={`pb-2 text-[14px] font-bold transition-all relative whitespace-nowrap ${discoveryTab === 'library' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}>
-                                도서관 인기 대출 {discoveryTab === 'library' && <span className="absolute bottom-[-17px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
-                            </button>
-                            <button onClick={() => setDiscoveryTab('naver')} className={`pb-2 text-[14px] font-bold transition-all relative whitespace-nowrap ${discoveryTab === 'naver' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}>
-                                이달의 주목 신간 {discoveryTab === 'naver' && <span className="absolute bottom-[-17px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
-                            </button>
-                            <button onClick={() => setDiscoveryTab('bntalk')} className={`pb-2 text-[14px] font-bold transition-all relative whitespace-nowrap ${discoveryTab === 'bntalk' ? 'text-[#1F3A5F]' : 'text-[#A0AABF] hover:text-[#667085]'}`}>
-                                서재 최신 등록 {discoveryTab === 'bntalk' && <span className="absolute bottom-[-17px] left-0 w-full h-[2px] bg-[#1F3A5F] rounded-t-sm" />}
-                            </button>
-                        </div>
+                        <TabsList className="bg-transparent p-0 h-auto gap-6 justify-start">
+                            <TabsTrigger value="library" className="p-0 pb-2 bg-transparent shadow-none rounded-none data-[state=active]:border-b-2 data-[state=active]:border-[#1F3A5F] data-[state=active]:text-[#1F3A5F] text-[14px] font-bold text-[#A0AABF]">도서관 인기 대출</TabsTrigger>
+                            <TabsTrigger value="naver" className="p-0 pb-2 bg-transparent shadow-none rounded-none data-[state=active]:border-b-2 data-[state=active]:border-[#1F3A5F] data-[state=active]:text-[#1F3A5F] text-[14px] font-bold text-[#A0AABF]">이달의 주목 신간</TabsTrigger>
+                            <TabsTrigger value="bntalk" className="p-0 pb-2 bg-transparent shadow-none rounded-none data-[state=active]:border-b-2 data-[state=active]:border-[#1F3A5F] data-[state=active]:text-[#1F3A5F] text-[14px] font-bold text-[#A0AABF]">서재 최신 등록</TabsTrigger>
+                        </TabsList>
                     </div>
 
                     <div className="w-full relative">
-                        {isLoading ? (
-                            <div className="flex justify-center items-center py-20 h-[240px]"><Loader2 className="animate-spin text-[#1F3A5F]" size={32} /></div>
-                        ) : (
-                            <div className="flex overflow-x-auto scrollbar-hide gap-4 md:gap-5 pb-4 snap-x snap-mandatory animate-in fade-in duration-500">
-                                {(() => {
-                                    let activeBooks = [];
-                                    if (discoveryTab === 'library') activeBooks = libraryPopular.slice(0, 10);
-                                    else if (discoveryTab === 'naver') activeBooks = naverNewArrivals.slice(0, 10);
-                                    else activeBooks = newArrivals.slice(0, 10);
-
-                                    if (activeBooks.length === 0) {
-                                        return (
-                                            <div className="w-full flex flex-col items-center justify-center text-[#A0AABF] font-medium border border-[#E7E2D9] border-dashed rounded-lg bg-white h-[200px]">
-                                                <Search className="mb-3 opacity-30" size={32} />
-                                                데이터를 수집 중이거나 아직 등록된 책이 없습니다.
-                                            </div>
-                                        );
-                                    }
-
-                                    return activeBooks.map((book, i) => {
-                                        const isInternal = discoveryTab === 'bntalk' || !!book.internal_work_id;
-
-                                        return (
-                                            <div 
-                                                key={`discovery-${i}`} 
-                                                onClick={() => {
-                                                    if (isInternal) {
-                                                        router.push(`/works/${book.internal_work_id || book.work_id}`);
-                                                    } else {
-                                                        if (book.isbn) {
-                                                            window.open(`https://books.google.co.kr/books?vid=ISBN${book.isbn}`, '_blank', 'noopener,noreferrer');
-                                                        } else {
-                                                            window.open(`https://www.google.co.kr/search?tbm=bks&q=${encodeURIComponent(book.title)}`, '_blank', 'noopener,noreferrer');
-                                                        }
-                                                    }
-                                                }} 
-                                                className="w-[120px] md:w-[150px] shrink-0 snap-start group cursor-pointer flex flex-col relative min-w-0">
-                                                
-                                                <div className="relative mb-3 w-full">
-                                                    <FloatingCover src={book.cover} className="w-full aspect-[1/1.45]" iconSize={24} />
-                                                    {isInternal && (
-                                                        <div className="absolute top-1.5 right-1.5 bg-[#1F3A5F]/90 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded-sm shadow-sm flex items-center gap-0.5 z-10 pointer-events-none">
-                                                            <BookOpen size={8} /> 서재
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex flex-col flex-1 px-0.5">
-                                                    <h3 className="font-bold text-[#1D2433] text-[12px] md:text-[13px] leading-snug line-clamp-2 mb-1 group-hover:text-[#C89B3C] transition-colors">{book.title}</h3>
-                                                    <p className="text-[10px] md:text-[11px] text-[#667085] line-clamp-1 font-medium">{book.author || book.discoverer}</p>
-                                                </div>
-                                            </div>
-                                        );
-                                    });
-                                })()}
-                            </div>
-                        )}
-                    </div>
-                </section>
-
-                {/* ▼ Section 3: 동적 워드 클라우드 & 사색 작가들 ▼ */}
-                <section className="w-full">
-                    <div className="mb-6">
-                        <span className="text-[12px] font-bold text-[#C89B3C] tracking-widest uppercase mb-1.5 block">Trending Thoughts</span>
-                        <h2 className="text-[24px] font-black text-[#1D2433] mb-1.5 tracking-tight">BnTalkers Tag</h2>
-                        <p className="text-[#667085] font-medium text-[14px]">많이 읽히는 책보다, 많이 생각되는 주제를 보여줍니다.</p>
-                    </div>
-
-                    <div className="flex flex-col lg:flex-row gap-6 items-stretch min-h-[320px] lg:h-[320px]">
-                        
-                        {/* Left (60%): 고밀도 팩킹 워드 클라우드 */}
-                        <InsightCard className="lg:w-[60%] w-full h-full relative flex items-center justify-center p-2 hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow overflow-visible">
-                            <div className="absolute top-4 right-4 z-20">
-                                <div className="relative group">
-                                    <div className="flex items-center gap-1 text-[12px] font-bold text-[#A0AABF] hover:text-[#1D2433] cursor-help transition-colors bg-white/80 px-2 py-1 rounded-sm backdrop-blur-sm">
-                                        <HelpCircle size={14} /> Color Guide
-                                    </div>
-                                    <div className="absolute right-0 top-full mt-2 w-[220px] bg-[#FFFFFF] rounded-sm p-4 border border-[#EEF2F7] shadow-[0_8px_30px_rgba(29,36,51,0.12)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 pointer-events-none">
-                                        <span className="text-[11px] text-[#667085] font-bold uppercase tracking-widest mb-3 block">Color Guide</span>
-                                        <ul className="space-y-2.5">
-                                            <li className="flex items-center gap-2 text-[12px]"><span className="w-3 h-3 rounded-sm bg-[#1F3A5F]"></span><span className="font-bold text-[#1F3A5F]">Core</span><span className="text-[#A0AABF] ml-auto">1~2위</span></li>
-                                            <li className="flex items-center gap-2 text-[12px]"><span className="w-3 h-3 rounded-sm bg-[#C89B3C]"></span><span className="font-bold text-[#C89B3C] flex items-center gap-1">Rising <Flame size={10}/></span><span className="text-[#A0AABF] ml-auto">3~4위</span></li>
-                                            <li className="flex items-center gap-2 text-[12px]"><span className="w-3 h-3 rounded-sm bg-[#667085]"></span><span className="font-bold text-[#667085]">Steady</span><span className="text-[#A0AABF] ml-auto">5~7위</span></li>
-                                            <li className="flex items-center gap-2 text-[12px]"><span className="w-3 h-3 rounded-sm bg-[#A0AABF]"></span><span className="font-medium text-[#A0AABF]">Niche</span><span className="text-[#A0AABF] ml-auto">8위 이하</span></li>
-                                        </ul>
-                                    </div>
+                        <TabsContent value="library" className="mt-0 flex overflow-x-auto gap-4 pb-4 scrollbar-hide">
+                            {libraryPopular.map((book, i) => (
+                                <div key={i} className="w-[120px] shrink-0 cursor-pointer" onClick={() => window.open(`https://books.google.co.kr/books?vid=ISBN${book.isbn}`, '_blank')}>
+                                    <FloatingCover src={book.cover} className="w-full aspect-[1/1.45] mb-2" iconSize={24} />
+                                    <h3 className="font-bold text-[12px] line-clamp-2">{book.title}</h3>
                                 </div>
-                            </div>
-                            {isLoading ? (
-                                <Loader2 className="animate-spin text-[#1F3A5F]" size={32} />
-                            ) : trendingTags.length > 0 ? (
-                                <div className="w-full h-full flex-1">
-                                    <WordCloudChart data={trendingTags} onWordClick={handleCardClick} />
+                            ))}
+                        </TabsContent>
+                        <TabsContent value="naver" className="mt-0 flex overflow-x-auto gap-4 pb-4 scrollbar-hide">
+                            {naverNewArrivals.map((book, i) => (
+                                <div key={i} className="w-[120px] shrink-0 cursor-pointer" onClick={() => window.open(`https://www.google.co.kr/search?tbm=bks&q=${encodeURIComponent(book.title)}`, '_blank')}>
+                                    <FloatingCover src={book.cover} className="w-full aspect-[1/1.45] mb-2" iconSize={24} />
+                                    <h3 className="font-bold text-[12px] line-clamp-2">{book.title}</h3>
                                 </div>
-                            ) : (
-                                <span className="text-[#A0AABF] font-medium text-[15px] text-center border p-4 rounded-md">아직 수집된 사색의 조각이 없습니다.</span>
-                            )}
-                        </InsightCard>
-
-                        {/* Right (40%): 사색을 유발한 작가들 */}
-                        <InsightCard className="lg:w-[40%] w-full h-full flex flex-col !p-5 bg-[#FFFFFF] hover:shadow-[0_8px_30px_rgba(29,36,51,0.06)] transition-shadow">
-                            <h3 className="text-[16px] font-extrabold text-[#1D2433] mb-4 flex items-center gap-2 border-b border-[#E7E2D9] pb-3 shrink-0">
-                                <PenTool size={16} className="text-[#C89B3C]" />
-                                우리를 사색에 잠기게 한 작가들
-                            </h3>
-                            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pr-1">
-                                <div className="grid grid-cols-2 gap-2 pb-1">
-                                    {inspiringAuthors && inspiringAuthors.length > 0 ? (
-                                        inspiringAuthors.slice(0, 5).map((author, index) => {
-                                            const authorId = author?.contributor_id || author?.id;
-                                            const authorName = author?.author_name || author?.name || "이름 없는 작가";
-                                            const profileImg = author?.author_profile_image || author?.profile_image;
-                                            const displayTag = author?.top_keyword || author?.keyword || "#정보없음";
-
-                                            return (
-                                                <div 
-                                                    key={`author-${authorId || index}`} 
-                                                    className="flex items-center gap-2.5 group cursor-pointer p-2 hover:bg-[#F7F5F1] rounded-lg transition-all"
-                                                    onClick={() => router.push(`/author/${authorId || ''}`)}
-                                                >
-                                                    <AuthorAvatar 
-                                                        src={profileImg} 
-                                                        alt={authorName} 
-                                                        size={36} 
-                                                        fallbackType="pen" 
-                                                        className="shadow-sm ring-2 ring-transparent group-hover:ring-[#EEF2F7] transition-all"
-                                                    />
-                                                    <div className="flex flex-col flex-1 min-w-0 justify-center">
-                                                        <span className="font-bold text-[#1D2433] text-[13px] truncate group-hover:text-[#1F3A5F] transition-colors">{authorName}</span>
-                                                        <div className="flex items-center mt-0.5">
-                                                            <span className="text-[10px] font-bold text-[#1F3A5F] bg-[#EEF2F7] px-1.5 py-0.5 rounded-sm shrink-0 border border-[#E7E2D9]/50 shadow-sm truncate max-w-full">{displayTag}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    ) : (
-                                        <div className="col-span-2 flex flex-col items-center justify-center text-[#A0AABF] text-[13px] text-center border-dashed rounded-md bg-[#F7F5F1] p-4 h-[200px] border">
-                                            <PenTool size={20} className="mb-2 opacity-30"/>
-                                            아직 수집된 작가 데이터가 없습니다.<br/>서재를 채워주세요.
-                                        </div>
-                                    )}
+                            ))}
+                        </TabsContent>
+                        <TabsContent value="bntalk" className="mt-0 flex overflow-x-auto gap-4 pb-4 scrollbar-hide">
+                            {newArrivals.map((book, i) => (
+                                <div key={i} className="w-[120px] shrink-0 cursor-pointer" onClick={() => router.push(`/works/${book.internal_work_id || book.work_id}`)}>
+                                    <FloatingCover src={book.cover} className="w-full aspect-[1/1.45] mb-2" iconSize={24} />
+                                    <h3 className="font-bold text-[12px] line-clamp-2">{book.title}</h3>
                                 </div>
-                            </div>
-                        </InsightCard>
+                            ))}
+                        </TabsContent>
                     </div>
-                </section>
+                </Tabs>
+            </section>
 
-                {/* ▼ Section 4: 하단 통계 대시보드 ▼ */}
-                <section className="w-full">
-                    <InsightCard className="grid grid-cols-1 md:grid-cols-3 gap-8 !p-10">
-                        <div className="flex flex-col items-center justify-center text-center md:border-r border-[#EEF2F7] md:pr-8">
+            {/* Section 4: 하단 통계 대시보드 */}
+            <section className="w-full">
+                <Card className="border-[#EEF2F7] shadow-sm rounded-sm">
+                    <CardContent className="p-10 grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="flex flex-col items-center justify-center text-center md:border-r border-[#EEF2F7]">
                             <span className="text-[13px] font-bold text-[#667085] tracking-widest uppercase mb-3">누적 사색 기록</span>
-                            <span className="text-[36px] font-black text-[#1D2433] tracking-tight">{isLoading ? "-" : stats.total_sentences.toLocaleString()}<span className="text-[16px] font-bold text-[#A0AABF] ml-1">개</span></span>
+                            <span className="text-[36px] font-black text-[#1D2433]">{stats.total_sentences.toLocaleString()}<span className="text-[16px] ml-1">개</span></span>
                         </div>
-                        <div className="flex flex-col items-center justify-center text-center md:border-r border-[#EEF2F7] md:px-8">
+                        <div className="flex flex-col items-center justify-center text-center md:border-r border-[#EEF2F7]">
                             <span className="text-[13px] font-bold text-[#667085] tracking-widest uppercase mb-3">이번 주 넘긴 페이지</span>
-                            <span className="text-[36px] font-black text-[#1F3A5F] tracking-tight">{isLoading ? "-" : stats.total_pages.toLocaleString()}<span className="text-[16px] font-bold text-[#A0AABF] ml-1">p</span></span>
+                            <span className="text-[36px] font-black text-[#1F3A5F]">{stats.total_pages.toLocaleString()}<span className="text-[16px] ml-1">p</span></span>
                         </div>
-                        <div className="flex flex-col items-center justify-center text-center md:pl-8">
+                        <div className="flex flex-col items-center justify-center text-center">
                             <span className="text-[13px] font-bold text-[#667085] tracking-widest uppercase mb-3">현재 함께 읽는 책</span>
-                            <span className="text-[36px] font-black text-[#1D2433] tracking-tight">{isLoading ? "-" : stats.reading_books.toLocaleString()}<span className="text-[16px] font-bold text-[#A0AABF] ml-1">권</span></span>
+                            <span className="text-[36px] font-black text-[#1D2433]">{stats.reading_books.toLocaleString()}<span className="text-[16px] ml-1">권</span></span>
                         </div>
-                    </InsightCard>
-                </section>
-
-            </StandardContainer>
-        </div>
+                    </CardContent>
+                </Card>
+            </section>
+        </HomeLayout>
     );
 }
