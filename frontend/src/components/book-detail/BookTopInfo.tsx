@@ -1,5 +1,5 @@
 // 파일 경로: src/components/book/BookTopInfo.tsx
-// 역할 및 기능: BoooknTalk 도서 상세 페이지의 최상단 영역을 담당하며, 도서 표지, 상세 정보, 사용자의 독서 기록 상태, 그리고 간략한 작가 정보 및 대표작을 렌더링하는 UI 컴포넌트입니다.
+// 역할 및 기능: 도서 상세 페이지의 최상단 히어로 영역을 담당하며, 1cm 마스터 레이아웃에 맞게 컨테이너 제한을 해제하고 14px 표준 폰트를 적용했습니다.
 
 'use client';
 
@@ -39,7 +39,6 @@ const getSafeDateString = (dateString: string) => {
     return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}.`;
 };
 
-// 함수 기능: 도서 데이터, 사용자 독서 기록, 작가 데이터를 props로 전달받아, 좌측 도서 표지와 우측 도서 정보(2/3) 및 작가 정보(1/3)를 포함한 반응형 레이아웃을 구성합니다. 도서 상세 설명은 3줄까지 표시(말줄임)하며 툴팁으로 전체 내용을 제공합니다.
 export default function BookTopInfo({ 
     record, edition, work, myEditions = [], onRecordChange,
     authorInfo, authorOtherBooks = []
@@ -68,17 +67,14 @@ export default function BookTopInfo({
     const progressPercent = Math.min(Math.round((currentPage / totalPage) * 100), 100);
     const currentStatus = (record?.status || '').toLowerCase();
     
-    const categoryHierarchy = work?.category ? work.category.split('/').map((c: string) => c.trim()) : ['미분류'];
     const statusIndex = currentStatus === 'finished' ? 2 : currentStatus === 'reading' ? 1 : 0;
 
     return (
-        <section className="bg-white border-b border-gray-100 relative z-[100]">
-            <div className="max-w-[1200px] mx-auto px-8 pt-4 pb-10">
-                
-                {/* [1. 전체 레이아웃] 좌측 고정 표지 vs 우측 정보 영역 */}
-                <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,40px)] items-stretch">
-                    
-                    {/* [좌측 영역]: 도서 표지 (폭 고정) */}
+        // 💡 [영점 조절] 부모 레이아웃이 여백을 잡아주므로, 불필요한 패딩(p, pt)과 최대 너비를 제거하고 max-w-[1200px] 컨테이너 중앙 정렬만 유지합니다.
+        <section className="bg-transparent w-full relative z-[100]">
+            <div className="max-w-[1200px] mx-auto p-[var(--spacing-1cm,32px)]">
+                <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,32px)] items-stretch">
+                    {/* [좌측 영역]: 도서 표지 */}
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
                         <FloatingCover 
                             src={edition?.cover_image || edition?.cover || work?.cover_image ? getHighResCover(edition.cover_image || edition.cover || work.cover_image) : null}
@@ -93,14 +89,12 @@ export default function BookTopInfo({
                         </div>
                     </div>
 
-                    {/* [우측 영역]: 내부에서 다시 2/3 (도서) 와 1/3 (작가) 로 강제 분할 */}
+                    {/* [우측 영역]: 2/3 (도서) 와 1/3 (작가) 로 강제 분할 */}
                     <div className="flex-1 flex flex-col min-w-0">
-                        {/* 💡 Grid 대신 Flexbox를 사용하여 w-2/3, w-1/3 비율을 명확하게 줌 */}
                         <div className="flex flex-col lg:flex-row gap-8 w-full">
                             
-                            {/* [우측-1] 도서 상세 정보 (66.6% 비율) + 우측 세로 경계선(border-r) */}
-                            <div className="w-full lg:w-2/3 flex flex-col min-w-0 lg:border-r lg:border-gray-200 lg:pr-8">
-                                
+                            {/* [우측-1] 도서 상세 정보 */}
+                            <div className="w-full lg:w-2/3 flex flex-col min-w-0 lg:border-r lg:border-gray-100 lg:pr-8">
                                 <div className="flex justify-between items-start mb-2 gap-4">
                                     <h1 className="text-[28px] md:text-[32px] font-extrabold text-[#1d1d1f] leading-tight tracking-tight break-keep">
                                         {work?.title}
@@ -160,27 +154,26 @@ export default function BookTopInfo({
                                 </div>
 
                                 <div className="mb-6">
-                                    <Tooltip 
-                                        content={displayDesc !== "상세 설명이 없습니다." ? displayDesc : null} 
-                                        position="bottom" // 하단 탭 메뉴에 가리지 않도록 위로 열림
-                                    >
+                                    <Tooltip content={displayDesc !== "상세 설명이 없습니다." ? displayDesc : null} position="bottom">
+                                        {/* 💡 기획자님 표준: 본문 폰트 14px 적용(text-[14px]) */}
                                         <p className="text-[14px] text-gray-600 leading-relaxed font-medium line-clamp-3 break-keep cursor-pointer">
                                             {displayDesc}
                                         </p>
                                     </Tooltip>
                                 </div>
 
-                                <div className="mt-auto bg-white rounded-[20px] p-6 border border-gray-200 shadow-[0_2px_16px_rgba(0,0,0,0.03)]">
+                                {/* 나의 독서 기록 게이지 바 */}
+                                <div className="mt-auto bg-[#F5F5F7] rounded-2xl p-5 border border-gray-200/60 shadow-sm">
                                     <div className="flex justify-between items-center mb-6">
                                         <div className="flex items-baseline gap-2">
-                                            <h3 className="font-bold text-[16px] text-[#1d1d1f]">나의 독서 기록</h3>
-                                            <span className="text-[13px] font-medium text-gray-400">
+                                            <h3 className="font-bold text-[15px] text-[#1d1d1f]">나의 독서 기록</h3>
+                                            <span className="text-[12px] font-medium text-gray-500">
                                                 {currentStatus === 'wish' ? '' : `(${record?.start_date ? getSafeDateString(record.start_date) : '미정'} ~ ${record?.finish_date ? getSafeDateString(record.finish_date) : (currentStatus === 'reading' ? '현재' : '')})`}
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-1">
-                                            <button className="p-1.5 text-gray-400 hover:text-[#0066cc] hover:bg-blue-50 rounded-md transition-colors" title="기록 수정"><Edit3 size={15} /></button>
-                                            <button className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" title="기록 삭제"><Trash2 size={15} /></button>
+                                            <button className="p-1.5 text-gray-400 hover:text-[#0066cc] hover:bg-white rounded-md transition-colors" title="기록 수정"><Edit3 size={15} /></button>
+                                            <button className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white rounded-md transition-colors" title="기록 삭제"><Trash2 size={15} /></button>
                                         </div>
                                     </div>
                                     <div>
@@ -190,7 +183,7 @@ export default function BookTopInfo({
                                                 <span className="text-[13px] text-gray-500 font-bold">{currentPage} / {totalPage} 페이지</span>
                                             </div>
                                         )}
-                                        <div className="relative h-2 bg-gray-100 rounded-full flex items-center mt-3 mb-2">
+                                        <div className="relative h-2 bg-gray-200 rounded-full flex items-center mt-3 mb-2">
                                             <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: currentStatus === 'wish' ? '0%' : currentStatus === 'finished' ? '100%' : `${progressPercent}%` }}></div>
                                             <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
                                             <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
@@ -205,36 +198,28 @@ export default function BookTopInfo({
                                 </div>
                             </div>
 
-                            {/* [우측-2] 작가 정보 영역 (33.3% 비율) */}
+                            {/* [우측-2] 작가 정보 영역 */}
                             <div className="w-full lg:w-1/3 flex flex-col min-w-0">
                                 {authorInfo && (
-                                    <div className="flex flex-col gap-6">
+                                    <div className="flex flex-col h-full gap-6">
                                         <div className="flex flex-col">
-                                            <h2 className="text-[13px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
+                                            <h2 className="text-[12px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
                                             <div className="flex items-center gap-3 mb-4">
-                                                
-                                                {/* 💡 기존의 복잡했던 div 래퍼와 img, User 조건부 렌더링을 공통 컴포넌트로 교체 완료 */}
-                                                <AuthorAvatar 
-                                                    src={authorInfo.photo} 
-                                                    alt={authorInfo.name} 
-                                                    size={48} 
-                                                    fallbackType="user" 
-                                                />
-                                                
+                                                <AuthorAvatar src={authorInfo.photo} alt={authorInfo.name} size={48} fallbackType="user" />
                                                 <div>
                                                     <h3 className="text-[16px] font-extrabold text-[#1d1d1f]">{authorInfo.name}</h3>
                                                     {authorInfo.role && <p className="text-[11px] font-bold text-[#0066cc] mt-0.5">{authorInfo.role}</p>}
                                                 </div>
                                             </div>
                                             
-                                            <p className="text-[13px] leading-[1.6] text-gray-600 font-medium break-keep line-clamp-4 mb-4">
+                                            {/* 💡 기획자님 표준: 본문 폰트 14px 적용(text-[14px]) */}
+                                            <p className="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-4 mb-4">
                                                 {authorInfo.bio || "등록된 저자 소개가 없습니다."}
                                             </p>
                                         </div>
 
-                                        {/* 이 저자의 다른 책 (1권만) */}
                                         {authorOtherBooks.length > 0 && (
-                                            <div className="pt-6 border-t border-gray-100/60 mt-auto">
+                                            <div className="pt-6 border-t border-gray-100 mt-auto">
                                                 <div className="flex items-center justify-between mb-4">
                                                     <h3 className="text-[12px] font-extrabold text-gray-500 uppercase tracking-wide">대표작</h3>
                                                     {authorOtherBooks.length > 1 && (
@@ -244,11 +229,11 @@ export default function BookTopInfo({
                                                     )}
                                                 </div>
                                                 {authorOtherBooks.slice(0, 1).map((book) => (
-                                                    <div key={book.id} onClick={() => router.push(`/works/${book.id}`)} className="flex items-center gap-3 cursor-pointer group rounded-xl hover:bg-gray-50 transition-all p-1 -ml-1">
-                                                        <FloatingCover src={book.cover} className="w-[40px] shrink-0 aspect-[1/1.45]" iconSize={12} />
+                                                    <div key={book.id} onClick={() => router.push(`/works/${book.id}`)} className="flex items-center gap-3 cursor-pointer group rounded-xl hover:bg-gray-50 transition-all p-2 -ml-2 border border-transparent hover:border-gray-100">
+                                                        <FloatingCover src={book.cover} className="w-[44px] shrink-0 aspect-[1/1.45]" iconSize={12} />
                                                         <div className="flex flex-col flex-1 min-w-0">
-                                                            <h4 className="text-[13px] font-bold text-[#1d1d1f] line-clamp-2 leading-tight group-hover:text-[#0066cc] transition-colors mb-0.5">{book.title}</h4>
-                                                            <span className="text-[10px] font-bold text-gray-400">BoooknTalk 광장</span>
+                                                            <h4 className="text-[14px] font-bold text-[#1d1d1f] line-clamp-2 leading-tight group-hover:text-[#0066cc] transition-colors mb-1">{book.title}</h4>
+                                                            <span className="text-[11px] font-bold text-gray-400">BoooknTalk 광장</span>
                                                         </div>
                                                     </div>
                                                 ))}

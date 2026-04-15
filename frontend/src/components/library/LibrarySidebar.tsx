@@ -1,5 +1,5 @@
 // 파일 경로: src/components/library/LibrarySidebar.tsx
-// 역할 및 기능: BoooknTalk 서비스의 내 서재 전용 좌측 네비게이션(LNB). 메인 컨텐츠 영역의 브레드크럼(pt-4, min-h-[40px])과 수학적으로 완벽하게 동일한 높이를 갖도록 pt-4 및 h-10 클래스를 적용하여 영점 조절을 완료했습니다.
+// 역할 및 기능: BoooknTalk 서비스의 내 서재 전용 좌측 네비게이션(LNB). 퍼블릭 공간인 '사색 라운지' 메뉴를 제거하여 프라이빗 공간 컨트롤러로서의 정체성을 확립했습니다.
 
 'use client';
 
@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
     Library, Edit3, MessageSquare, ScrollText, 
-    BarChart2, Globe, BookOpen, Tags, Bookmark,
+    BarChart2, BookOpen, Tags, Bookmark,
     PenTool, PieChart, Users, Clock, Languages
 } from 'lucide-react';
 import {
@@ -17,7 +17,20 @@ import {
     SidebarMenuSubItem, SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 
-const navItems = [
+// href와 subItems에 '?' 기호를 붙여 선택적(Optional) 속성임을 선언합니다.
+type NavItemType = {
+    title: string;
+    icon: React.ElementType;
+    href?: string;
+    subItems?: {
+        title: string;
+        href: string;
+        icon: React.ElementType;
+    }[];
+};
+
+// 💡 [해결] 위에서 만든 NavItemType 배열이라고 명시해줍니다.
+const navItems: NavItemType[] = [
     {
         title: "내 서재", icon: Library,
         subItems: [
@@ -46,8 +59,7 @@ const navItems = [
         subItems: [
             { title: '서재 인사이트', href: '/my-records/insights', icon: PieChart },
         ]
-    },
-    { title: "사색 라운지", href: "/community", icon: Globe }
+    }
 ];
 
 export function LibrarySidebar() {
@@ -69,9 +81,7 @@ export function LibrarySidebar() {
             className="!fixed top-14 left-0 h-[calc(100vh-3.5rem)] border-r border-gray-100 bg-white z-40 shadow-sm" 
             collapsible="none"
         >
-            {/* 💡 [영점 조절 1] pt-5 -> pt-4 로 변경하여 메인 콘텐츠 상단 여백(16px)과 일치시킴 */}
             <SidebarContent className="px-4 pb-2 pt-4">
-                {/* 💡 [완벽 영점 조절] shadcn/ui가 몰래 가지고 있던 기본 패딩을 강제로 없앱니다 (!p-0) */}
                 <SidebarGroup className="!p-0 !m-0">
                     <SidebarMenu className="gap-1.5 !mt-0">
                         {navItems.map((item, index) => {
@@ -81,7 +91,6 @@ export function LibrarySidebar() {
                                     <SidebarMenuItem key={index}>
                                         <SidebarMenuButton 
                                             asChild
-                                            // 높이 40px(h-10) 유지
                                             className={`w-full justify-start gap-3 px-3 h-10 text-[15px] font-bold rounded-none cursor-default hover:bg-transparent hover:text-inherit active:bg-transparent ${isGroupActive ? 'text-[#0066cc]' : 'text-[#1d1d1f]'}`}
                                         >
                                             <div>
@@ -91,7 +100,6 @@ export function LibrarySidebar() {
                                         </SidebarMenuButton>
                                         
                                         <SidebarMenuSub className="ml-2 border-l-gray-100 pl-2 my-1">
-                                            {/* ... 하위 메뉴 렌더링 (기존 동일) ... */}
                                             {item.subItems.map((subItem, subIndex) => {
                                                  const isSubActive = isActiveRoute(subItem.href);
                                                  return (
@@ -114,6 +122,7 @@ export function LibrarySidebar() {
                                 );
                             }
 
+                            // 💡 이제 TypeScript가 item에 href가 있을 수도 있다는 것을 알기 때문에 에러를 뱉지 않습니다!
                             const isSingleActive = isActiveRoute(item.href || '');
                             return (
                                 <SidebarMenuItem key={index}>

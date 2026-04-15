@@ -61,6 +61,8 @@ export default function AuthorWriterClient() {
     useEffect(() => {
         if (!selectedAuthor) return;
 
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
         const fetchTimeline = async () => {
             setIsLoadingTimeline(true);
             setTimelineData([]); 

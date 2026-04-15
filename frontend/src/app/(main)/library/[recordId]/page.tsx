@@ -1,3 +1,6 @@
+// 경로: src/app/(main)/library/[recordId]/page.tsx
+// 역할: 도서 상세 페이지 서버 컴포넌트. 최상위 레이아웃이 주입하는 1cm 상단 여백을 마이너스 마진으로 상쇄하여 글로벌 헤더와 완벽하게 밀착시킵니다.
+
 import React from 'react';
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -38,7 +41,6 @@ export default async function BookDetailPage({ params }: PageProps) {
 
     try {
         // 4. 백엔드 API 호출 
-        // 팁: 백엔드 주소가 /api/records 인지 /api/library 인지 확인 필요 (현재 로그는 records)
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const res = await fetch(`${apiUrl}/api/records/${recordId}`, {
             cache: "no-store",
@@ -51,7 +53,6 @@ export default async function BookDetailPage({ params }: PageProps) {
             initialData = await res.json();
         } else {
             console.error(`Failed to fetch record detail: ${res.status}`);
-            // 422 에러가 발생하면 백엔드의 데이터 타입 정의를 확인해야 합니다.
         }
     } catch (error) {
         console.error("API Connection Error (Backend status check needed):", error);
@@ -61,9 +62,9 @@ export default async function BookDetailPage({ params }: PageProps) {
     if (!initialData) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-                <p className="text-gray-500 font-medium text-lg">도서 정보를 불러올 수 없습니다.</p>
-                <p className="text-gray-400 text-sm">해당 기록이 삭제되었거나 서버 연결에 문제가 있습니다.</p>
-                <a href="/library" className="px-6 py-2 bg-black text-white rounded-md hover:bg-gray-800 transition-colors">
+                <p className="text-gray-500 font-medium text-[16px]">도서 정보를 불러올 수 없습니다.</p>
+                <p className="text-gray-400 text-[14px]">해당 기록이 삭제되었거나 서버 연결에 문제가 있습니다.</p>
+                <a href="/library" className="px-6 py-2 bg-[#1d1d1f] text-white font-bold rounded-xl hover:bg-black transition-colors">
                     서재로 돌아가기
                 </a>
             </div>
@@ -71,7 +72,9 @@ export default async function BookDetailPage({ params }: PageProps) {
     }
 
     return (
-        <div className="w-full min-h-screen bg-[#F5F5F7] pb-20">
+        // 💡 [핵심 영점 조절] 부모 레이아웃(layout.tsx)이 강제로 밀어낸 1cm(32px)를 
+        // 다시 -mt-[var(--spacing-1cm,32px)] 로 끌어올려서 헤더에 틈 없이 자석처럼 붙여버립니다!
+        <div className="w-full h-full -mt-[var(--spacing-1cm,32px)] relative z-10">
             {/* 클라이언트 컴포넌트에 세밀한 데이터 전달 */}
             <BookDetailClient initialData={initialData} user={session.user} />
         </div>
