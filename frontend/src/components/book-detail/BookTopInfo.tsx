@@ -11,6 +11,7 @@ import { FloatingCover } from '@/components/common/FloatingCover';
 import { Tooltip } from '@/components/common/Tooltip';
 import { useRouter } from 'next/navigation';
 import { AuthorAvatar } from '@/components/common/AuthorAvatar';
+import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
 
 interface BookTopInfoProps {
     record: any;
@@ -153,13 +154,12 @@ export default function BookTopInfo({
                                     </div>
                                 </div>
 
+                                {/* 💡 [적용] SmartTruncatedText 컴포넌트를 사용하여 설명 텍스트를 처리합니다. */}
                                 <div className="mb-6">
-                                    <Tooltip content={displayDesc !== "상세 설명이 없습니다." ? displayDesc : null} position="bottom">
-                                        {/* 💡 기획자님 표준: 본문 폰트 14px 적용(text-[14px]) */}
-                                        <p className="text-[14px] text-gray-600 leading-relaxed font-medium line-clamp-3 break-keep cursor-pointer">
-                                            {displayDesc}
-                                        </p>
-                                    </Tooltip>
+                                    <SmartTruncatedText 
+                                        content={displayDesc}
+                                        textClassName="text-[14px] text-gray-600 leading-relaxed font-medium break-keep"
+                                    />
                                 </div>
 
                                 {/* 나의 독서 기록 게이지 바 */}

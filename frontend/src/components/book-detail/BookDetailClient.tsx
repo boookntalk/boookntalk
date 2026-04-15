@@ -154,14 +154,23 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                 {/* 1. 상단 브레드크럼 (화살표 대체) */}
                 <div className="w-full max-w-[1200px] mx-auto px-[var(--spacing-1cm,32px)] pt-6 pb-2">
                     <div className="flex items-center gap-1.5 text-[13px] font-bold text-gray-400">
+                        {/* 홈으로 이동 */}
                         <Link href="/" className="flex items-center gap-1 hover:text-[#0066cc] transition-colors">
                             <Home size={14} /> 홈
                         </Link>
                         <ChevronRight size={14} className="opacity-50" />
+                        
+                        {/* 내 서재 카테고리 (단순 텍스트 혹은 기본 리스트로 이동) */}
+                        <span className="cursor-default">내 서재</span>
+                        <ChevronRight size={14} className="opacity-50" />
+                        
+                        {/* 도서 목록으로 이동 */}
                         <Link href="/library" className="hover:text-[#0066cc] transition-colors">
-                            내 서재
+                            도서
                         </Link>
                         <ChevronRight size={14} className="opacity-50" />
+                        
+                        {/* 현재 도서 이름 (강조) */}
                         <span className="text-[#1d1d1f] truncate max-w-[200px] sm:max-w-md">
                             {work?.title || '도서 상세'}
                         </span>
