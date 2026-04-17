@@ -1,14 +1,12 @@
 // 파일 경로: src/components/book/BookTopInfo.tsx
-// 역할 및 기능: 도서 상세 페이지의 최상단 히어로 영역을 담당하며, 1cm 마스터 레이아웃에 맞게 컨테이너 제한을 해제하고 14px 표준 폰트를 적용했습니다.
 
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Star, ExternalLink, Layers, User, ArrowRight, Edit3, Trash2 } from 'lucide-react';
+import { Star, ExternalLink, Layers, ArrowRight, Edit3, Trash2 } from 'lucide-react';
 import { FloatingCover } from '@/components/common/FloatingCover';
-import { Tooltip } from '@/components/common/Tooltip';
 import { useRouter } from 'next/navigation';
 import { AuthorAvatar } from '@/components/common/AuthorAvatar';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
@@ -63,18 +61,34 @@ export default function BookTopInfo({
     const externalLink = `https://search.shopping.naver.com/book/search?query=${edition?.isbn}`;
     const displayDesc = (edition?.description || work?.description || "").trim() || "상세 설명이 없습니다.";
 
+    // =========================================================================
+    // 💡 [핵심 수정] 독서 상태 마커(O) 활성화 로직 강화
+    // 백엔드의 다양한 상태값(read, completed 등)과 % 진행률을 모두 조합하여 
+    // 현재 도달한 단계를 정확하게 계산해 냅니다.
+    // =========================================================================
     const currentPage = record?.current_page || 0;
     const totalPage = edition?.page_count || 1;
     const progressPercent = Math.min(Math.round((currentPage / totalPage) * 100), 100);
-    const currentStatus = (record?.status || '').toLowerCase();
     
-    const statusIndex = currentStatus === 'finished' ? 2 : currentStatus === 'reading' ? 1 : 0;
+    const rawStatus = (record?.status || '').toLowerCase();
+    let statusIndex = 0; // 0: 읽고 싶음 (기본)
+    
+    if (['reading', 'currently_reading'].includes(rawStatus) || (progressPercent > 0 && progressPercent < 100)) {
+        statusIndex = 1; // 1: 읽는 중 단계 도달
+    }
+    if (['finished', 'read', 'completed', 'done'].includes(rawStatus) || progressPercent >= 100) {
+        statusIndex = 2; // 2: 완독 단계 도달
+    }
+
+    const currentStatus = statusIndex === 0 ? 'wish' : statusIndex === 1 ? 'reading' : 'finished';
+    const barWidth = statusIndex === 2 ? '100%' : statusIndex === 0 ? '0%' : `${progressPercent}%`;
+    // =========================================================================
 
     return (
-        // 💡 [영점 조절] 부모 레이아웃이 여백을 잡아주므로, 불필요한 패딩(p, pt)과 최대 너비를 제거하고 max-w-[1200px] 컨테이너 중앙 정렬만 유지합니다.
         <section className="bg-transparent w-full relative z-[100]">
-            <div className="max-w-[1200px] mx-auto p-[var(--spacing-1cm,32px)]">
+            <div className="max-w-[1200px] mx-auto px-[var(--spacing-1cm,32px)] pt-4 pb-8">
                 <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,32px)] items-stretch">
+                    
                     {/* [좌측 영역]: 도서 표지 */}
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
                         <FloatingCover 
@@ -90,7 +104,7 @@ export default function BookTopInfo({
                         </div>
                     </div>
 
-                    {/* [우측 영역]: 2/3 (도서) 와 1/3 (작가) 로 강제 분할 */}
+                    {/* [우측 영역]: 2/3 (도서) 와 1/3 (작가) 분할 */}
                     <div className="flex-1 flex flex-col min-w-0">
                         <div className="flex flex-col lg:flex-row gap-8 w-full">
                             
@@ -154,7 +168,6 @@ export default function BookTopInfo({
                                     </div>
                                 </div>
 
-                                {/* 💡 [적용] SmartTruncatedText 컴포넌트를 사용하여 설명 텍스트를 처리합니다. */}
                                 <div className="mb-6">
                                     <SmartTruncatedText 
                                         content={displayDesc}
@@ -177,22 +190,25 @@ export default function BookTopInfo({
                                         </div>
                                     </div>
                                     <div>
-                                        {currentStatus === 'reading' && (
+                                        {statusIndex === 1 && (
                                             <div className="flex justify-between items-end mb-2">
                                                 <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">{progressPercent}%</span>
                                                 <span className="text-[13px] text-gray-500 font-bold">{currentPage} / {totalPage} 페이지</span>
                                             </div>
                                         )}
                                         <div className="relative h-2 bg-gray-200 rounded-full flex items-center mt-3 mb-2">
-                                            <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: currentStatus === 'wish' ? '0%' : currentStatus === 'finished' ? '100%' : `${progressPercent}%` }}></div>
-                                            <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                            <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                            <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 ${statusIndex === 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                            {/* 파란색 게이지 라인 */}
+                                            <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: barWidth }}></div>
+                                            
+                                            {/* 💡 [적용] 단계 도달 시 테두리 점등 로직 */}
+                                            <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 transition-colors duration-300 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                            <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                            <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 transition-colors duration-300 ${statusIndex >= 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
                                         </div>
                                         <div className="flex justify-between text-[11px] font-bold text-gray-400 relative">
-                                            <span className={`absolute left-0 -ml-1 ${statusIndex >= 0 ? 'text-[#0066cc]' : ''}`}>읽고 싶음</span>
-                                            <span className={`absolute left-1/2 -translate-x-1/2 ${statusIndex >= 1 ? 'text-[#0066cc]' : ''}`}>읽는 중</span>
-                                            <span className={`absolute right-0 -mr-1 ${statusIndex === 2 ? 'text-[#0066cc]' : ''}`}>완독</span>
+                                            <span className={`absolute left-0 -ml-1 transition-colors duration-300 ${statusIndex >= 0 ? 'text-[#0066cc]' : ''}`}>읽고 싶음</span>
+                                            <span className={`absolute left-1/2 -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'text-[#0066cc]' : ''}`}>읽는 중</span>
+                                            <span className={`absolute right-0 -mr-1 transition-colors duration-300 ${statusIndex >= 2 ? 'text-[#0066cc]' : ''}`}>완독</span>
                                         </div>
                                     </div>
                                 </div>
@@ -212,7 +228,6 @@ export default function BookTopInfo({
                                                 </div>
                                             </div>
                                             
-                                            {/* 💡 기획자님 표준: 본문 폰트 14px 적용(text-[14px]) */}
                                             <p className="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-4 mb-4">
                                                 {authorInfo.bio || "등록된 저자 소개가 없습니다."}
                                             </p>

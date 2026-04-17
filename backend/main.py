@@ -22,6 +22,7 @@ from services.author_service import get_or_create_contributor
 from utils.global_category_mapper import get_category_hierarchy # ▼▼▼ [NEW] 글로벌 장르 파서 임포트 ▼▼▼
 from services.trending_service import update_global_trending_authors
 from services.external_api_service import update_external_book_cache
+from sqlalchemy import or_ # 상단에 없을 경우를 대비해 필요합니다.
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 import subprocess
@@ -296,7 +297,6 @@ def generate_btk_isbn():
 # -------------------------------------------------------------------
 # [추가] 키워드 통합 검색 API (도서명 / 저자명)
 # -------------------------------------------------------------------
-from sqlalchemy import or_ # 상단에 없을 경우를 대비해 필요합니다.
 
 # =========================================================
 # 1. 키워드 검색 API (BoooknTalk 로컬 DB 전용 검색)
