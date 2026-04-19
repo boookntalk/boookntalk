@@ -187,6 +187,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                         onRecordChange={(id) => router.push(`/library/${id}`)}
                         authorInfo={DUMMY_AUTHOR_INFO}
                         authorOtherBooks={DUMMY_OTHER_BOOKS}
+                        currentUser={user}
                     />
                 </div>
 

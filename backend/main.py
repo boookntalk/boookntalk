@@ -22,7 +22,6 @@ from services.author_service import get_or_create_contributor
 from utils.global_category_mapper import get_category_hierarchy # ▼▼▼ [NEW] 글로벌 장르 파서 임포트 ▼▼▼
 from services.trending_service import update_global_trending_authors
 from services.external_api_service import update_external_book_cache
-from sqlalchemy import or_ # 상단에 없을 경우를 대비해 필요합니다.
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 import subprocess
@@ -357,6 +356,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
     [상용화(BoooknTalk Pro) 대비 2 Tier 검색 아키텍처] 
     1. 국립중앙도서관(NLK): 법적 제약 없는 완벽한 핵심 서지정보 (1순위)
     2. 네이버 오픈 API: 표지 이미지 및 책 소개글 보완 (2순위)
+    3. 구글 도서 API : 쪽수 정보
     """
     
     clean_isbn = isbn.replace("-", "").strip()
@@ -489,6 +489,23 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             import re
             nums = re.findall(r'\d+', str(page_raw))
             if nums: page_count = int(nums[0])
+
+        # ▼▼▼ [NEW] 구글 도서 API 쪽수 심폐소생술 ▼▼▼
+        if page_count == 0 and GOOGLE_BOOKS_API_KEY:
+            try:
+                google_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{clean_isbn}&key={GOOGLE_BOOKS_API_KEY}"
+                google_res = await client.get(google_url, timeout=5.0)
+                if google_res.status_code == 200:
+                    g_data = google_res.json()
+                    g_items = g_data.get("items", [])
+                    if g_items:
+                        # 구글 API에서 pageCount 추출
+                        g_page = g_items[0].get("volumeInfo", {}).get("pageCount", 0)
+                        if g_page > 0:
+                            page_count = g_page
+                            print(f"🚀 [Google Books API] 쪽수 복구 성공: {page_count}쪽")
+            except Exception as e:
+                print(f"⚠️ 구글 도서 API 호출 에러: {e}")
 
         # ==========================================
         # ▼▼▼ [NEW: 새로 추가되는 구역] 정제기 통과하여 표준 장르 확정 ▼▼▼
@@ -1626,42 +1643,42 @@ async def get_user_short_reviews(user_email: str, db: Session = Depends(get_db))
 #         "message": f"User {user.nickname} liked {prefix} {target_id}"
 #     }
 
-# # main.py 파일 맨 아래쪽에 추가해 주세요.
+# # # main.py 파일 맨 아래쪽에 추가해 주세요.
 
-@app.get("/api/admin/sync-covers")
-async def sync_existing_covers(
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """
-    [관리자 전용] 기존에 등록된 도서 중 외부 URL(네이버 등)을 
-    사용하고 있는 도서를 찾아 로컬로 일괄 다운로드합니다.
-    """
-    # 1. DB에서 로컬 주소(localhost)가 아닌 외부 http 주소를 가진 책들만 골라냅니다.
-    editions_to_update = db.query(models.Edition).filter(
-        models.Edition.cover_image.isnot(None),
-        models.Edition.cover_image.like("http%"),
-        ~models.Edition.cover_image.like("%localhost%"),       # 우리 서버 주소 제외
-        ~models.Edition.cover_image.like("%/static/covers/%")  # 이미 다운로드된 주소 제외
-    ).all()
+# @app.get("/api/admin/sync-covers")
+# async def sync_existing_covers(
+#     background_tasks: BackgroundTasks,
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     [관리자 전용] 기존에 등록된 도서 중 외부 URL(네이버 등)을 
+#     사용하고 있는 도서를 찾아 로컬로 일괄 다운로드합니다.
+#     """
+#     # 1. DB에서 로컬 주소(localhost)가 아닌 외부 http 주소를 가진 책들만 골라냅니다.
+#     editions_to_update = db.query(models.Edition).filter(
+#         models.Edition.cover_image.isnot(None),
+#         models.Edition.cover_image.like("http%"),
+#         ~models.Edition.cover_image.like("%localhost%"),       # 우리 서버 주소 제외
+#         ~models.Edition.cover_image.like("%/static/covers/%")  # 이미 다운로드된 주소 제외
+#     ).all()
 
-    count = 0
-    # 2. 찾아낸 책들을 하나씩 백그라운드 다운로드 대기열에 넣습니다.
-    for edition in editions_to_update:
-        background_tasks.add_task(
-            download_and_update_cover,
-            edition.id,
-            edition.cover_image,
-            SessionLocal
-        )
-        count += 1
+#     count = 0
+#     # 2. 찾아낸 책들을 하나씩 백그라운드 다운로드 대기열에 넣습니다.
+#     for edition in editions_to_update:
+#         background_tasks.add_task(
+#             download_and_update_cover,
+#             edition.id,
+#             edition.cover_image,
+#             SessionLocal
+#         )
+#         count += 1
 
-    # 3. 작업 지시 완료 메시지 반환
-    return {
-        "status": "success",
-        "message": f"총 {count}권의 도서 커버 이미지를 찾아 다운로드를 시작했습니다!",
-        "target_editions": [ed.id for ed in editions_to_update]
-    }
+#     # 3. 작업 지시 완료 메시지 반환
+#     return {
+#         "status": "success",
+#         "message": f"총 {count}권의 도서 커버 이미지를 찾아 다운로드를 시작했습니다!",
+#         "target_editions": [ed.id for ed in editions_to_update]
+#     }
 
 # -------------------------------------------------------------------
 # [NEW] 긴줄평 (Long Review) API (조회, 저장/수정, 삭제)
@@ -2554,203 +2571,7 @@ async def get_long_review_detail_direct(review_id: int, db: Session = Depends(ge
             "cover": edition.cover_image
         }
     }
-
-@app.get("/api/admin/sync-authors")
-async def sync_existing_authors(db: Session = Depends(get_db)):
-    """
-    [관리자 전용] 기존 DB에 저장된 모든 Work의 author 문자열을 
-    새로 업그레이드된 parse_author_string 엔진으로 다시 분석하여
-    Contributor 및 WorkContributor 테이블을 완벽하게 재정립합니다.
-    """
-    works = db.query(models.Work).all()
-    updated_count = 0
-
-    for work in works:
-        if not work.author:
-            continue
-
-        # 1. 기존에 연결된 낡은 참여자 연결 고리(WorkContributor)를 모두 끊습니다.
-        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
-        
-        # 2. 업그레이드된 새 엔진으로 원본 문자열을 다시 정교하게 파싱합니다.
-        parsed_authors = parse_author_string(work.author)
-        
-        # 3. 새로운 규칙에 맞게 DB에 다시 예쁘게 관계를 맺어줍니다.
-        for p_auth in parsed_authors:
-            # 해당 이름의 참여자가 DB에 있는지 확인 (없으면 새로 생성)
-            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
-            
-            if not contributor:
-                # ▼▼▼ [수정됨] name과 original_name을 동시에 완벽하게 저장! ▼▼▼
-                contributor = models.Contributor(
-                    name=p_auth['name'],
-                    original_name=p_auth.get('original_name')
-                )
-                db.add(contributor)
-                db.flush() # ID를 즉시 발급받기 위해 flush
-            
-            # ▼▼▼ [NEW] 이미 등록된 작가인데 원어 이름이 없다면 추가로 채워넣기 ▼▼▼
-            elif p_auth.get('original_name') and not contributor.original_name:
-                contributor.original_name = p_auth.get('original_name')
-                db.flush()
-
-            # 작품과 참여자를 새로운 역할(role)로 연결
-            link = models.WorkContributor(
-                work_id=work.id, 
-                contributor_id=contributor.id, 
-                role=p_auth['role']
-            )
-            db.add(link)
-
-        updated_count += 1
-
-    # 4. 모든 작업이 성공하면 최종 커밋!
-    try:
-        db.commit()
-        return {
-            "status": "success", 
-            "message": f"총 {updated_count}개 작품의 참여자 데이터가 새 규칙에 맞게 완벽히 정제되었습니다!"
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"데이터 정제 중 오류 발생: {str(e)}")
     
-@app.get("/api/admin/cleanup-contributors")
-async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
-    """
-    [관리자 전용] 어떤 작품(Work)과도 연결되지 않은 찌꺼기(고아) 참여자 데이터를
-    contributors 테이블에서 영구적으로 일괄 삭제합니다.
-    """
-    # 1. 현재 작품과 정상적으로 연결된 참여자들의 ID 목록을 뽑아냅니다.
-    active_contributor_ids = db.query(models.WorkContributor.contributor_id).distinct()
-    
-    # 2. 이 연결된 ID 목록에 포함되지 않는(not_in) 고아 참여자들을 찾아 전부 삭제합니다.
-    deleted_count = db.query(models.Contributor).filter(
-        models.Contributor.id.not_in(active_contributor_ids)
-    ).delete(synchronize_session=False)
-    
-    # 3. 데이터베이스에 삭제를 최종 확정합니다.
-    try:
-        db.commit()
-        return {
-            "status": "success", 
-            "message": f"대청소 완료! 총 {deleted_count}개의 찌꺼기 참여자 데이터가 영구 삭제되었습니다."
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"데이터 청소 중 오류 발생: {str(e)}")
-    
-@app.get("/api/admin/merge-contributors")
-async def merge_specific_contributors(
-    target_id: int, 
-    source_ids: str, 
-    db: Session = Depends(get_db)
-):
-    """
-    [관리자 전용] 파편화된 작가들을 한 명(target_id)으로 강제 흡수 병합합니다.
-    사용법: /api/admin/merge-contributors?target_id=58&source_ids=59,60
-    """
-    try:
-        # "59,60" 문자열을 [59, 60] 리스트로 변환
-        source_id_list = [int(x.strip()) for x in source_ids.split(",")]
-        
-        for source_id in source_id_list:
-            if source_id == target_id: continue # 자기 자신은 무시
-            
-            # 1. source_id(가짜 톨킨)가 가진 작품 연결고리를 모두 찾습니다.
-            links = db.query(models.WorkContributor).filter(models.WorkContributor.contributor_id == source_id).all()
-            
-            for link in links:
-                # 2. target_id(진짜 톨킨)가 이미 이 작품과 연결되어 있는지 확인
-                exists = db.query(models.WorkContributor).filter(
-                    models.WorkContributor.work_id == link.work_id,
-                    models.WorkContributor.contributor_id == target_id,
-                    models.WorkContributor.role == link.role
-                ).first()
-
-                if exists:
-                    # 진짜 톨킨이 이미 연결되어 있다면, 가짜 연결고리는 중복이므로 삭제
-                    db.delete(link)
-                else:
-                    # 연결되어 있지 않다면, 가짜 연결고리의 주인을 '진짜 톨킨(target_id)'으로 바꿈!
-                    link.contributor_id = target_id
-            
-            # 3. 모든 책을 빼앗긴 가짜 톨킨(source_id)의 숨통을 끊습니다(영구 삭제).
-            source_contributor = db.query(models.Contributor).filter(models.Contributor.id == source_id).first()
-            if source_contributor:
-                db.delete(source_contributor)
-
-        db.commit()
-        return {
-            "status": "success", 
-            "message": f"파편화된 작가들({source_ids}번)이 진짜 작가({target_id}번)로 완벽하게 흡수 병합되었습니다!"
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ==========================================
-# [관리자 전용] 과거 도서 장르 일괄 세탁(마이그레이션) API
-# ==========================================
-# ▼▼▼ [수정] 네이버 대신 알라딘 API를 사용하여 완벽하게 카테고리를 복구하는 코드 ▼▼▼
-
-@app.get("/api/admin/sync-genres")
-async def sync_existing_genres(db: Session = Depends(get_db)):
-    """
-    [관리자 전용] '기타'로 오염된 도서들을 알라딘 API(ItemLookUp)를 통해 심층 복구합니다.
-    """
-    works = db.query(models.Work).filter(models.Work.category == "기타").all()
-    updated_count = 0
-
-    aladin_key = os.getenv("ALADIN_TTB_KEY", "")
-    if not aladin_key:
-        return {"status": "error", "message": "ALADIN_TTB_KEY가 설정되어 있지 않습니다."}
-
-    async with httpx.AsyncClient() as client:
-        for work in works:
-            edition = db.query(models.Edition).filter(models.Edition.work_id == work.id).first()
-            if not edition or not edition.isbn:
-                continue
-            
-            raw_kdc = edition.kdc_code or ""
-            new_cat = "기타"
-            
-            # 1. KDC 코드로 1차 복구 시도
-            if raw_kdc:
-                new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category="")
-            
-            # 2. KDC로 실패했다면 알라딘 API로 카테고리 심폐소생술!
-            if new_cat == "기타":
-                clean_isbn = edition.isbn.replace("-", "").strip()
-                # 💡 [핵심] 알라딘 API로 정확한 1권짜리 도서의 상세 정보를 요청합니다.
-                aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={aladin_key}&itemIdType=ISBN&ItemId={clean_isbn}&output=js&Version=20131101"
-                
-                try:
-                    res = await client.get(aladin_url, timeout=5.0)
-                    if res.status_code == 200:
-                        data = res.json()
-                        items = data.get("item", [])
-                        if items:
-                            # 알라딘이 주는 아주 상세하고 완벽한 카테고리 문자열 (예: "국내도서>소설/시/희곡>한국소설")
-                            raw_aladin_cat = items[0].get("categoryName", "")
-                            
-                            # 우리의 궁극의 정제기 엔진에 투입!
-                            new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category=raw_aladin_cat)
-                            print(f"🔍 [복구 성공] {work.title} : {raw_aladin_cat} ➡️ {new_cat}")
-                except Exception as e:
-                    print(f"⚠️ 알라딘 API 복구 에러: {e}")
-            
-            # 3. 드디어 '기타'에서 탈출했다면 DB에 진짜 저장!
-            if new_cat != "기타":
-                work.category = new_cat
-                updated_count += 1
-                db.commit()
-
-    return {
-        "status": "success", 
-        "message": f"장르 심폐소생술 완벽 종료! 총 {updated_count}개 작품이 '기타'에서 탈출했습니다."
-    }
-
 # ===================================================================
 # [NEW] 나의 긴줄평 전체 목록 조회 전용 API (도돌이표 종결자!)
 # ===================================================================
@@ -2804,94 +2625,290 @@ async def get_user_long_reviews(user_email: str, db: Session = Depends(get_db)):
         
     return results
 
-@app.post("/api/admin/retrain-ai")
-async def retrain_ai_model(user_email: str):
-    """
-    함수 기능: 마스터 계정 검증 후 AI 장르 분류기 재학습 스크립트를 백그라운드에서 실행하고, 
-    새로 구워진 모델을 메모리에 즉시 다시 불러옵니다(Hot Reload).
-    """
-    # 💡 [핵심 방어막] boookntalk 마스터 계정만 실행 가능!
-    if not user_email.startswith("boookntalk"):
-        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 계정만 접근 가능합니다.")
-    
-    try:
-        # 1. 아까 만든 학습 스크립트 실행 (DB 연동 버전으로 추후 업그레이드 예정)
-        subprocess.run(["python", "utils/train_model.py"], check=True)
-        
-        # 2. 핫 리로드 (메모리의 뇌를 새 것으로 교체)
-        from utils.genre_parser import reload_ai_model
-        reload_ai_model()
-        
-        return {"status": "success", "message": "BoooknTalk AI가 새롭게 진화했습니다!"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI 학습 중 오류 발생: {str(e)}")
+# @app.get("/api/admin/sync-authors")
+# async def sync_existing_authors(db: Session = Depends(get_db)):
+#     """
+#     [관리자 전용] 기존 DB에 저장된 모든 Work의 author 문자열을 
+#     새로 업그레이드된 parse_author_string 엔진으로 다시 분석하여
+#     Contributor 및 WorkContributor 테이블을 완벽하게 재정립합니다.
+#     """
+#     works = db.query(models.Work).all()
+#     updated_count = 0
 
-@app.get("/api/admin/refresh-trending")
-async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
-    """
-    [관리자 전용] 사색에 잠기게 한 작가들(GlobalTrendingAuthor) 캐시 테이블을 
-    즉시 삭제하고, 가장 최신의 정제된 데이터로 다시 집계하여 갱신합니다.
-    """
-    result = update_global_trending_authors(db)
-    return result
+#     for work in works:
+#         if not work.author:
+#             continue
 
-@app.get("/api/admin/master-cleanup")
-async def execute_master_cleanup(db: Session = Depends(get_db)):
-    """
-    [최종 병기] 
-    1. Work 테이블의 원본 author 문자열 자체를 깨끗하게 세탁
-    2. Contributor 매핑 초기화 및 재생성
-    3. 찌꺼기(고아) 작가 데이터 완전 삭제
-    4. 랭킹 스냅샷 재갱신
-    이 모든 과정을 단 한 번의 호출로 완벽하게 수행합니다.
-    """
-    from utils.author_parser import parse_author_string
-    from services.trending_service import update_global_trending_authors
-    
-    # 1. 모든 책(Work) 데이터를 가져옵니다.
-    works = db.query(models.Work).all()
-    for work in works:
-        if not work.author: continue
+#         # 1. 기존에 연결된 낡은 참여자 연결 고리(WorkContributor)를 모두 끊습니다.
+#         db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
         
-        # 파서 엔진을 돌려 깨끗한 배열을 얻습니다.
-        parsed = parse_author_string(work.author)
-        if not parsed: continue
+#         # 2. 업그레이드된 새 엔진으로 원본 문자열을 다시 정교하게 파싱합니다.
+#         parsed_authors = parse_author_string(work.author)
         
-        # ▼▼▼ [핵심 수술] Work 마스터 테이블의 author 자체를 대표 작가 이름으로 영구 교체! ▼▼▼
-        main_authors = [p['name'] for p in parsed if p['role'] == 'AUTHOR']
-        clean_str = ", ".join(main_authors) if main_authors else parsed[0]['name']
-        work.author = clean_str # 이제 원본 텍스트 자체가 깨끗해집니다.
-        
-        # 기존 연결 고리 끊기
-        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
-        
-        # 새 연결 고리 맺기
-        for p_auth in parsed:
-            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
-            if not contributor:
-                contributor = models.Contributor(name=p_auth['name'], original_name=p_auth.get('original_name'))
-                db.add(contributor)
-                db.flush()
+#         # 3. 새로운 규칙에 맞게 DB에 다시 예쁘게 관계를 맺어줍니다.
+#         for p_auth in parsed_authors:
+#             # 해당 이름의 참여자가 DB에 있는지 확인 (없으면 새로 생성)
+#             contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
             
-            link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
-            db.add(link)
+#             if not contributor:
+#                 # ▼▼▼ [수정됨] name과 original_name을 동시에 완벽하게 저장! ▼▼▼
+#                 contributor = models.Contributor(
+#                     name=p_auth['name'],
+#                     original_name=p_auth.get('original_name')
+#                 )
+#                 db.add(contributor)
+#                 db.flush() # ID를 즉시 발급받기 위해 flush
             
-    db.commit()
+#             # ▼▼▼ [NEW] 이미 등록된 작가인데 원어 이름이 없다면 추가로 채워넣기 ▼▼▼
+#             elif p_auth.get('original_name') and not contributor.original_name:
+#                 contributor.original_name = p_auth.get('original_name')
+#                 db.flush()
+
+#             # 작품과 참여자를 새로운 역할(role)로 연결
+#             link = models.WorkContributor(
+#                 work_id=work.id, 
+#                 contributor_id=contributor.id, 
+#                 role=p_auth['role']
+#             )
+#             db.add(link)
+
+#         updated_count += 1
+
+#     # 4. 모든 작업이 성공하면 최종 커밋!
+#     try:
+#         db.commit()
+#         return {
+#             "status": "success", 
+#             "message": f"총 {updated_count}개 작품의 참여자 데이터가 새 규칙에 맞게 완벽히 정제되었습니다!"
+#         }
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(status_code=500, detail=f"데이터 정제 중 오류 발생: {str(e)}")
     
-    # 2. 연결되지 않은 찌꺼기 작가(': 시드니 셀던' 등) 영구 삭제
-    active_ids = db.query(models.WorkContributor.contributor_id).distinct()
-    db.query(models.Contributor).filter(models.Contributor.id.not_in(active_ids)).delete(synchronize_session=False)
-    db.commit()
+# @app.get("/api/admin/cleanup-contributors")
+# async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
+#     """
+#     [관리자 전용] 어떤 작품(Work)과도 연결되지 않은 찌꺼기(고아) 참여자 데이터를
+#     contributors 테이블에서 영구적으로 일괄 삭제합니다.
+#     """
+#     # 1. 현재 작품과 정상적으로 연결된 참여자들의 ID 목록을 뽑아냅니다.
+#     active_contributor_ids = db.query(models.WorkContributor.contributor_id).distinct()
     
-    # 3. 트렌딩(사색 작가) 스냅샷 갱신
-    update_global_trending_authors(db)
+#     # 2. 이 연결된 ID 목록에 포함되지 않는(not_in) 고아 참여자들을 찾아 전부 삭제합니다.
+#     deleted_count = db.query(models.Contributor).filter(
+#         models.Contributor.id.not_in(active_contributor_ids)
+#     ).delete(synchronize_session=False)
     
-    return {"status": "success", "message": "마스터 클린업 완료! BoooknTalk의 모든 작가 데이터가 완벽하게 정제되었습니다."}
+#     # 3. 데이터베이스에 삭제를 최종 확정합니다.
+#     try:
+#         db.commit()
+#         return {
+#             "status": "success", 
+#             "message": f"대청소 완료! 총 {deleted_count}개의 찌꺼기 참여자 데이터가 영구 삭제되었습니다."
+#         }
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(status_code=500, detail=f"데이터 청소 중 오류 발생: {str(e)}")
+    
+# @app.get("/api/admin/merge-contributors")
+# async def merge_specific_contributors(
+#     target_id: int, 
+#     source_ids: str, 
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     [관리자 전용] 파편화된 작가들을 한 명(target_id)으로 강제 흡수 병합합니다.
+#     사용법: /api/admin/merge-contributors?target_id=58&source_ids=59,60
+#     """
+#     try:
+#         # "59,60" 문자열을 [59, 60] 리스트로 변환
+#         source_id_list = [int(x.strip()) for x in source_ids.split(",")]
+        
+#         for source_id in source_id_list:
+#             if source_id == target_id: continue # 자기 자신은 무시
+            
+#             # 1. source_id(가짜 톨킨)가 가진 작품 연결고리를 모두 찾습니다.
+#             links = db.query(models.WorkContributor).filter(models.WorkContributor.contributor_id == source_id).all()
+            
+#             for link in links:
+#                 # 2. target_id(진짜 톨킨)가 이미 이 작품과 연결되어 있는지 확인
+#                 exists = db.query(models.WorkContributor).filter(
+#                     models.WorkContributor.work_id == link.work_id,
+#                     models.WorkContributor.contributor_id == target_id,
+#                     models.WorkContributor.role == link.role
+#                 ).first()
+
+#                 if exists:
+#                     # 진짜 톨킨이 이미 연결되어 있다면, 가짜 연결고리는 중복이므로 삭제
+#                     db.delete(link)
+#                 else:
+#                     # 연결되어 있지 않다면, 가짜 연결고리의 주인을 '진짜 톨킨(target_id)'으로 바꿈!
+#                     link.contributor_id = target_id
+            
+#             # 3. 모든 책을 빼앗긴 가짜 톨킨(source_id)의 숨통을 끊습니다(영구 삭제).
+#             source_contributor = db.query(models.Contributor).filter(models.Contributor.id == source_id).first()
+#             if source_contributor:
+#                 db.delete(source_contributor)
+
+#         db.commit()
+#         return {
+#             "status": "success", 
+#             "message": f"파편화된 작가들({source_ids}번)이 진짜 작가({target_id}번)로 완벽하게 흡수 병합되었습니다!"
+#         }
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# [관리자 전용] 과거 도서 장르 일괄 세탁(마이그레이션) API
+# ==========================================
+# ▼▼▼ [수정] 네이버 대신 알라딘 API를 사용하여 완벽하게 카테고리를 복구하는 코드 ▼▼▼
+
+# @app.get("/api/admin/sync-genres")
+# async def sync_existing_genres(db: Session = Depends(get_db)):
+#     """
+#     [관리자 전용] '기타'로 오염된 도서들을 알라딘 API(ItemLookUp)를 통해 심층 복구합니다.
+#     """
+#     works = db.query(models.Work).filter(models.Work.category == "기타").all()
+#     updated_count = 0
+
+#     aladin_key = os.getenv("ALADIN_TTB_KEY", "")
+#     if not aladin_key:
+#         return {"status": "error", "message": "ALADIN_TTB_KEY가 설정되어 있지 않습니다."}
+
+#     async with httpx.AsyncClient() as client:
+#         for work in works:
+#             edition = db.query(models.Edition).filter(models.Edition.work_id == work.id).first()
+#             if not edition or not edition.isbn:
+#                 continue
+            
+#             raw_kdc = edition.kdc_code or ""
+#             new_cat = "기타"
+            
+#             # 1. KDC 코드로 1차 복구 시도
+#             if raw_kdc:
+#                 new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category="")
+            
+#             # 2. KDC로 실패했다면 알라딘 API로 카테고리 심폐소생술!
+#             if new_cat == "기타":
+#                 clean_isbn = edition.isbn.replace("-", "").strip()
+#                 # 💡 [핵심] 알라딘 API로 정확한 1권짜리 도서의 상세 정보를 요청합니다.
+#                 aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={aladin_key}&itemIdType=ISBN&ItemId={clean_isbn}&output=js&Version=20131101"
+                
+#                 try:
+#                     res = await client.get(aladin_url, timeout=5.0)
+#                     if res.status_code == 200:
+#                         data = res.json()
+#                         items = data.get("item", [])
+#                         if items:
+#                             # 알라딘이 주는 아주 상세하고 완벽한 카테고리 문자열 (예: "국내도서>소설/시/희곡>한국소설")
+#                             raw_aladin_cat = items[0].get("categoryName", "")
+                            
+#                             # 우리의 궁극의 정제기 엔진에 투입!
+#                             new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category=raw_aladin_cat)
+#                             print(f"🔍 [복구 성공] {work.title} : {raw_aladin_cat} ➡️ {new_cat}")
+#                 except Exception as e:
+#                     print(f"⚠️ 알라딘 API 복구 에러: {e}")
+            
+#             # 3. 드디어 '기타'에서 탈출했다면 DB에 진짜 저장!
+#             if new_cat != "기타":
+#                 work.category = new_cat
+#                 updated_count += 1
+#                 db.commit()
+
+#     return {
+#         "status": "success", 
+#         "message": f"장르 심폐소생술 완벽 종료! 총 {updated_count}개 작품이 '기타'에서 탈출했습니다."
+#     }
+
+# @app.post("/api/admin/retrain-ai")
+# async def retrain_ai_model(user_email: str):
+#     """
+#     함수 기능: 마스터 계정 검증 후 AI 장르 분류기 재학습 스크립트를 백그라운드에서 실행하고, 
+#     새로 구워진 모델을 메모리에 즉시 다시 불러옵니다(Hot Reload).
+#     """
+#     # 💡 [핵심 방어막] boookntalk 마스터 계정만 실행 가능!
+#     if not user_email.startswith("boookntalk"):
+#         raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 계정만 접근 가능합니다.")
+    
+#     try:
+#         # 1. 아까 만든 학습 스크립트 실행 (DB 연동 버전으로 추후 업그레이드 예정)
+#         subprocess.run(["python", "utils/train_model.py"], check=True)
+        
+#         # 2. 핫 리로드 (메모리의 뇌를 새 것으로 교체)
+#         from utils.genre_parser import reload_ai_model
+#         reload_ai_model()
+        
+#         return {"status": "success", "message": "BoooknTalk AI가 새롭게 진화했습니다!"}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"AI 학습 중 오류 발생: {str(e)}")
+
+# @app.get("/api/admin/refresh-trending")
+# async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
+#     """
+#     [관리자 전용] 사색에 잠기게 한 작가들(GlobalTrendingAuthor) 캐시 테이블을 
+#     즉시 삭제하고, 가장 최신의 정제된 데이터로 다시 집계하여 갱신합니다.
+#     """
+#     result = update_global_trending_authors(db)
+#     return result
+
+# @app.get("/api/admin/master-cleanup")
+# async def execute_master_cleanup(db: Session = Depends(get_db)):
+#     """
+#     [최종 병기] 
+#     1. Work 테이블의 원본 author 문자열 자체를 깨끗하게 세탁
+#     2. Contributor 매핑 초기화 및 재생성
+#     3. 찌꺼기(고아) 작가 데이터 완전 삭제
+#     4. 랭킹 스냅샷 재갱신
+#     이 모든 과정을 단 한 번의 호출로 완벽하게 수행합니다.
+#     """
+#     from utils.author_parser import parse_author_string
+#     from services.trending_service import update_global_trending_authors
+    
+#     # 1. 모든 책(Work) 데이터를 가져옵니다.
+#     works = db.query(models.Work).all()
+#     for work in works:
+#         if not work.author: continue
+        
+#         # 파서 엔진을 돌려 깨끗한 배열을 얻습니다.
+#         parsed = parse_author_string(work.author)
+#         if not parsed: continue
+        
+#         # ▼▼▼ [핵심 수술] Work 마스터 테이블의 author 자체를 대표 작가 이름으로 영구 교체! ▼▼▼
+#         main_authors = [p['name'] for p in parsed if p['role'] == 'AUTHOR']
+#         clean_str = ", ".join(main_authors) if main_authors else parsed[0]['name']
+#         work.author = clean_str # 이제 원본 텍스트 자체가 깨끗해집니다.
+        
+#         # 기존 연결 고리 끊기
+#         db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
+        
+#         # 새 연결 고리 맺기
+#         for p_auth in parsed:
+#             contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+#             if not contributor:
+#                 contributor = models.Contributor(name=p_auth['name'], original_name=p_auth.get('original_name'))
+#                 db.add(contributor)
+#                 db.flush()
+            
+#             link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
+#             db.add(link)
+            
+#     db.commit()
+    
+#     # 2. 연결되지 않은 찌꺼기 작가(': 시드니 셀던' 등) 영구 삭제
+#     active_ids = db.query(models.WorkContributor.contributor_id).distinct()
+#     db.query(models.Contributor).filter(models.Contributor.id.not_in(active_ids)).delete(synchronize_session=False)
+#     db.commit()
+    
+#     # 3. 트렌딩(사색 작가) 스냅샷 갱신
+#     update_global_trending_authors(db)
+    
+#     return {"status": "success", "message": "마스터 클린업 완료! BoooknTalk의 모든 작가 데이터가 완벽하게 정제되었습니다."}
 
 # 기능: 외부 도서 API 데이터를 수동으로 즉시 갱신하는 어드민용 트리거
-@app.post("/api/admin/refresh-discovery", tags=["Admin"])
-def refresh_discovery_data(db: Session = Depends(get_db)):
-    success = update_external_book_cache(db)
-    if success:
-        return {"message": "디스커버리 도서 데이터가 성공적으로 갱신되었습니다."}
-    raise HTTPException(status_code=500, detail="데이터 수집에 실패했거나 가져올 데이터가 없습니다.")
+# @app.post("/api/admin/refresh-discovery", tags=["Admin"])
+# def refresh_discovery_data(db: Session = Depends(get_db)):
+#     success = update_external_book_cache(db)
+#     if success:
+#         return {"message": "디스커버리 도서 데이터가 성공적으로 갱신되었습니다."}
+#     raise HTTPException(status_code=500, detail="데이터 수집에 실패했거나 가져올 데이터가 없습니다.")

@@ -1397,7 +1397,6 @@ PROJECT ROOT: boookntalk
 │   ├── src
 │   │   ├── app
 │   │   │   ├── (main)
-│   │   │   │   ├── community
 │   │   │   │   ├── layout.tsx
 │   │   │   │   ├── library
 │   │   │   │   │   ├── BookDetailForm.tsx
@@ -1439,8 +1438,6 @@ PROJECT ROOT: boookntalk
 │   │   │   │   │   └── short-reviews
 │   │   │   │   │       ├── ShortReviewsClient.tsx
 │   │   │   │   │       └── page.tsx
-│   │   │   │   ├── mypage
-│   │   │   │   │   └── page.tsx
 │   │   │   │   ├── page.tsx
 │   │   │   │   ├── review
 │   │   │   │   │   └── [review_id]
@@ -1449,7 +1446,6 @@ PROJECT ROOT: boookntalk
 │   │   │   │   │   └── page.tsx
 │   │   │   │   ├── square
 │   │   │   │   │   └── page.tsx
-│   │   │   │   ├── statistics
 │   │   │   │   └── works
 │   │   │   │       └── [id]
 │   │   │   │           └── page.tsx
@@ -1458,7 +1454,9 @@ PROJECT ROOT: boookntalk
 │   │   │   │       └── [...nextauth]
 │   │   │   │           └── route.ts
 │   │   │   ├── globals.css
-│   │   │   └── layout.tsx
+│   │   │   ├── layout.tsx
+│   │   │   └── mypage
+│   │   │       └── page.tsx
 │   │   ├── components
 │   │   │   ├── AddBookFAB.tsx
 │   │   │   ├── AddBookModal.tsx
@@ -1467,6 +1465,7 @@ PROJECT ROOT: boookntalk
 │   │   │   ├── GlobalAddBookFAB.tsx
 │   │   │   ├── admin
 │   │   │   │   ├── AdminPanel.tsx
+│   │   │   │   ├── AdminWorkMerge.tsx
 │   │   │   │   └── AuthorImageManager.tsx
 │   │   │   ├── book-detail
 │   │   │   │   ├── BookDetailClient.tsx
@@ -7642,6 +7641,272 @@ html, body {
 
 
 ============================================================
+FILE PATH: frontend/src/app/mypage/page.tsx
+============================================================
+// 파일 경로: frontend/src/app/mypage/page.tsx
+// 역할 및 기능: 유저의 독서 통계 대시보드와 관리자 전용 제어 패널을 탭 형태로 스위칭하여 보여주는 페이지 컴포넌트입니다.
+
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { useSession } from "next-auth/react";
+import { useRouter } from 'next/navigation';
+import Container from '@/components/layout/Container';
+import Footer from '@/components/layout/Footer';
+import { Loader2, BookOpen, Star, FileText, TrendingUp, Edit3, Hash, BarChart3, ShieldCheck } from 'lucide-react';
+import ProfileEditModal from '@/components/profile/ProfileEditModal';
+import AdminPanel from '@/components/admin/AdminPanel';
+import AdminWorkMerge from '@/components/admin/AdminWorkMerge';
+
+// 함수 기능: 마이페이지 레이아웃 렌더링 및 통계/관리자 탭 스위칭
+export default function MyPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
+    const [statsData, setStatsData] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'admin'>('dashboard');
+
+    const currentUserEmail = session?.user?.email?.toLowerCase().trim() || "";
+    const isAdmin = currentUserEmail === 'boookntalk@gmail.com';
+
+    useEffect(() => {
+        if (status === 'unauthenticated') {
+            router.push('/');
+            return;
+        }
+
+        if (status === 'authenticated' && currentUserEmail) {
+            fetchStats(currentUserEmail);
+        } else if (status === 'authenticated') {
+            setIsLoading(false);
+        }
+    }, [status, session, currentUserEmail]);
+
+    const fetchStats = async (email: string) => {
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/mypage/stats/${encodeURIComponent(email)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setStatsData(data);
+            }
+        } catch (error) {
+            console.error("통계 데이터 로딩 실패:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    if (status === 'loading' || isLoading) {
+        return (
+            <div className="min-h-screen flex justify-center items-center bg-[#F5F5F7]">
+                <Loader2 className="animate-spin text-[#0066cc]" size={32} />
+            </div>
+        );
+    }
+
+    const profile = statsData?.profile || { nickname: session?.user?.name || '관리자', bio: '프로필을 설정해주세요.', profile_image: session?.user?.image || '' };
+    const summary = statsData?.summary || { total_finished: 0, avg_rating: 0, total_pages: 0, total_reading: 0 };
+    const trend_data = statsData?.trend_data || [];
+    const top_genres = statsData?.top_genres || [];
+    const top_tags = statsData?.top_tags || [];
+    const maxTrendCount = Math.max(...trend_data.map((d: any) => d.count), 1);
+
+    return (
+        <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col pt-[var(--spacing-1cm,32px)] pb-20">
+            <Container>
+                
+                {/* 탭 네비게이션 영역 */}
+                <div className="flex items-center gap-6 border-b border-gray-200 mb-[var(--spacing-1cm,32px)] px-2">
+                    <button 
+                        onClick={() => setActiveTab('dashboard')}
+                        className={`pb-3 text-[16px] font-extrabold transition-colors relative ${activeTab === 'dashboard' ? 'text-[#1d1d1f]' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                        나의 대시보드
+                        {activeTab === 'dashboard' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-[#1d1d1f] rounded-t-md"></span>}
+                    </button>
+                    
+                    {isAdmin && (
+                        <button 
+                            onClick={() => setActiveTab('admin')}
+                            className={`pb-3 text-[16px] font-extrabold transition-colors relative flex items-center gap-1.5 ${activeTab === 'admin' ? 'text-[#0066cc]' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            <ShieldCheck size={18} className={activeTab === 'admin' ? 'text-[#0066cc]' : 'text-gray-400'} />
+                            시스템 관리
+                            {activeTab === 'admin' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-[#0066cc] rounded-t-md"></span>}
+                        </button>
+                    )}
+                </div>
+
+                {/* 탭 1: 대시보드 화면 */}
+                {activeTab === 'dashboard' && statsData && (
+                    <div className="animate-in fade-in duration-300 w-full mb-[var(--spacing-1cm,32px)]">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-[var(--spacing-1cm,32px)] mb-[var(--spacing-1cm,32px)]">
+                            <div className="lg:col-span-4 bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden">
+                                <div className="absolute top-0 w-full h-24 bg-gradient-to-b from-[#0066cc]/5 to-transparent z-0" />
+                                <div className="relative z-10 w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-gray-100 mb-4">
+                                    {profile.profile_image ? (
+                                        <img src={profile.profile_image} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full bg-gray-200" />
+                                    )}
+                                </div>
+                                <h2 className="relative z-10 text-[22px] font-black text-[#1d1d1f] mb-1">{profile.nickname}</h2>
+                                <p className="relative z-10 text-[14px] text-gray-500 font-medium break-keep px-4">{profile.bio}</p>
+                                <button 
+                                    onClick={() => setIsProfileModalOpen(true)} 
+                                    className="relative z-10 mt-6 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-50 text-[13px] font-bold text-gray-600 hover:bg-gray-100 transition-colors border border-gray-200"
+                                >
+                                    <Edit3 size={14} /> 프로필 수정
+                                </button>
+                            </div>
+
+                            <div className="lg:col-span-8 grid grid-cols-2 gap-4 md:gap-[var(--spacing-1cm,32px)]">
+                                <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="p-2 bg-blue-50 rounded-lg"><BookOpen size={18} className="text-[#0066cc]" /></div>
+                                        <span className="text-[13px] font-bold text-gray-500">완독한 지식들</span>
+                                    </div>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_finished}</span>
+                                        <span className="text-[15px] font-medium text-gray-400">권</span>
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="p-2 bg-amber-50 rounded-lg"><Star size={18} className="text-amber-500" /></div>
+                                        <span className="text-[13px] font-bold text-gray-500">나의 평균 별점</span>
+                                    </div>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.avg_rating}</span>
+                                        <span className="text-[15px] font-medium text-gray-400">점</span>
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="p-2 bg-emerald-50 rounded-lg"><FileText size={18} className="text-emerald-600" /></div>
+                                        <span className="text-[13px] font-bold text-gray-500">누적 읽은 페이지</span>
+                                    </div>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_pages.toLocaleString()}</span>
+                                        <span className="text-[15px] font-medium text-gray-400">쪽</span>
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="p-2 bg-purple-50 rounded-lg"><TrendingUp size={18} className="text-purple-600" /></div>
+                                        <span className="text-[13px] font-bold text-gray-500">현재 읽는 중</span>
+                                    </div>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_reading}</span>
+                                        <span className="text-[15px] font-medium text-gray-400">권</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="w-full bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 mb-[var(--spacing-1cm,32px)]">
+                            <div className="flex items-center justify-between mb-8">
+                                <h3 className="text-[18px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
+                                    <BarChart3 className="text-[#0066cc]" size={20} /> 올해의 독서 흐름
+                                </h3>
+                                <span className="text-[13px] font-bold bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200">
+                                    {new Date().getFullYear()}년 완독 기준
+                                </span>
+                            </div>
+                            <div className="h-[200px] w-full flex items-end justify-between gap-2 px-2">
+                                {trend_data.length > 0 ? trend_data.map((data: any, idx: number) => {
+                                    const heightPercent = data.count > 0 ? Math.max((data.count / maxTrendCount) * 100, 10) : 0;
+                                    return (
+                                        <div key={idx} className="flex flex-col items-center flex-1 group">
+                                            <div className="text-[12px] font-bold text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity mb-2">
+                                                {data.count}권
+                                            </div>
+                                            <div className="w-full max-w-[40px] bg-[#f5f5f7] rounded-t-xl flex items-end justify-center overflow-hidden h-[150px] relative">
+                                                <div 
+                                                    className="w-full bg-gradient-to-t from-[#0066cc] to-[#3388ff] rounded-t-xl transition-all duration-1000 ease-out"
+                                                    style={{ height: `${heightPercent}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-[12px] font-bold text-gray-400 mt-3">{data.month}</span>
+                                        </div>
+                                    );
+                                }) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm font-bold">아직 기록된 데이터가 없습니다.</div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--spacing-1cm,32px)]">
+                            <div className="bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 min-h-[280px]">
+                                <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">나의 선호 장르</h3>
+                                {top_genres.length > 0 ? (
+                                    <div className="flex flex-col gap-4">
+                                        {top_genres.map((genre: any, idx: number) => (
+                                            <div key={idx} className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="w-6 h-6 rounded-full bg-blue-50 text-[#0066cc] text-[12px] font-black flex items-center justify-center">{idx + 1}</span>
+                                                    <span className="text-[14px] font-bold text-[#1d1d1f]">{genre.genre}</span>
+                                                </div>
+                                                <span className="text-[13px] font-bold text-gray-400">{genre.count}권</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex items-center justify-center text-[13px] text-gray-400 font-medium pb-8">아직 기록된 장르 데이터가 없습니다.</div>
+                                )}
+                            </div>
+
+                            <div className="bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 min-h-[280px]">
+                                <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">
+                                    <Hash className="text-[#0066cc]" size={18} /> 내가 가장 많이 쓴 태그
+                                </h3>
+                                {top_tags.length > 0 ? (
+                                    <div className="flex flex-wrap gap-3">
+                                        {top_tags.map((tag: any, idx: number) => (
+                                            <div key={idx} className="px-3 py-1.5 rounded-lg bg-[#f5f5f7] border border-gray-200 flex items-center gap-1.5 hover:bg-blue-50 hover:border-blue-100 hover:text-[#0066cc] transition-colors cursor-default">
+                                                <span className="text-[13px] font-bold text-gray-700">{tag.text}</span>
+                                                <span className="text-[11px] font-medium text-gray-400">{tag.count}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex items-center justify-center text-[13px] text-gray-400 font-medium pb-8">아직 등록된 태그가 없습니다.</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 탭 2: 최고 관리자 시스템 영역 (기존 패널과 신규 스캐너 동시 노출) */}
+                {activeTab === 'admin' && isAdmin && (
+                    <div className="w-full flex flex-col gap-[var(--spacing-1cm,32px)] animate-in fade-in slide-in-from-bottom-2 duration-300 mb-[var(--spacing-1cm,32px)]">
+                        <AdminPanel /> 
+                        <AdminWorkMerge />
+                    </div>
+                )}
+
+            </Container>
+            
+            <div className="mt-auto w-full">
+                <Footer />
+            </div>
+
+            <ProfileEditModal 
+                isOpen={isProfileModalOpen} 
+                onClose={() => {
+                    setIsProfileModalOpen(false);
+                    if (currentUserEmail) fetchStats(currentUserEmail);
+                }} 
+                session={session} 
+            />
+        </div>
+    );
+}
+
+
+============================================================
 FILE PATH: frontend/src/app/api/auth/[...nextauth]/route.ts
 ============================================================
 // frontend/src/app/api/auth/[...nextauth]/route.ts
@@ -12224,229 +12489,6 @@ export default function SearchPage() {
 
 
 ============================================================
-FILE PATH: frontend/src/app/(main)/mypage/page.tsx
-============================================================
-'use client';
-
-import React, { useEffect, useState } from 'react';
-import { useSession } from "next-auth/react";
-import { useRouter } from 'next/navigation';
-import Container from '@/components/layout/Container';
-import Footer from '@/components/layout/Footer';
-import { Loader2, BookOpen, Star, FileText, TrendingUp, Edit3, Hash, BarChart3 } from 'lucide-react';
-import ProfileEditModal from '@/components/profile/ProfileEditModal';
-import AdminPanel from '@/components/admin/AdminPanel';
-
-export default function MyPage() {
-    const { data: session, status } = useSession();
-    const router = useRouter();
-    const [statsData, setStatsData] = useState<any>(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-
-    useEffect(() => {
-        if (status === 'unauthenticated') {
-            router.push('/');
-            return;
-        }
-
-        if (status === 'authenticated' && session?.user?.email) {
-            fetchStats(session.user.email);
-        }
-    }, [status, session]);
-
-    const fetchStats = async (email: string) => {
-        try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/mypage/stats/${encodeURIComponent(email)}`);
-            if (res.ok) {
-                const data = await res.json();
-                setStatsData(data);
-            }
-        } catch (error) {
-            console.error("통계 데이터 로딩 실패:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    if (isLoading || status === 'loading') {
-        return <div className="min-h-screen flex justify-center items-center bg-[#F5F5F7]"><Loader2 className="animate-spin text-[#0066cc]" size={32} /></div>;
-    }
-
-    if (!statsData) return null;
-
-    const { profile, summary, trend_data, top_genres, top_tags } = statsData;
-    const maxTrendCount = Math.max(...trend_data.map((d: any) => d.count), 1); // 차트 비율 계산용
-
-    return (
-        <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col pt-[var(--spacing-1cm,32px)]">
-            <Container>
-                {/* 1. 상단: 프로필 및 요약 대시보드 */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-[var(--spacing-1cm,32px)] mb-[var(--spacing-1cm,32px)]">
-                    
-                    {/* 프로필 카드 */}
-                    <div className="lg:col-span-4 bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden">
-                        <div className="absolute top-0 w-full h-24 bg-gradient-to-b from-[#0066cc]/5 to-transparent z-0" />
-                        <div className="relative z-10 w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-gray-100 mb-4">
-                            {profile.profile_image ? (
-                                <img src={profile.profile_image} alt="Profile" className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full bg-gray-200" />
-                            )}
-                        </div>
-                        <h2 className="relative z-10 text-[22px] font-black text-[#1d1d1f] mb-1">{profile.nickname}</h2>
-                        <p className="relative z-10 text-[14px] text-gray-500 font-medium break-keep px-4">{profile.bio}</p>
-                        <button 
-                            onClick={() => setIsProfileModalOpen(true)} 
-                            className="relative z-10 mt-6 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-50 text-[13px] font-bold text-gray-600 hover:bg-gray-100 transition-colors border border-gray-200"
-                        >
-                            <Edit3 size={14} /> 프로필 수정
-                        </button>
-                    </div>
-
-                    {/* 4개의 핵심 요약 통계 */}
-                    <div className="lg:col-span-8 grid grid-cols-2 gap-4 md:gap-[var(--spacing-1cm,32px)]">
-                        <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="p-2 bg-blue-50 rounded-lg"><BookOpen size={18} className="text-[#0066cc]" /></div>
-                                <span className="text-[13px] font-bold text-gray-500">완독한 지식들</span>
-                            </div>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_finished}</span>
-                                <span className="text-[15px] font-medium text-gray-400">권</span>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="p-2 bg-amber-50 rounded-lg"><Star size={18} className="text-amber-500" /></div>
-                                <span className="text-[13px] font-bold text-gray-500">나의 평균 별점</span>
-                            </div>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.avg_rating}</span>
-                                <span className="text-[15px] font-medium text-gray-400">점</span>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="p-2 bg-emerald-50 rounded-lg"><FileText size={18} className="text-emerald-600" /></div>
-                                <span className="text-[13px] font-bold text-gray-500">누적 읽은 페이지</span>
-                            </div>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_pages.toLocaleString()}</span>
-                                <span className="text-[15px] font-medium text-gray-400">쪽</span>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="p-2 bg-purple-50 rounded-lg"><TrendingUp size={18} className="text-purple-600" /></div>
-                                <span className="text-[13px] font-bold text-gray-500">현재 읽는 중</span>
-                            </div>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_reading}</span>
-                                <span className="text-[15px] font-medium text-gray-400">권</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. 중단: 올해의 독서 흐름 (월별 막대 그래프) */}
-                <div className="w-full bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 mb-[var(--spacing-1cm,32px)]">
-                    <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-[18px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
-                            <BarChart3 className="text-[#0066cc]" size={20} /> 올해의 독서 흐름
-                        </h3>
-                        <span className="text-[13px] font-bold bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200">
-                            {new Date().getFullYear()}년 완독 기준
-                        </span>
-                    </div>
-                    
-                    <div className="h-[200px] w-full flex items-end justify-between gap-2 px-2">
-                        {trend_data.map((data: any, idx: number) => {
-                            const heightPercent = data.count > 0 ? Math.max((data.count / maxTrendCount) * 100, 10) : 0;
-                            return (
-                                <div key={idx} className="flex flex-col items-center flex-1 group">
-                                    <div className="text-[12px] font-bold text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity mb-2">
-                                        {data.count}권
-                                    </div>
-                                    <div className="w-full max-w-[40px] bg-[#f5f5f7] rounded-t-xl flex items-end justify-center overflow-hidden h-[150px] relative">
-                                        <div 
-                                            className="w-full bg-gradient-to-t from-[#0066cc] to-[#3388ff] rounded-t-xl transition-all duration-1000 ease-out"
-                                            style={{ height: `${heightPercent}%` }}
-                                        />
-                                    </div>
-                                    <span className="text-[12px] font-bold text-gray-400 mt-3">{data.month}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* 3. 하단: 독서 취향 분석 (장르 및 태그) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--spacing-1cm,32px)] mb-12">
-                    {/* 선호 장르 */}
-                    <div className="bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 min-h-[280px]">
-                        <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">
-                            나의 선호 장르
-                        </h3>
-                        {top_genres.length > 0 ? (
-                            <div className="flex flex-col gap-4">
-                                {top_genres.map((genre: any, idx: number) => (
-                                    <div key={idx} className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <span className="w-6 h-6 rounded-full bg-blue-50 text-[#0066cc] text-[12px] font-black flex items-center justify-center">{idx + 1}</span>
-                                            <span className="text-[14px] font-bold text-[#1d1d1f]">{genre.genre}</span>
-                                        </div>
-                                        <span className="text-[13px] font-bold text-gray-400">{genre.count}권</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="h-full flex items-center justify-center text-[13px] text-gray-400 font-medium pb-8">아직 기록된 장르 데이터가 없습니다.</div>
-                        )}
-                    </div>
-
-                    {/* 선호 태그 워드 클라우드 형태 */}
-                    <div className="bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 min-h-[280px]">
-                        <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">
-                            <Hash className="text-[#0066cc]" size={18} /> 내가 가장 많이 쓴 태그
-                        </h3>
-                        {top_tags.length > 0 ? (
-                            <div className="flex flex-wrap gap-3">
-                                {top_tags.map((tag: any, idx: number) => (
-                                    <div key={idx} className="px-3 py-1.5 rounded-lg bg-[#f5f5f7] border border-gray-200 flex items-center gap-1.5 hover:bg-blue-50 hover:border-blue-100 hover:text-[#0066cc] transition-colors cursor-default">
-                                        <span className="text-[13px] font-bold text-gray-700">{tag.text}</span>
-                                        <span className="text-[11px] font-medium text-gray-400">{tag.count}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="h-full flex items-center justify-center text-[13px] text-gray-400 font-medium pb-8">아직 등록된 태그가 없습니다.</div>
-                        )}
-                    </div>
-                </div>
-                <AdminPanel /> {/* 최고 관리자용 시스템 제어 패널 컴포넌트 삽입 */} 
-            </Container>
-            <Footer />
-            {/* ▼▼▼ [NEW] 프로필 수정 모달 컴포넌트 삽입 ▼▼▼ */}
-            <ProfileEditModal 
-                isOpen={isProfileModalOpen} 
-                onClose={() => {
-                    setIsProfileModalOpen(false);
-                    // 모달이 닫힐 때 변경된 닉네임/소개가 화면에 즉시 반영되도록 데이터 다시 불러오기
-                    if (session?.user?.email) fetchStats(session.user.email);
-                }} 
-                session={session} 
-            />
-        </div>
-    );
-}
-
-
-============================================================
 FILE PATH: frontend/src/app/(main)/works/[id]/page.tsx
 ============================================================
 'use client';
@@ -16615,210 +16657,256 @@ export default function RecordForm() {
 ============================================================
 FILE PATH: frontend/src/components/admin/AdminPanel.tsx
 ============================================================
-// 파일 경로: src/components/admin/AdminPanel.tsx
-// 역할 및 기능: 최고 관리자(ADMIN) 권한을 가진 유저에게만 노출되며, DB 일괄 정비 및 AI 엔진 재학습 등을 제어하는 시스템 관리 패널입니다.
+// 파일 경로: frontend/src/components/admin/AdminPanel.tsx
+// 역할 및 기능: BoooknTalk 최고 관리자 전용 제어 패널 (장르 복구, 표지 다운로드, 작가 정제, 마스터 클린업 등)
 
 'use client';
 
 import React, { useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { toast } from 'sonner';
-import { ShieldAlert, RefreshCw, Trash2, GitMerge, Wand2, Sparkles, Bot } from 'lucide-react';
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import AuthorImageManager from './AuthorImageManager';
+import { Loader2, RefreshCw, Download, Database, AlertTriangle } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
+// 함수 기능: 관리자 전용 시스템 제어 UI를 렌더링하고, 각 버튼 클릭 시 백엔드 admin API를 호출합니다.
 export default function AdminPanel() {
     const { data: session } = useSession();
-    const [isLoading, setIsLoading] = useState(false);
+    const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
-    // 병합(Merge) 기능용 상태
-    const [targetId, setTargetId] = useState('');
-    const [sourceIds, setSourceIds] = useState('');
+    const currentUserEmail = session?.user?.email?.toLowerCase().trim() || "";
+    if (currentUserEmail !== 'boookntalk@gmail.com') return null;
 
-    // ==========================================
-    // 💡 [핵심 방어벽 교체] 하드코딩 이메일 제거 -> DB role 기반 체크!
-    // ==========================================
-    if (session?.user?.role !== 'ADMIN') {
-        return null; // ADMIN이 아니면 화면에 아예 그리지 않습니다.
-    }
+    const handleAdminAction = async (actionUrl: string, confirmMsg: string, successMsg: string, method: string = 'GET') => {
+        if (!window.confirm(confirmMsg)) return;
 
-    // 공통 도트 로딩 애니메이션 컴포넌트
-    const DotLoader = () => (
-        <div className="flex items-center justify-center gap-1.5 w-full">
-            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-            <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-        </div>
-    );
-
-    // [기존 1] 장르 데이터 일괄 세탁
-    const handleSyncGenres = async () => {
-        if (!confirm("과거 도서의 장르 데이터를 북앤톡 8대 표준 장르로 일괄 세탁하시겠습니까?")) return;
-        setIsLoading(true);
+        setLoadingAction(actionUrl);
         try {
-            const res = await fetch(`${API_URL}/api/admin/sync-genres`);
-            const data = await res.json();
-            if (res.ok) toast.success(data.message);
-            else throw new Error(data.detail);
-        } catch (error: any) {
-            toast.error(error.message || "장르 세탁 작업 중 오류가 발생했습니다.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // [기존 2] 작가 데이터 전면 재정제
-    const handleSyncAuthors = async () => {
-        if (!confirm("모든 작가 데이터를 재정제하시겠습니까? (시간이 다소 소요될 수 있습니다)")) return;
-        setIsLoading(true);
-        try {
-            const res = await fetch(`${API_URL}/api/admin/sync-authors`);
-            const data = await res.json();
-            if (res.ok) toast.success(data.message);
-            else throw new Error(data.detail);
-        } catch (error: any) {
-            toast.error(error.message || "정제 작업 중 오류가 발생했습니다.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // [기존 3] 꼬리표 클렌징 및 파편화 병합
-    const handleDeepCleanse = async () => {
-        if (!confirm("오염된 꼬리표를 제거하고 파편화된 작가를 병합하시겠습니까?")) return;
-        setIsLoading(true);
-        try {
-            const res = await fetch(`${API_URL}/api/admin/cleanse-authors`, { method: 'POST' });
-            const data = await res.json();
-            if (res.ok) toast.success(`수술 완료! ${data.message}`);
-            else throw new Error(data.message);
-        } catch (error: any) {
-            toast.error(error.message || "딥 클렌징 작업 중 오류가 발생했습니다.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // [기존 4] 고아 데이터 대청소
-    const handleCleanup = async () => {
-        if (!confirm("연결되지 않은 찌꺼기 작가 데이터를 영구 삭제하시겠습니까?")) return;
-        setIsLoading(true);
-        try {
-            const res = await fetch(`${API_URL}/api/admin/cleanup-contributors`);
-            const data = await res.json();
-            if (res.ok) toast.success(data.message);
-            else throw new Error(data.detail);
-        } catch (error: any) {
-            toast.error(error.message || "청소 작업 중 오류가 발생했습니다.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // [기존 5] 수동 강제 병합
-    const handleMerge = async () => {
-        if (!targetId || !sourceIds) {
-            toast.error("진짜 작가 ID와 가짜 작가 ID를 모두 입력해주세요.");
-            return;
-        }
-        if (!confirm(`${sourceIds}번 작가들을 ${targetId}번 작가로 강제 흡수하시겠습니까?`)) return;
-        
-        setIsLoading(true);
-        try {
-            const res = await fetch(`${API_URL}/api/admin/merge-contributors?target_id=${targetId}&source_ids=${sourceIds}`);
-            const data = await res.json();
+            const res = await fetch(`http://localhost:8000/api/admin/${actionUrl}`, { method });
             if (res.ok) {
-                toast.success(data.message);
-                setTargetId('');
-                setSourceIds('');
-            } else throw new Error(data.detail);
-        } catch (error: any) {
-            toast.error(error.message || "병합 작업 중 오류가 발생했습니다.");
+                alert(successMsg);
+            } else {
+                const err = await res.json();
+                alert(`오류 발생: ${err.detail || '알 수 없는 에러'}`);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("서버 연결에 실패했습니다.");
         } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // ==========================================
-    // ▼▼▼ [NEW 6] BoooknTalk AI 재학습 엔진 ▼▼▼
-    // ==========================================
-    const handleRetrainAI = async () => {
-        if (!confirm("누적된 오답 노트를 바탕으로 AI 장르 분류 모델을 새롭게 재학습하시겠습니까?")) return;
-        setIsLoading(true);
-        try {
-            const userEmail = session?.user?.email || '';
-            const res = await fetch(`${API_URL}/api/admin/retrain-ai?user_email=${encodeURIComponent(userEmail)}`, { method: 'POST' });
-            const data = await res.json();
-            if (res.ok) toast.success(data.message || "🎉 AI의 새로운 학습이 완벽하게 완료되었습니다!");
-            else throw new Error(data.detail || "학습 실패");
-        } catch (error: any) {
-            toast.error(error.message || "AI 재학습 작업 중 오류가 발생했습니다.");
-        } finally {
-            setIsLoading(false);
+            setLoadingAction(null);
         }
     };
 
     return (
-        <div className="mt-8 bg-red-50/50 border border-red-100 rounded-2xl p-[var(--spacing-1cm,32px)]">
-            <div className="flex items-center gap-2 text-red-600 mb-6 border-b border-red-100 pb-4">
-                <ShieldAlert size={24} />
-                <h2 className="text-lg font-black tracking-tight">System Admin Control (최고 관리자 전용)</h2>
+        <div className="p-[var(--spacing-1cm,32px)] bg-white rounded-2xl border border-gray-100 shadow-sm w-full mb-[var(--spacing-1cm,32px)]">
+            <div className="mb-6">
+                <h2 className="text-[20px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
+                    <Database className="text-[#0066cc]" size={20} /> 시스템 제어 패널
+                </h2>
+                <p className="text-[14px] text-gray-500 font-medium mt-1">
+                    BoooknTalk 데이터베이스 무결성을 관리하는 마스터 도구입니다.
+                </p>
             </div>
 
-            <div className="grid gap-8 md:grid-cols-2">
-                {/* 왼쪽: 일괄 처리 버튼들 */}
-                <div className="flex flex-col gap-4">
-                    <h3 className="text-sm font-bold text-gray-700">데이터베이스 일괄 정비</h3>
-                    
-                    <Button onClick={handleSyncGenres} disabled={isLoading} variant="outline" className={`border-purple-200 text-purple-700 hover:bg-purple-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}>
-                        {isLoading ? <DotLoader /> : <><Wand2 className="mr-2 h-4 w-4" /> 장르 데이터 일괄 세탁 (Sync Genres)</>}
-                    </Button>
-
-                    <Button onClick={handleSyncAuthors} disabled={isLoading} variant="outline" className={`border-blue-200 text-blue-700 hover:bg-blue-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}>
-                        {isLoading ? <DotLoader /> : <><RefreshCw className="mr-2 h-4 w-4" /> 작가 데이터 전면 재정제 (Sync Authors)</>}
-                    </Button>
-
-                    <Button onClick={handleDeepCleanse} disabled={isLoading} variant="outline" style={{ justifyContent: isLoading ? 'center' : 'flex-start' }} className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all w-full">
-                        {isLoading ? <DotLoader /> : <><Sparkles className="mr-2 h-4 w-4" /> 오염 데이터 딥 클렌징 (Cleanse & Merge)</>}
-                    </Button>
-
-                    <Button onClick={handleCleanup} disabled={isLoading} variant="outline" className={`border-red-200 text-red-700 hover:bg-red-50 transition-all ${isLoading ? 'justify-center' : 'justify-start'}`}>
-                        {isLoading ? <DotLoader /> : <><Trash2 className="mr-2 h-4 w-4" /> 찌꺼기 데이터 영구 삭제 (Cleanup)</>}
-                    </Button>
-
-                    {/* 💡 [NEW] AI 재학습 버튼 추가 (눈에 띄는 Violet 톤 적용) */}
-                    <Button onClick={handleRetrainAI} disabled={isLoading} variant="outline" className={`border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-all shadow-sm ${isLoading ? 'justify-center' : 'justify-start'}`}>
-                        {isLoading ? <DotLoader /> : <><Bot className="mr-2 h-4 w-4" /> AI 장르 분류 엔진 재학습 (Retrain AI)</>}
-                    </Button>
-                </div>
-
-                {/* 오른쪽: 수동 병합 컨트롤러 (기존 유지) */}
-                <div className="flex flex-col gap-4 bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                    <h3 className="text-sm font-bold text-gray-700 flex items-center gap-1.5">
-                        <GitMerge size={16} className="text-[#0066cc]" /> 
-                        작가 강제 병합 (Manual Merge)
-                    </h3>
-                    
-                    <div className="grid gap-3">
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-bold text-gray-500">진짜 작가 (Target ID)</label>
-                            <Input placeholder="예: 58 (살려둘 번호)" value={targetId} onChange={(e) => setTargetId(e.target.value)} className="h-9 text-sm" disabled={isLoading} />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-bold text-gray-500">가짜 작가들 (Source IDs)</label>
-                            <Input placeholder="예: 59,60 (삭제할 콤마 구분 번호)" value={sourceIds} onChange={(e) => setSourceIds(e.target.value)} className="h-9 text-sm" disabled={isLoading} />
-                        </div>
-                        <Button onClick={handleMerge} disabled={isLoading} className={`w-full mt-2 bg-[#1d1d1f] hover:bg-[#333] text-white transition-all ${isLoading ? 'justify-center' : 'justify-center'}`}>
-                            {isLoading ? <DotLoader /> : "강제 흡수 병합 실행"}
-                        </Button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-5 border border-gray-100 rounded-xl bg-gray-50 flex flex-col justify-between">
+                    <div className="mb-4">
+                        <h3 className="text-[15px] font-bold text-[#1d1d1f] mb-1 flex items-center gap-1.5">
+                            <RefreshCw size={16} className="text-[#0066cc]" /> 장르 일괄 복구 (알라딘 API)
+                        </h3>
+                        <p className="text-[13px] text-gray-500 break-keep">
+                            '기타'로 분류된 도서들을 스캔하여 알라딘 API를 통해 정확한 장르로 재분류합니다.
+                        </p>
                     </div>
+                    <Button 
+                        disabled={loadingAction !== null}
+                        onClick={() => handleAdminAction('sync-genres', '기타 장르 도서들을 스캔하여 복구하시겠습니까?', '장르 복구가 완료되었습니다.')}
+                        variant="outline" className="w-full bg-white hover:bg-blue-50 hover:text-[#0066cc]"
+                    >
+                        {loadingAction === 'sync-genres' ? <Loader2 className="animate-spin" size={16} /> : '장르 복구 실행'}
+                    </Button>
                 </div>
-                <div className="mt-8">
-                    <AuthorImageManager userEmail={session?.user?.email || ''} />
+
+                <div className="p-5 border border-gray-100 rounded-xl bg-gray-50 flex flex-col justify-between">
+                    <div className="mb-4">
+                        <h3 className="text-[15px] font-bold text-[#1d1d1f] mb-1 flex items-center gap-1.5">
+                            <Download size={16} className="text-emerald-600" /> 외부 표지 일괄 다운로드
+                        </h3>
+                        <p className="text-[13px] text-gray-500 break-keep">
+                            외부 URL(http)을 사용 중인 표지를 찾아 로컬 서버로 일괄 다운로드합니다.
+                        </p>
+                    </div>
+                    <Button 
+                        disabled={loadingAction !== null}
+                        onClick={() => handleAdminAction('sync-covers', '외부 표지 이미지를 로컬로 다운로드하시겠습니까?', '표지 다운로드 작업이 백그라운드에서 시작되었습니다.')}
+                        variant="outline" className="w-full bg-white hover:bg-emerald-50 hover:text-emerald-600"
+                    >
+                        {loadingAction === 'sync-covers' ? <Loader2 className="animate-spin" size={16} /> : '다운로드 실행'}
+                    </Button>
                 </div>
+
+                <div className="p-5 border border-gray-100 rounded-xl bg-gray-50 flex flex-col justify-between">
+                    <div className="mb-4">
+                        <h3 className="text-[15px] font-bold text-[#1d1d1f] mb-1 flex items-center gap-1.5">
+                            <RefreshCw size={16} className="text-amber-500" /> 작가 데이터 전면 정제
+                        </h3>
+                        <p className="text-[13px] text-gray-500 break-keep">
+                            파싱 엔진을 다시 가동하여 작가 관계(WorkContributor)를 완벽하게 재정립합니다.
+                        </p>
+                    </div>
+                    <Button 
+                        disabled={loadingAction !== null}
+                        onClick={() => handleAdminAction('sync-authors', '작가 파싱 엔진을 다시 실행하시겠습니까?', '작가 데이터 정제가 완료되었습니다.')}
+                        variant="outline" className="w-full bg-white hover:bg-amber-50 hover:text-amber-600"
+                    >
+                        {loadingAction === 'sync-authors' ? <Loader2 className="animate-spin" size={16} /> : '정제 실행'}
+                    </Button>
+                </div>
+
+                <div className="p-5 border border-red-100 rounded-xl bg-red-50/30 flex flex-col justify-between">
+                    <div className="mb-4">
+                        <h3 className="text-[15px] font-bold text-red-600 mb-1 flex items-center gap-1.5">
+                            <AlertTriangle size={16} /> 마스터 클린업 (고아 데이터 청소)
+                        </h3>
+                        <p className="text-[13px] text-gray-500 break-keep">
+                            연결되지 않은 찌꺼기 데이터를 영구 삭제하고 랭킹을 갱신합니다. (주의 요망)
+                        </p>
+                    </div>
+                    <Button 
+                        disabled={loadingAction !== null}
+                        onClick={() => handleAdminAction('master-cleanup', '모든 찌꺼기 데이터를 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.', '마스터 클린업이 완벽하게 완료되었습니다.')}
+                        variant="destructive" className="w-full"
+                    >
+                        {loadingAction === 'master-cleanup' ? <Loader2 className="animate-spin text-white" size={16} /> : '클린업 강제 실행'}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+
+============================================================
+FILE PATH: frontend/src/components/admin/AdminWorkMerge.tsx
+============================================================
+// 파일 경로: frontend/src/components/admin/AdminWorkMerge.tsx
+// 역할 및 기능: 관리자가 중복 파편화된 작품(Work)을 찾아 한 번의 클릭으로 병합하는 UI 컴포넌트입니다.
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { Button } from "@/components/ui/button";
+
+// 함수 기능: 중복 작품 목록을 불러오고 병합을 실행하는 관리자 패널 렌더링
+export default function AdminWorkMerge() {
+    const [duplicates, setDuplicates] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const fetchDuplicates = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('http://localhost:8000/api/admin/duplicate-works');
+            const data = await res.json();
+            setDuplicates(data);
+        } catch (error) {
+            console.error("중복 데이터 스캔 실패", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchDuplicates();
+    }, []);
+
+    const handleMerge = async (targetId: number, sourceIds: number[]) => {
+        if (!window.confirm(`파편화된 작품들을 ${targetId}번 원본 작품으로 영구 병합하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+
+        try {
+            const res = await fetch('http://localhost:8000/api/admin/merge-works', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    target_work_id: targetId,
+                    source_work_ids: sourceIds
+                })
+            });
+
+            if (res.ok) {
+                alert("성공적으로 작품이 통합되었습니다!");
+                fetchDuplicates(); // 스캔 목록 갱신
+            } else {
+                const error = await res.json();
+                alert(`병합 실패: ${error.detail}`);
+            }
+        } catch (error) {
+            alert("서버 연결에 실패했습니다.");
+        }
+    };
+
+    return (
+        <div className="p-[var(--spacing-1cm,32px)] bg-white rounded-2xl border border-gray-100 shadow-sm w-full">
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h2 className="text-[20px] font-extrabold text-[#1d1d1f]">작품(Work) 데이터 대통합 스캐너</h2>
+                    <p className="text-[14px] text-gray-500 font-medium mt-1">이름이 유사하여 파편화된 도서들을 하나의 작품으로 영구 병합합니다.</p>
+                </div>
+                <Button onClick={fetchDuplicates} disabled={loading} className="bg-[#1d1d1f] text-white font-bold h-10 px-5 rounded-xl hover:bg-black transition-colors">
+                    {loading ? '스캔 진행 중...' : '중복 작품 스캔하기'}
+                </Button>
+            </div>
+
+            <div className="flex flex-col gap-[var(--spacing-1cm,32px)]">
+                {duplicates.map((group, index) => {
+                    // 첫 번째 작품을 생존할 원본(Target)으로, 나머지를 흡수될(Source) 작품으로 자동 분류
+                    const targetId = group.works[0].work_id;
+                    const sourceIds = group.works.slice(1).map((w: any) => w.work_id);
+
+                    return (
+                        <div key={index} className="p-5 bg-[#F5F5F7] rounded-xl border border-gray-200">
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="px-2 py-1 bg-red-100 text-red-600 text-[11px] font-extrabold rounded-md">중복 의심</span>
+                                <h3 className="text-[16px] font-extrabold text-[#1d1d1f]">
+                                    "{group.normalized_title}" 그룹 ({group.works.length}개로 파편화됨)
+                                </h3>
+                            </div>
+                            
+                            <div className="flex flex-col gap-2 mb-5">
+                                {group.works.map((work: any, idx: number) => (
+                                    <div key={work.work_id} className={`flex items-center justify-between p-3 rounded-xl border text-[14px] ${idx === 0 ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-gray-100'}`}>
+                                        <div className="flex items-center gap-3">
+                                            {idx === 0 ? (
+                                                <span className="text-[11px] font-bold text-[#0066cc] bg-white px-2 py-0.5 rounded-sm border border-blue-100">원본 지정</span>
+                                            ) : (
+                                                <span className="text-[11px] font-bold text-gray-400 px-2 py-0.5 border border-transparent">흡수 대상</span>
+                                            )}
+                                            <span className="font-mono font-bold text-[#1d1d1f] w-12">ID:{work.work_id}</span>
+                                            <span className="font-bold text-gray-700">{work.title}</span>
+                                            <span className="text-gray-500">- {work.author}</span>
+                                        </div>
+                                        <div className="text-[12px] font-bold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-md">
+                                            연결된 판본: {work.edition_count}개
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <div className="flex justify-end">
+                                <Button 
+                                    onClick={() => handleMerge(targetId, sourceIds)}
+                                    className="bg-[#03C75A] hover:bg-[#02a048] text-white font-bold h-10 px-6 rounded-xl"
+                                >
+                                    {targetId}번 원본 작품으로 대통합 실행
+                                </Button>
+                            </div>
+                        </div>
+                    );
+                })}
+                
+                {!loading && duplicates.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-16 bg-[#F5F5F7] rounded-xl border border-dashed border-gray-300">
+                        <p className="text-[#1d1d1f] font-extrabold text-[16px]">중복 의심 작품이 없습니다.</p>
+                        <p className="text-gray-500 font-medium text-[14px] mt-1">현재 BoooknTalk DB의 무결성이 완벽하게 유지되고 있습니다.</p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -16960,18 +17048,20 @@ export default function AuthorImageManager({ userEmail }: { userEmail: string })
 FILE PATH: frontend/src/components/book-detail/BookTopInfo.tsx
 ============================================================
 // 파일 경로: src/components/book/BookTopInfo.tsx
-// 역할 및 기능: 도서 상세 페이지의 최상단 히어로 영역을 담당하며, 1cm 마스터 레이아웃에 맞게 컨테이너 제한을 해제하고 14px 표준 폰트를 적용했습니다.
+// 역할 및 기능: 부모 영역의 하얀 도화지에 녹아들도록 디자인된 도서 상세 상단 정보 컴포넌트.
+// 업데이트: 1줄 정렬 UI 유지 및 판본(출판사) 스위칭 메뉴 노출 조건 완벽 조율(2개 이상일 때만 노출)
 
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Star, ExternalLink, Layers, User, ArrowRight, Edit3, Trash2 } from 'lucide-react';
+import { Star, ExternalLink, Layers, ArrowRight, Edit3, Trash2, User, Edit2 } from 'lucide-react';
 import { FloatingCover } from '@/components/common/FloatingCover';
-import { Tooltip } from '@/components/common/Tooltip';
 import { useRouter } from 'next/navigation';
 import { AuthorAvatar } from '@/components/common/AuthorAvatar';
+import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface BookTopInfoProps {
     record: any;
@@ -16991,6 +17081,7 @@ interface BookTopInfoProps {
         title: string;
         cover: string;
     }>;
+    currentUser?: any; 
 }
 
 const getSafeDateString = (dateString: string) => {
@@ -17000,9 +17091,10 @@ const getSafeDateString = (dateString: string) => {
     return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}.`;
 };
 
+// 함수 기능: 도서 상단 히어로 영역 렌더링. 판본 스위칭, 쪽수 미상 툴팁, 1줄 메타 데이터 등 포함.
 export default function BookTopInfo({ 
     record, edition, work, myEditions = [], onRecordChange,
-    authorInfo, authorOtherBooks = []
+    authorInfo, authorOtherBooks = [], currentUser
 }: BookTopInfoProps) {
     const router = useRouter();
     const [isMounted, setIsMounted] = useState(false);
@@ -17023,19 +17115,53 @@ export default function BookTopInfo({
     const externalLink = `https://search.shopping.naver.com/book/search?query=${edition?.isbn}`;
     const displayDesc = (edition?.description || work?.description || "").trim() || "상세 설명이 없습니다.";
 
+    const rawStatus = (record?.status || '').toLowerCase();
     const currentPage = record?.current_page || 0;
-    const totalPage = edition?.page_count || 1;
-    const progressPercent = Math.min(Math.round((currentPage / totalPage) * 100), 100);
-    const currentStatus = (record?.status || '').toLowerCase();
+    const dbTotalPage = edition?.page_count || 0; 
+
+    let statusIndex = 0; 
     
-    const statusIndex = currentStatus === 'finished' ? 2 : currentStatus === 'reading' ? 1 : 0;
+    if (['reading', 'currently_reading'].includes(rawStatus) || (currentPage > 0 && currentPage < (dbTotalPage || Infinity))) {
+        statusIndex = 1;
+    }
+    if (['finished', 'read', 'completed', 'done'].includes(rawStatus) || (dbTotalPage > 0 && currentPage >= dbTotalPage)) {
+        statusIndex = 2;
+    }
+
+    let progressPercent = 0;
+    if (statusIndex === 2) {
+        progressPercent = 100; 
+    } else if (dbTotalPage > 0) {
+        progressPercent = Math.min(Math.round((currentPage / dbTotalPage) * 100), 100);
+    }
+
+    const currentStatus = statusIndex === 0 ? 'wish' : statusIndex === 1 ? 'reading' : 'finished';
+    const barWidth = statusIndex === 2 ? '100%' : statusIndex === 0 ? '0%' : `${progressPercent}%`;
+
+    const firstDiscoverer = edition?.first_discoverer || "익명의 여행자";
+    const isAdmin = currentUser?.email?.startsWith('boookntalk');
+    const currentNickname = currentUser?.nickname || currentUser?.email?.split('@')[0];
+    const isCreator = currentNickname === firstDiscoverer;
+    
+    const canEditBookInfo = isAdmin || isCreator;
+
+    const handleEditPageCount = () => {
+        const newPageStr = window.prompt("책의 정확한 전체 쪽수를 입력해 주세요:");
+        if (newPageStr !== null) {
+            const newPageNum = parseInt(newPageStr, 10);
+            if (isNaN(newPageNum) || newPageNum <= 0) {
+                alert("올바른 숫자를 입력해 주세요.");
+                return;
+            }
+            alert(`쪽수가 ${newPageNum}쪽으로 업데이트 되었습니다! (API 연동 대기중)`);
+        }
+    };
 
     return (
-        // 💡 [영점 조절] 부모 레이아웃이 여백을 잡아주므로, 불필요한 패딩(p, pt)과 최대 너비를 제거하고 max-w-[1200px] 컨테이너 중앙 정렬만 유지합니다.
         <section className="bg-transparent w-full relative z-[100]">
-            <div className="max-w-[1200px] mx-auto p-[var(--spacing-1cm,32px)]">
+            <div className="max-w-[1200px] mx-auto px-[var(--spacing-1cm,32px)] pt-4 pb-8">
                 <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,32px)] items-stretch">
-                    {/* [좌측 영역]: 도서 표지 */}
+                    
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
                         <FloatingCover 
                             src={edition?.cover_image || edition?.cover || work?.cover_image ? getHighResCover(edition.cover_image || edition.cover || work.cover_image) : null}
@@ -17050,17 +17176,16 @@ export default function BookTopInfo({
                         </div>
                     </div>
 
-                    {/* [우측 영역]: 2/3 (도서) 와 1/3 (작가) 로 강제 분할 */}
                     <div className="flex-1 flex flex-col min-w-0">
                         <div className="flex flex-col lg:flex-row gap-8 w-full">
                             
-                            {/* [우측-1] 도서 상세 정보 */}
                             <div className="w-full lg:w-2/3 flex flex-col min-w-0 lg:border-r lg:border-gray-100 lg:pr-8">
                                 <div className="flex justify-between items-start mb-2 gap-4">
                                     <h1 className="text-[28px] md:text-[32px] font-extrabold text-[#1d1d1f] leading-tight tracking-tight break-keep">
                                         {work?.title}
                                     </h1>
-                                    {isMounted && myEditions.length > 0 && (
+                                    {/* 💡 [적용] 내 서재에 같은 책의 다른 판본이 존재할 때(2개 이상)만 셀렉트 박스 노출 */}
+                                    {isMounted && myEditions.length > 1 && (
                                         <div className="flex items-center bg-gray-50 rounded-lg pr-1 shadow-sm border border-gray-100 flex-shrink-0 mt-1">
                                             <div className="pl-3 pr-2 py-1.5 flex items-center gap-1.5 border-r border-gray-200/60">
                                                 <Layers size={14} className="text-gray-400" />
@@ -17081,49 +17206,78 @@ export default function BookTopInfo({
                                     )}
                                 </div>
 
-                                <div className="text-[15px] text-gray-700 font-bold mb-3 flex items-center flex-wrap gap-2">
-                                    <span>{formatAuthor(work?.author)}</span>
-                                    <span className="text-gray-300 mx-1">|</span>
-                                    <span>{edition?.publisher}</span>
-                                    {pubYear && <span className="text-gray-500 font-medium">({pubYear})</span>}
+                                {/* 작가, 출판사 & 최초도서등록 우측 정렬 */}
+                                <div className="flex justify-between items-center mb-3 gap-4">
+                                    <div className="text-[15px] text-gray-700 font-bold flex items-center flex-wrap gap-2 flex-1 min-w-0">
+                                        <span className="truncate">{formatAuthor(work?.author)}</span>
+                                        <span className="text-gray-300 shrink-0">|</span>
+                                        <span className="truncate">{edition?.publisher}</span>
+                                        {pubYear && <span className="text-gray-500 font-medium shrink-0">({pubYear})</span>}
+                                    </div>
+                                    <div className="flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-md text-[11px] font-bold text-gray-500 shrink-0">
+                                        <User size={12} className="text-gray-400" />
+                                        <span>최초도서등록 : <span className="text-gray-700">{firstDiscoverer}</span></span>
+                                    </div>
                                 </div>
 
-                                <div className="flex flex-wrap items-center justify-between mb-5 gap-y-3">
-                                    <div className="flex items-center flex-wrap gap-2.5">
-                                        <div className="text-[13px] text-gray-500 font-medium flex items-center gap-1.5 flex-wrap">
-                                            {edition?.format && <><span className="text-[#1d1d1f] font-bold">{edition.format}</span><span className="text-gray-300">·</span></>}
-                                            {edition?.language && <><span className="text-[#1d1d1f] font-bold">{edition.language}</span><span className="text-gray-300">·</span></>}
-                                            <span>{edition?.page_count ? `${edition.page_count}쪽` : '쪽수 미상'}</span>
-                                            <span className="text-gray-300">·</span>
-                                            <span className="font-mono">ISBN {edition?.isbn}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-4 bg-gray-50/50 px-3 py-1.5 rounded-xl border border-gray-100 shrink-0">
-                                        <div className="flex items-center gap-1.5 pr-3 border-r border-gray-200">
-                                            <span className="text-[11px] font-bold text-gray-500">BoooknTalk 평균</span>
-                                            <span className="text-[13px] font-black text-[#1d1d1f] flex items-center gap-0.5"><Star size={12} className="text-[#FFCC00]" fill="currentColor" /> {work?.average_rating || "0.0"}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-[11px] font-bold text-gray-500">나의 별점</span>
-                                            {currentStatus !== 'wish' ? (
-                                                <div className="flex text-[#FFCC00]">{[1, 2, 3, 4, 5].map((s) => <Star key={s} size={13} fill={s <= (record?.rating || 0) ? "currentColor" : "none"} className={s <= (record?.rating || 0) ? "text-[#FFCC00]" : "text-gray-200"} />)}</div>
-                                            ) : (
-                                                <span className="text-[11px] font-medium text-gray-400">평가 전</span>
-                                            )}
-                                        </div>
-                                    </div>
+                                {/* [완벽 1줄 강제] 언어, 쪽수(툴팁), ISBN, 평균별점, 나의별점 */}
+                                <div className="flex items-center gap-2.5 mb-6 text-[13px] text-gray-500 font-medium overflow-x-auto scrollbar-hide whitespace-nowrap w-full">
+                                    {edition?.language && (
+                                        <><span className="text-[#1d1d1f] font-bold">{edition.language}</span><span className="text-gray-300">·</span></>
+                                    )}
+                                    
+                                    {dbTotalPage > 0 ? (
+                                        <span className="text-[#1d1d1f] font-bold">{dbTotalPage}쪽</span>
+                                    ) : canEditBookInfo ? (
+                                        <TooltipProvider delayDuration={200}>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <button 
+                                                        onClick={handleEditPageCount}
+                                                        className="text-[#0066cc] font-bold border-b border-dashed border-[#0066cc] pb-[1px] hover:text-blue-700 hover:border-blue-700 transition-colors cursor-pointer flex items-center gap-1"
+                                                    >
+                                                        <Edit2 size={10} /> 쪽수 미상
+                                                    </button>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="top" className="bg-[#1d1d1f] text-white text-[12px] font-bold px-3 py-2 rounded-lg border-none shadow-md z-[100]">
+                                                    쪽수를 입력할 수 있는 메뉴입니다.
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    ) : (
+                                        <span>쪽수 미상</span>
+                                    )}
+                                    <span className="text-gray-300">·</span>
+
+                                    <span className="font-mono">ISBN {edition?.isbn}</span>
+                                    <span className="text-gray-300">·</span>
+
+                                    <span className="flex items-center gap-1">
+                                        BoooknTalk 평균 <Star size={12} className="text-[#FFCC00] mb-[2px]" fill="currentColor" />
+                                        <span className="text-[#1d1d1f] font-black">{work?.average_rating || "0.0"}</span>
+                                    </span>
+                                    <span className="text-gray-300">·</span>
+
+                                    <span className="flex items-center gap-1.5">나의 별점
+                                        {currentStatus !== 'wish' ? (
+                                            <div className="flex text-[#FFCC00] mb-[2px]">
+                                                {[1, 2, 3, 4, 5].map((s) => (
+                                                    <Star key={s} size={13} fill={s <= (record?.rating || 0) ? "currentColor" : "none"} className={s <= (record?.rating || 0) ? "text-[#FFCC00]" : "text-gray-200"} />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-400">평가 전</span>
+                                        )}
+                                    </span>
                                 </div>
 
                                 <div className="mb-6">
-                                    <Tooltip content={displayDesc !== "상세 설명이 없습니다." ? displayDesc : null} position="bottom">
-                                        {/* 💡 기획자님 표준: 본문 폰트 14px 적용(text-[14px]) */}
-                                        <p className="text-[14px] text-gray-600 leading-relaxed font-medium line-clamp-3 break-keep cursor-pointer">
-                                            {displayDesc}
-                                        </p>
-                                    </Tooltip>
+                                    <SmartTruncatedText 
+                                        content={displayDesc}
+                                        textClassName="text-[14px] text-gray-600 leading-relaxed font-medium break-keep"
+                                    />
                                 </div>
 
-                                {/* 나의 독서 기록 게이지 바 */}
                                 <div className="mt-auto bg-[#F5F5F7] rounded-2xl p-5 border border-gray-200/60 shadow-sm">
                                     <div className="flex justify-between items-center mb-6">
                                         <div className="flex items-baseline gap-2">
@@ -17138,28 +17292,31 @@ export default function BookTopInfo({
                                         </div>
                                     </div>
                                     <div>
-                                        {currentStatus === 'reading' && (
+                                        {statusIndex === 1 && (
                                             <div className="flex justify-between items-end mb-2">
-                                                <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">{progressPercent}%</span>
-                                                <span className="text-[13px] text-gray-500 font-bold">{currentPage} / {totalPage} 페이지</span>
+                                                <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">
+                                                    {dbTotalPage > 0 ? `${progressPercent}%` : '읽는 중'}
+                                                </span>
+                                                <span className="text-[13px] text-gray-500 font-bold">
+                                                    {dbTotalPage > 0 ? `${currentPage} / ${dbTotalPage} 페이지` : `현재 ${currentPage}쪽`}
+                                                </span>
                                             </div>
                                         )}
                                         <div className="relative h-2 bg-gray-200 rounded-full flex items-center mt-3 mb-2">
-                                            <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: currentStatus === 'wish' ? '0%' : currentStatus === 'finished' ? '100%' : `${progressPercent}%` }}></div>
-                                            <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                            <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                            <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 ${statusIndex === 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                            <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: barWidth }}></div>
+                                            <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 transition-colors duration-300 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                            <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                            <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 transition-colors duration-300 ${statusIndex >= 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
                                         </div>
                                         <div className="flex justify-between text-[11px] font-bold text-gray-400 relative">
-                                            <span className={`absolute left-0 -ml-1 ${statusIndex >= 0 ? 'text-[#0066cc]' : ''}`}>읽고 싶음</span>
-                                            <span className={`absolute left-1/2 -translate-x-1/2 ${statusIndex >= 1 ? 'text-[#0066cc]' : ''}`}>읽는 중</span>
-                                            <span className={`absolute right-0 -mr-1 ${statusIndex === 2 ? 'text-[#0066cc]' : ''}`}>완독</span>
+                                            <span className={`absolute left-0 -ml-1 transition-colors duration-300 ${statusIndex >= 0 ? 'text-[#0066cc]' : ''}`}>읽고 싶음</span>
+                                            <span className={`absolute left-1/2 -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'text-[#0066cc]' : ''}`}>읽는 중</span>
+                                            <span className={`absolute right-0 -mr-1 transition-colors duration-300 ${statusIndex >= 2 ? 'text-[#0066cc]' : ''}`}>완독</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* [우측-2] 작가 정보 영역 */}
                             <div className="w-full lg:w-1/3 flex flex-col min-w-0">
                                 {authorInfo && (
                                     <div className="flex flex-col h-full gap-6">
@@ -17173,7 +17330,6 @@ export default function BookTopInfo({
                                                 </div>
                                             </div>
                                             
-                                            {/* 💡 기획자님 표준: 본문 폰트 14px 적용(text-[14px]) */}
                                             <p className="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-4 mb-4">
                                                 {authorInfo.bio || "등록된 저자 소개가 없습니다."}
                                             </p>
@@ -18655,14 +18811,23 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                 {/* 1. 상단 브레드크럼 (화살표 대체) */}
                 <div className="w-full max-w-[1200px] mx-auto px-[var(--spacing-1cm,32px)] pt-6 pb-2">
                     <div className="flex items-center gap-1.5 text-[13px] font-bold text-gray-400">
+                        {/* 홈으로 이동 */}
                         <Link href="/" className="flex items-center gap-1 hover:text-[#0066cc] transition-colors">
                             <Home size={14} /> 홈
                         </Link>
                         <ChevronRight size={14} className="opacity-50" />
+                        
+                        {/* 내 서재 카테고리 (단순 텍스트 혹은 기본 리스트로 이동) */}
+                        <span className="cursor-default">내 서재</span>
+                        <ChevronRight size={14} className="opacity-50" />
+                        
+                        {/* 도서 목록으로 이동 */}
                         <Link href="/library" className="hover:text-[#0066cc] transition-colors">
-                            내 서재
+                            도서
                         </Link>
                         <ChevronRight size={14} className="opacity-50" />
+                        
+                        {/* 현재 도서 이름 (강조) */}
                         <span className="text-[#1d1d1f] truncate max-w-[200px] sm:max-w-md">
                             {work?.title || '도서 상세'}
                         </span>
@@ -18679,6 +18844,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                         onRecordChange={(id) => router.push(`/library/${id}`)}
                         authorInfo={DUMMY_AUTHOR_INFO}
                         authorOtherBooks={DUMMY_OTHER_BOOKS}
+                        currentUser={user}
                     />
                 </div>
 
@@ -19212,7 +19378,6 @@ FILE PATH: frontend/src/components/common/SmartTruncatedText.tsx
 ============================================================
 // 파일 경로: frontend/src/components/common/SmartTruncatedText.tsx
 // 역할 및 기능: 긴 텍스트를 말줄임표(...)로 처리하고, 내용이 길어 잘렸을 경우 마우스를 올리면 원문을 보여주는 지능형 툴팁 컴포넌트입니다.
-// 업데이트: shadcn/ui 툴팁(Portal 기반)을 적용하여 화면 밖으로 잘리는 현상을 완벽하게 해결하고, 심리스한 다크 테마를 적용했습니다.
 
 'use client';
 
@@ -19234,7 +19399,6 @@ export function SmartTruncatedText({ content, textClassName = "", wrapQuotes = f
   const [isTruncated, setIsTruncated] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
 
-  // 텍스트가 컨테이너를 넘어갔는지(말줄임이 발생했는지) 계산
   useEffect(() => {
     const checkTruncation = () => {
       if (textRef.current) {
@@ -19250,10 +19414,8 @@ export function SmartTruncatedText({ content, textClassName = "", wrapQuotes = f
   const displayContent = wrapQuotes ? `"${content}"` : content;
 
   return (
-    // 💡 delayDuration을 200ms로 설정하여 마우스를 스칠 때마다 번쩍거리는 것을 방지
     <TooltipProvider delayDuration={200}>
       <Tooltip>
-        {/* 말줄임표가 적용된 원본 텍스트 */}
         <TooltipTrigger asChild>
           <div 
             ref={textRef} 
@@ -19263,17 +19425,17 @@ export function SmartTruncatedText({ content, textClassName = "", wrapQuotes = f
           </div>
         </TooltipTrigger>
 
-        {/* 💡 텍스트가 잘렸을 때(isTruncated)만 툴팁 렌더링 */}
         {isTruncated && (
           <TooltipContent 
-            side="bottom"    // 기본적으로 아래로 띄웁니다.
-            align="start"    // 왼쪽 정렬
-            sideOffset={8}   // 본문과 8px 간격 유지
-            collisionPadding={16} // 화면 가장자리에 닿기 16px 전에 위치를 강제로 뒤집음(Auto-Flip)
-            // ▼ 기획자님의 시그니처 다크 테마 적용! ▼
-            className="z-[100] max-w-[300px] sm:max-w-[400px] bg-[#1d1d1f] text-[#F7F5F1] p-4 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.2)] border border-[#333333] break-words"
+            side="top"    
+            align="start"    
+            sideOffset={8}   
+            collisionPadding={16} 
+            // 💡 [폭 확장] 기존 max-w-[400px]에서 lg:max-w-[750px]로 대폭 확장하여 도서 상세 본문 너비와 밸런스를 맞췄습니다.
+            className="z-[100] max-w-[calc(100vw-32px)] md:max-w-[650px] lg:max-w-[750px] max-h-[300px] overflow-y-auto scrollbar-hide bg-[#1d1d1f] text-[#F7F5F1] p-5 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.2)] border border-[#333333] break-words"
           >
-            <p className="text-[13px] leading-relaxed font-medium font-sans">
+            {/* 💡 기획자님 폰트 표준(14px)과 줄간격(leading-relaxed) 유지 */}
+            <p className="text-[14px] leading-relaxed font-medium font-sans">
               {displayContent}
             </p>
           </TooltipContent>
@@ -21630,7 +21792,6 @@ def generate_btk_isbn():
 # -------------------------------------------------------------------
 # [추가] 키워드 통합 검색 API (도서명 / 저자명)
 # -------------------------------------------------------------------
-from sqlalchemy import or_ # 상단에 없을 경우를 대비해 필요합니다.
 
 # =========================================================
 # 1. 키워드 검색 API (BoooknTalk 로컬 DB 전용 검색)
@@ -21691,6 +21852,7 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
     [상용화(BoooknTalk Pro) 대비 2 Tier 검색 아키텍처] 
     1. 국립중앙도서관(NLK): 법적 제약 없는 완벽한 핵심 서지정보 (1순위)
     2. 네이버 오픈 API: 표지 이미지 및 책 소개글 보완 (2순위)
+    3. 구글 도서 API : 쪽수 정보
     """
     
     clean_isbn = isbn.replace("-", "").strip()
@@ -21823,6 +21985,23 @@ async def search_external_books(isbn: str, extra: Optional[str] = None, db: Sess
             import re
             nums = re.findall(r'\d+', str(page_raw))
             if nums: page_count = int(nums[0])
+
+        # ▼▼▼ [NEW] 구글 도서 API 쪽수 심폐소생술 ▼▼▼
+        if page_count == 0 and GOOGLE_BOOKS_API_KEY:
+            try:
+                google_url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{clean_isbn}&key={GOOGLE_BOOKS_API_KEY}"
+                google_res = await client.get(google_url, timeout=5.0)
+                if google_res.status_code == 200:
+                    g_data = google_res.json()
+                    g_items = g_data.get("items", [])
+                    if g_items:
+                        # 구글 API에서 pageCount 추출
+                        g_page = g_items[0].get("volumeInfo", {}).get("pageCount", 0)
+                        if g_page > 0:
+                            page_count = g_page
+                            print(f"🚀 [Google Books API] 쪽수 복구 성공: {page_count}쪽")
+            except Exception as e:
+                print(f"⚠️ 구글 도서 API 호출 에러: {e}")
 
         # ==========================================
         # ▼▼▼ [NEW: 새로 추가되는 구역] 정제기 통과하여 표준 장르 확정 ▼▼▼
@@ -22960,42 +23139,42 @@ async def get_user_short_reviews(user_email: str, db: Session = Depends(get_db))
 #         "message": f"User {user.nickname} liked {prefix} {target_id}"
 #     }
 
-# # main.py 파일 맨 아래쪽에 추가해 주세요.
+# # # main.py 파일 맨 아래쪽에 추가해 주세요.
 
-@app.get("/api/admin/sync-covers")
-async def sync_existing_covers(
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """
-    [관리자 전용] 기존에 등록된 도서 중 외부 URL(네이버 등)을 
-    사용하고 있는 도서를 찾아 로컬로 일괄 다운로드합니다.
-    """
-    # 1. DB에서 로컬 주소(localhost)가 아닌 외부 http 주소를 가진 책들만 골라냅니다.
-    editions_to_update = db.query(models.Edition).filter(
-        models.Edition.cover_image.isnot(None),
-        models.Edition.cover_image.like("http%"),
-        ~models.Edition.cover_image.like("%localhost%"),       # 우리 서버 주소 제외
-        ~models.Edition.cover_image.like("%/static/covers/%")  # 이미 다운로드된 주소 제외
-    ).all()
+# @app.get("/api/admin/sync-covers")
+# async def sync_existing_covers(
+#     background_tasks: BackgroundTasks,
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     [관리자 전용] 기존에 등록된 도서 중 외부 URL(네이버 등)을 
+#     사용하고 있는 도서를 찾아 로컬로 일괄 다운로드합니다.
+#     """
+#     # 1. DB에서 로컬 주소(localhost)가 아닌 외부 http 주소를 가진 책들만 골라냅니다.
+#     editions_to_update = db.query(models.Edition).filter(
+#         models.Edition.cover_image.isnot(None),
+#         models.Edition.cover_image.like("http%"),
+#         ~models.Edition.cover_image.like("%localhost%"),       # 우리 서버 주소 제외
+#         ~models.Edition.cover_image.like("%/static/covers/%")  # 이미 다운로드된 주소 제외
+#     ).all()
 
-    count = 0
-    # 2. 찾아낸 책들을 하나씩 백그라운드 다운로드 대기열에 넣습니다.
-    for edition in editions_to_update:
-        background_tasks.add_task(
-            download_and_update_cover,
-            edition.id,
-            edition.cover_image,
-            SessionLocal
-        )
-        count += 1
+#     count = 0
+#     # 2. 찾아낸 책들을 하나씩 백그라운드 다운로드 대기열에 넣습니다.
+#     for edition in editions_to_update:
+#         background_tasks.add_task(
+#             download_and_update_cover,
+#             edition.id,
+#             edition.cover_image,
+#             SessionLocal
+#         )
+#         count += 1
 
-    # 3. 작업 지시 완료 메시지 반환
-    return {
-        "status": "success",
-        "message": f"총 {count}권의 도서 커버 이미지를 찾아 다운로드를 시작했습니다!",
-        "target_editions": [ed.id for ed in editions_to_update]
-    }
+#     # 3. 작업 지시 완료 메시지 반환
+#     return {
+#         "status": "success",
+#         "message": f"총 {count}권의 도서 커버 이미지를 찾아 다운로드를 시작했습니다!",
+#         "target_editions": [ed.id for ed in editions_to_update]
+#     }
 
 # -------------------------------------------------------------------
 # [NEW] 긴줄평 (Long Review) API (조회, 저장/수정, 삭제)
@@ -23888,203 +24067,7 @@ async def get_long_review_detail_direct(review_id: int, db: Session = Depends(ge
             "cover": edition.cover_image
         }
     }
-
-@app.get("/api/admin/sync-authors")
-async def sync_existing_authors(db: Session = Depends(get_db)):
-    """
-    [관리자 전용] 기존 DB에 저장된 모든 Work의 author 문자열을 
-    새로 업그레이드된 parse_author_string 엔진으로 다시 분석하여
-    Contributor 및 WorkContributor 테이블을 완벽하게 재정립합니다.
-    """
-    works = db.query(models.Work).all()
-    updated_count = 0
-
-    for work in works:
-        if not work.author:
-            continue
-
-        # 1. 기존에 연결된 낡은 참여자 연결 고리(WorkContributor)를 모두 끊습니다.
-        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
-        
-        # 2. 업그레이드된 새 엔진으로 원본 문자열을 다시 정교하게 파싱합니다.
-        parsed_authors = parse_author_string(work.author)
-        
-        # 3. 새로운 규칙에 맞게 DB에 다시 예쁘게 관계를 맺어줍니다.
-        for p_auth in parsed_authors:
-            # 해당 이름의 참여자가 DB에 있는지 확인 (없으면 새로 생성)
-            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
-            
-            if not contributor:
-                # ▼▼▼ [수정됨] name과 original_name을 동시에 완벽하게 저장! ▼▼▼
-                contributor = models.Contributor(
-                    name=p_auth['name'],
-                    original_name=p_auth.get('original_name')
-                )
-                db.add(contributor)
-                db.flush() # ID를 즉시 발급받기 위해 flush
-            
-            # ▼▼▼ [NEW] 이미 등록된 작가인데 원어 이름이 없다면 추가로 채워넣기 ▼▼▼
-            elif p_auth.get('original_name') and not contributor.original_name:
-                contributor.original_name = p_auth.get('original_name')
-                db.flush()
-
-            # 작품과 참여자를 새로운 역할(role)로 연결
-            link = models.WorkContributor(
-                work_id=work.id, 
-                contributor_id=contributor.id, 
-                role=p_auth['role']
-            )
-            db.add(link)
-
-        updated_count += 1
-
-    # 4. 모든 작업이 성공하면 최종 커밋!
-    try:
-        db.commit()
-        return {
-            "status": "success", 
-            "message": f"총 {updated_count}개 작품의 참여자 데이터가 새 규칙에 맞게 완벽히 정제되었습니다!"
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"데이터 정제 중 오류 발생: {str(e)}")
     
-@app.get("/api/admin/cleanup-contributors")
-async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
-    """
-    [관리자 전용] 어떤 작품(Work)과도 연결되지 않은 찌꺼기(고아) 참여자 데이터를
-    contributors 테이블에서 영구적으로 일괄 삭제합니다.
-    """
-    # 1. 현재 작품과 정상적으로 연결된 참여자들의 ID 목록을 뽑아냅니다.
-    active_contributor_ids = db.query(models.WorkContributor.contributor_id).distinct()
-    
-    # 2. 이 연결된 ID 목록에 포함되지 않는(not_in) 고아 참여자들을 찾아 전부 삭제합니다.
-    deleted_count = db.query(models.Contributor).filter(
-        models.Contributor.id.not_in(active_contributor_ids)
-    ).delete(synchronize_session=False)
-    
-    # 3. 데이터베이스에 삭제를 최종 확정합니다.
-    try:
-        db.commit()
-        return {
-            "status": "success", 
-            "message": f"대청소 완료! 총 {deleted_count}개의 찌꺼기 참여자 데이터가 영구 삭제되었습니다."
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"데이터 청소 중 오류 발생: {str(e)}")
-    
-@app.get("/api/admin/merge-contributors")
-async def merge_specific_contributors(
-    target_id: int, 
-    source_ids: str, 
-    db: Session = Depends(get_db)
-):
-    """
-    [관리자 전용] 파편화된 작가들을 한 명(target_id)으로 강제 흡수 병합합니다.
-    사용법: /api/admin/merge-contributors?target_id=58&source_ids=59,60
-    """
-    try:
-        # "59,60" 문자열을 [59, 60] 리스트로 변환
-        source_id_list = [int(x.strip()) for x in source_ids.split(",")]
-        
-        for source_id in source_id_list:
-            if source_id == target_id: continue # 자기 자신은 무시
-            
-            # 1. source_id(가짜 톨킨)가 가진 작품 연결고리를 모두 찾습니다.
-            links = db.query(models.WorkContributor).filter(models.WorkContributor.contributor_id == source_id).all()
-            
-            for link in links:
-                # 2. target_id(진짜 톨킨)가 이미 이 작품과 연결되어 있는지 확인
-                exists = db.query(models.WorkContributor).filter(
-                    models.WorkContributor.work_id == link.work_id,
-                    models.WorkContributor.contributor_id == target_id,
-                    models.WorkContributor.role == link.role
-                ).first()
-
-                if exists:
-                    # 진짜 톨킨이 이미 연결되어 있다면, 가짜 연결고리는 중복이므로 삭제
-                    db.delete(link)
-                else:
-                    # 연결되어 있지 않다면, 가짜 연결고리의 주인을 '진짜 톨킨(target_id)'으로 바꿈!
-                    link.contributor_id = target_id
-            
-            # 3. 모든 책을 빼앗긴 가짜 톨킨(source_id)의 숨통을 끊습니다(영구 삭제).
-            source_contributor = db.query(models.Contributor).filter(models.Contributor.id == source_id).first()
-            if source_contributor:
-                db.delete(source_contributor)
-
-        db.commit()
-        return {
-            "status": "success", 
-            "message": f"파편화된 작가들({source_ids}번)이 진짜 작가({target_id}번)로 완벽하게 흡수 병합되었습니다!"
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ==========================================
-# [관리자 전용] 과거 도서 장르 일괄 세탁(마이그레이션) API
-# ==========================================
-# ▼▼▼ [수정] 네이버 대신 알라딘 API를 사용하여 완벽하게 카테고리를 복구하는 코드 ▼▼▼
-
-@app.get("/api/admin/sync-genres")
-async def sync_existing_genres(db: Session = Depends(get_db)):
-    """
-    [관리자 전용] '기타'로 오염된 도서들을 알라딘 API(ItemLookUp)를 통해 심층 복구합니다.
-    """
-    works = db.query(models.Work).filter(models.Work.category == "기타").all()
-    updated_count = 0
-
-    aladin_key = os.getenv("ALADIN_TTB_KEY", "")
-    if not aladin_key:
-        return {"status": "error", "message": "ALADIN_TTB_KEY가 설정되어 있지 않습니다."}
-
-    async with httpx.AsyncClient() as client:
-        for work in works:
-            edition = db.query(models.Edition).filter(models.Edition.work_id == work.id).first()
-            if not edition or not edition.isbn:
-                continue
-            
-            raw_kdc = edition.kdc_code or ""
-            new_cat = "기타"
-            
-            # 1. KDC 코드로 1차 복구 시도
-            if raw_kdc:
-                new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category="")
-            
-            # 2. KDC로 실패했다면 알라딘 API로 카테고리 심폐소생술!
-            if new_cat == "기타":
-                clean_isbn = edition.isbn.replace("-", "").strip()
-                # 💡 [핵심] 알라딘 API로 정확한 1권짜리 도서의 상세 정보를 요청합니다.
-                aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={aladin_key}&itemIdType=ISBN&ItemId={clean_isbn}&output=js&Version=20131101"
-                
-                try:
-                    res = await client.get(aladin_url, timeout=5.0)
-                    if res.status_code == 200:
-                        data = res.json()
-                        items = data.get("item", [])
-                        if items:
-                            # 알라딘이 주는 아주 상세하고 완벽한 카테고리 문자열 (예: "국내도서>소설/시/희곡>한국소설")
-                            raw_aladin_cat = items[0].get("categoryName", "")
-                            
-                            # 우리의 궁극의 정제기 엔진에 투입!
-                            new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category=raw_aladin_cat)
-                            print(f"🔍 [복구 성공] {work.title} : {raw_aladin_cat} ➡️ {new_cat}")
-                except Exception as e:
-                    print(f"⚠️ 알라딘 API 복구 에러: {e}")
-            
-            # 3. 드디어 '기타'에서 탈출했다면 DB에 진짜 저장!
-            if new_cat != "기타":
-                work.category = new_cat
-                updated_count += 1
-                db.commit()
-
-    return {
-        "status": "success", 
-        "message": f"장르 심폐소생술 완벽 종료! 총 {updated_count}개 작품이 '기타'에서 탈출했습니다."
-    }
-
 # ===================================================================
 # [NEW] 나의 긴줄평 전체 목록 조회 전용 API (도돌이표 종결자!)
 # ===================================================================
@@ -24138,97 +24121,293 @@ async def get_user_long_reviews(user_email: str, db: Session = Depends(get_db)):
         
     return results
 
-@app.post("/api/admin/retrain-ai")
-async def retrain_ai_model(user_email: str):
-    """
-    함수 기능: 마스터 계정 검증 후 AI 장르 분류기 재학습 스크립트를 백그라운드에서 실행하고, 
-    새로 구워진 모델을 메모리에 즉시 다시 불러옵니다(Hot Reload).
-    """
-    # 💡 [핵심 방어막] boookntalk 마스터 계정만 실행 가능!
-    if not user_email.startswith("boookntalk"):
-        raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 계정만 접근 가능합니다.")
-    
-    try:
-        # 1. 아까 만든 학습 스크립트 실행 (DB 연동 버전으로 추후 업그레이드 예정)
-        subprocess.run(["python", "utils/train_model.py"], check=True)
-        
-        # 2. 핫 리로드 (메모리의 뇌를 새 것으로 교체)
-        from utils.genre_parser import reload_ai_model
-        reload_ai_model()
-        
-        return {"status": "success", "message": "BoooknTalk AI가 새롭게 진화했습니다!"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI 학습 중 오류 발생: {str(e)}")
+# @app.get("/api/admin/sync-authors")
+# async def sync_existing_authors(db: Session = Depends(get_db)):
+#     """
+#     [관리자 전용] 기존 DB에 저장된 모든 Work의 author 문자열을 
+#     새로 업그레이드된 parse_author_string 엔진으로 다시 분석하여
+#     Contributor 및 WorkContributor 테이블을 완벽하게 재정립합니다.
+#     """
+#     works = db.query(models.Work).all()
+#     updated_count = 0
 
-@app.get("/api/admin/refresh-trending")
-async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
-    """
-    [관리자 전용] 사색에 잠기게 한 작가들(GlobalTrendingAuthor) 캐시 테이블을 
-    즉시 삭제하고, 가장 최신의 정제된 데이터로 다시 집계하여 갱신합니다.
-    """
-    result = update_global_trending_authors(db)
-    return result
+#     for work in works:
+#         if not work.author:
+#             continue
 
-@app.get("/api/admin/master-cleanup")
-async def execute_master_cleanup(db: Session = Depends(get_db)):
-    """
-    [최종 병기] 
-    1. Work 테이블의 원본 author 문자열 자체를 깨끗하게 세탁
-    2. Contributor 매핑 초기화 및 재생성
-    3. 찌꺼기(고아) 작가 데이터 완전 삭제
-    4. 랭킹 스냅샷 재갱신
-    이 모든 과정을 단 한 번의 호출로 완벽하게 수행합니다.
-    """
-    from utils.author_parser import parse_author_string
-    from services.trending_service import update_global_trending_authors
-    
-    # 1. 모든 책(Work) 데이터를 가져옵니다.
-    works = db.query(models.Work).all()
-    for work in works:
-        if not work.author: continue
+#         # 1. 기존에 연결된 낡은 참여자 연결 고리(WorkContributor)를 모두 끊습니다.
+#         db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
         
-        # 파서 엔진을 돌려 깨끗한 배열을 얻습니다.
-        parsed = parse_author_string(work.author)
-        if not parsed: continue
+#         # 2. 업그레이드된 새 엔진으로 원본 문자열을 다시 정교하게 파싱합니다.
+#         parsed_authors = parse_author_string(work.author)
         
-        # ▼▼▼ [핵심 수술] Work 마스터 테이블의 author 자체를 대표 작가 이름으로 영구 교체! ▼▼▼
-        main_authors = [p['name'] for p in parsed if p['role'] == 'AUTHOR']
-        clean_str = ", ".join(main_authors) if main_authors else parsed[0]['name']
-        work.author = clean_str # 이제 원본 텍스트 자체가 깨끗해집니다.
-        
-        # 기존 연결 고리 끊기
-        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
-        
-        # 새 연결 고리 맺기
-        for p_auth in parsed:
-            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
-            if not contributor:
-                contributor = models.Contributor(name=p_auth['name'], original_name=p_auth.get('original_name'))
-                db.add(contributor)
-                db.flush()
+#         # 3. 새로운 규칙에 맞게 DB에 다시 예쁘게 관계를 맺어줍니다.
+#         for p_auth in parsed_authors:
+#             # 해당 이름의 참여자가 DB에 있는지 확인 (없으면 새로 생성)
+#             contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
             
-            link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
-            db.add(link)
+#             if not contributor:
+#                 # ▼▼▼ [수정됨] name과 original_name을 동시에 완벽하게 저장! ▼▼▼
+#                 contributor = models.Contributor(
+#                     name=p_auth['name'],
+#                     original_name=p_auth.get('original_name')
+#                 )
+#                 db.add(contributor)
+#                 db.flush() # ID를 즉시 발급받기 위해 flush
             
-    db.commit()
+#             # ▼▼▼ [NEW] 이미 등록된 작가인데 원어 이름이 없다면 추가로 채워넣기 ▼▼▼
+#             elif p_auth.get('original_name') and not contributor.original_name:
+#                 contributor.original_name = p_auth.get('original_name')
+#                 db.flush()
+
+#             # 작품과 참여자를 새로운 역할(role)로 연결
+#             link = models.WorkContributor(
+#                 work_id=work.id, 
+#                 contributor_id=contributor.id, 
+#                 role=p_auth['role']
+#             )
+#             db.add(link)
+
+#         updated_count += 1
+
+#     # 4. 모든 작업이 성공하면 최종 커밋!
+#     try:
+#         db.commit()
+#         return {
+#             "status": "success", 
+#             "message": f"총 {updated_count}개 작품의 참여자 데이터가 새 규칙에 맞게 완벽히 정제되었습니다!"
+#         }
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(status_code=500, detail=f"데이터 정제 중 오류 발생: {str(e)}")
     
-    # 2. 연결되지 않은 찌꺼기 작가(': 시드니 셀던' 등) 영구 삭제
-    active_ids = db.query(models.WorkContributor.contributor_id).distinct()
-    db.query(models.Contributor).filter(models.Contributor.id.not_in(active_ids)).delete(synchronize_session=False)
-    db.commit()
+# @app.get("/api/admin/cleanup-contributors")
+# async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
+#     """
+#     [관리자 전용] 어떤 작품(Work)과도 연결되지 않은 찌꺼기(고아) 참여자 데이터를
+#     contributors 테이블에서 영구적으로 일괄 삭제합니다.
+#     """
+#     # 1. 현재 작품과 정상적으로 연결된 참여자들의 ID 목록을 뽑아냅니다.
+#     active_contributor_ids = db.query(models.WorkContributor.contributor_id).distinct()
     
-    # 3. 트렌딩(사색 작가) 스냅샷 갱신
-    update_global_trending_authors(db)
+#     # 2. 이 연결된 ID 목록에 포함되지 않는(not_in) 고아 참여자들을 찾아 전부 삭제합니다.
+#     deleted_count = db.query(models.Contributor).filter(
+#         models.Contributor.id.not_in(active_contributor_ids)
+#     ).delete(synchronize_session=False)
     
-    return {"status": "success", "message": "마스터 클린업 완료! BoooknTalk의 모든 작가 데이터가 완벽하게 정제되었습니다."}
+#     # 3. 데이터베이스에 삭제를 최종 확정합니다.
+#     try:
+#         db.commit()
+#         return {
+#             "status": "success", 
+#             "message": f"대청소 완료! 총 {deleted_count}개의 찌꺼기 참여자 데이터가 영구 삭제되었습니다."
+#         }
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(status_code=500, detail=f"데이터 청소 중 오류 발생: {str(e)}")
+    
+# @app.get("/api/admin/merge-contributors")
+# async def merge_specific_contributors(
+#     target_id: int, 
+#     source_ids: str, 
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     [관리자 전용] 파편화된 작가들을 한 명(target_id)으로 강제 흡수 병합합니다.
+#     사용법: /api/admin/merge-contributors?target_id=58&source_ids=59,60
+#     """
+#     try:
+#         # "59,60" 문자열을 [59, 60] 리스트로 변환
+#         source_id_list = [int(x.strip()) for x in source_ids.split(",")]
+        
+#         for source_id in source_id_list:
+#             if source_id == target_id: continue # 자기 자신은 무시
+            
+#             # 1. source_id(가짜 톨킨)가 가진 작품 연결고리를 모두 찾습니다.
+#             links = db.query(models.WorkContributor).filter(models.WorkContributor.contributor_id == source_id).all()
+            
+#             for link in links:
+#                 # 2. target_id(진짜 톨킨)가 이미 이 작품과 연결되어 있는지 확인
+#                 exists = db.query(models.WorkContributor).filter(
+#                     models.WorkContributor.work_id == link.work_id,
+#                     models.WorkContributor.contributor_id == target_id,
+#                     models.WorkContributor.role == link.role
+#                 ).first()
+
+#                 if exists:
+#                     # 진짜 톨킨이 이미 연결되어 있다면, 가짜 연결고리는 중복이므로 삭제
+#                     db.delete(link)
+#                 else:
+#                     # 연결되어 있지 않다면, 가짜 연결고리의 주인을 '진짜 톨킨(target_id)'으로 바꿈!
+#                     link.contributor_id = target_id
+            
+#             # 3. 모든 책을 빼앗긴 가짜 톨킨(source_id)의 숨통을 끊습니다(영구 삭제).
+#             source_contributor = db.query(models.Contributor).filter(models.Contributor.id == source_id).first()
+#             if source_contributor:
+#                 db.delete(source_contributor)
+
+#         db.commit()
+#         return {
+#             "status": "success", 
+#             "message": f"파편화된 작가들({source_ids}번)이 진짜 작가({target_id}번)로 완벽하게 흡수 병합되었습니다!"
+#         }
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# [관리자 전용] 과거 도서 장르 일괄 세탁(마이그레이션) API
+# ==========================================
+# ▼▼▼ [수정] 네이버 대신 알라딘 API를 사용하여 완벽하게 카테고리를 복구하는 코드 ▼▼▼
+
+# @app.get("/api/admin/sync-genres")
+# async def sync_existing_genres(db: Session = Depends(get_db)):
+#     """
+#     [관리자 전용] '기타'로 오염된 도서들을 알라딘 API(ItemLookUp)를 통해 심층 복구합니다.
+#     """
+#     works = db.query(models.Work).filter(models.Work.category == "기타").all()
+#     updated_count = 0
+
+#     aladin_key = os.getenv("ALADIN_TTB_KEY", "")
+#     if not aladin_key:
+#         return {"status": "error", "message": "ALADIN_TTB_KEY가 설정되어 있지 않습니다."}
+
+#     async with httpx.AsyncClient() as client:
+#         for work in works:
+#             edition = db.query(models.Edition).filter(models.Edition.work_id == work.id).first()
+#             if not edition or not edition.isbn:
+#                 continue
+            
+#             raw_kdc = edition.kdc_code or ""
+#             new_cat = "기타"
+            
+#             # 1. KDC 코드로 1차 복구 시도
+#             if raw_kdc:
+#                 new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category="")
+            
+#             # 2. KDC로 실패했다면 알라딘 API로 카테고리 심폐소생술!
+#             if new_cat == "기타":
+#                 clean_isbn = edition.isbn.replace("-", "").strip()
+#                 # 💡 [핵심] 알라딘 API로 정확한 1권짜리 도서의 상세 정보를 요청합니다.
+#                 aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={aladin_key}&itemIdType=ISBN&ItemId={clean_isbn}&output=js&Version=20131101"
+                
+#                 try:
+#                     res = await client.get(aladin_url, timeout=5.0)
+#                     if res.status_code == 200:
+#                         data = res.json()
+#                         items = data.get("item", [])
+#                         if items:
+#                             # 알라딘이 주는 아주 상세하고 완벽한 카테고리 문자열 (예: "국내도서>소설/시/희곡>한국소설")
+#                             raw_aladin_cat = items[0].get("categoryName", "")
+                            
+#                             # 우리의 궁극의 정제기 엔진에 투입!
+#                             new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category=raw_aladin_cat)
+#                             print(f"🔍 [복구 성공] {work.title} : {raw_aladin_cat} ➡️ {new_cat}")
+#                 except Exception as e:
+#                     print(f"⚠️ 알라딘 API 복구 에러: {e}")
+            
+#             # 3. 드디어 '기타'에서 탈출했다면 DB에 진짜 저장!
+#             if new_cat != "기타":
+#                 work.category = new_cat
+#                 updated_count += 1
+#                 db.commit()
+
+#     return {
+#         "status": "success", 
+#         "message": f"장르 심폐소생술 완벽 종료! 총 {updated_count}개 작품이 '기타'에서 탈출했습니다."
+#     }
+
+# @app.post("/api/admin/retrain-ai")
+# async def retrain_ai_model(user_email: str):
+#     """
+#     함수 기능: 마스터 계정 검증 후 AI 장르 분류기 재학습 스크립트를 백그라운드에서 실행하고, 
+#     새로 구워진 모델을 메모리에 즉시 다시 불러옵니다(Hot Reload).
+#     """
+#     # 💡 [핵심 방어막] boookntalk 마스터 계정만 실행 가능!
+#     if not user_email.startswith("boookntalk"):
+#         raise HTTPException(status_code=403, detail="권한이 없습니다. 마스터 계정만 접근 가능합니다.")
+    
+#     try:
+#         # 1. 아까 만든 학습 스크립트 실행 (DB 연동 버전으로 추후 업그레이드 예정)
+#         subprocess.run(["python", "utils/train_model.py"], check=True)
+        
+#         # 2. 핫 리로드 (메모리의 뇌를 새 것으로 교체)
+#         from utils.genre_parser import reload_ai_model
+#         reload_ai_model()
+        
+#         return {"status": "success", "message": "BoooknTalk AI가 새롭게 진화했습니다!"}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"AI 학습 중 오류 발생: {str(e)}")
+
+# @app.get("/api/admin/refresh-trending")
+# async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
+#     """
+#     [관리자 전용] 사색에 잠기게 한 작가들(GlobalTrendingAuthor) 캐시 테이블을 
+#     즉시 삭제하고, 가장 최신의 정제된 데이터로 다시 집계하여 갱신합니다.
+#     """
+#     result = update_global_trending_authors(db)
+#     return result
+
+# @app.get("/api/admin/master-cleanup")
+# async def execute_master_cleanup(db: Session = Depends(get_db)):
+#     """
+#     [최종 병기] 
+#     1. Work 테이블의 원본 author 문자열 자체를 깨끗하게 세탁
+#     2. Contributor 매핑 초기화 및 재생성
+#     3. 찌꺼기(고아) 작가 데이터 완전 삭제
+#     4. 랭킹 스냅샷 재갱신
+#     이 모든 과정을 단 한 번의 호출로 완벽하게 수행합니다.
+#     """
+#     from utils.author_parser import parse_author_string
+#     from services.trending_service import update_global_trending_authors
+    
+#     # 1. 모든 책(Work) 데이터를 가져옵니다.
+#     works = db.query(models.Work).all()
+#     for work in works:
+#         if not work.author: continue
+        
+#         # 파서 엔진을 돌려 깨끗한 배열을 얻습니다.
+#         parsed = parse_author_string(work.author)
+#         if not parsed: continue
+        
+#         # ▼▼▼ [핵심 수술] Work 마스터 테이블의 author 자체를 대표 작가 이름으로 영구 교체! ▼▼▼
+#         main_authors = [p['name'] for p in parsed if p['role'] == 'AUTHOR']
+#         clean_str = ", ".join(main_authors) if main_authors else parsed[0]['name']
+#         work.author = clean_str # 이제 원본 텍스트 자체가 깨끗해집니다.
+        
+#         # 기존 연결 고리 끊기
+#         db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
+        
+#         # 새 연결 고리 맺기
+#         for p_auth in parsed:
+#             contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+#             if not contributor:
+#                 contributor = models.Contributor(name=p_auth['name'], original_name=p_auth.get('original_name'))
+#                 db.add(contributor)
+#                 db.flush()
+            
+#             link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
+#             db.add(link)
+            
+#     db.commit()
+    
+#     # 2. 연결되지 않은 찌꺼기 작가(': 시드니 셀던' 등) 영구 삭제
+#     active_ids = db.query(models.WorkContributor.contributor_id).distinct()
+#     db.query(models.Contributor).filter(models.Contributor.id.not_in(active_ids)).delete(synchronize_session=False)
+#     db.commit()
+    
+#     # 3. 트렌딩(사색 작가) 스냅샷 갱신
+#     update_global_trending_authors(db)
+    
+#     return {"status": "success", "message": "마스터 클린업 완료! BoooknTalk의 모든 작가 데이터가 완벽하게 정제되었습니다."}
 
 # 기능: 외부 도서 API 데이터를 수동으로 즉시 갱신하는 어드민용 트리거
-@app.post("/api/admin/refresh-discovery", tags=["Admin"])
-def refresh_discovery_data(db: Session = Depends(get_db)):
-    success = update_external_book_cache(db)
-    if success:
-        return {"message": "디스커버리 도서 데이터가 성공적으로 갱신되었습니다."}
-    raise HTTPException(status_code=500, detail="데이터 수집에 실패했거나 가져올 데이터가 없습니다.")
+# @app.post("/api/admin/refresh-discovery", tags=["Admin"])
+# def refresh_discovery_data(db: Session = Depends(get_db)):
+#     success = update_external_book_cache(db)
+#     if success:
+#         return {"message": "디스커버리 도서 데이터가 성공적으로 갱신되었습니다."}
+#     raise HTTPException(status_code=500, detail="데이터 수집에 실패했거나 가져올 데이터가 없습니다.")
 
 
 ============================================================
@@ -24913,165 +25092,284 @@ FILE PATH: backend/routers/admin.py
 # 파일 경로: backend/routers/admin.py
 # 역할 및 기능: 관리자(ADMIN) 전용 API 라우터입니다. 데이터 클렌징, 작가 병합, 장르 오답 노트 수집 등의 시스템 핵심 관리 기능을 담당합니다.
 
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Body
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from pydantic import BaseModel
-import models
-from database import get_db
+from database import get_db, SessionLocal
 from services.admin_service import run_cleansing_and_merge
-
-import os
-import subprocess
-import uuid
-import shutil
 from utils.genre_parser import reload_ai_model
 
+# 외부 의존성 함수 임포트
+from utils import download_and_update_cover
+from utils.genre_parser import map_to_standard_genre
+from utils.author_parser import parse_author_string
+from services.trending_service import update_global_trending_authors
+from services.external_api_service import update_external_book_cache
+
+import os, httpx, subprocess, uuid, shutil, models
+
+# 💡 [핵심] 여기서 prefix를 "/api/admin"으로 고정해두면, 아래 API들에는 안 써도 자동으로 붙습니다!
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 # ==========================================
-# [기존 1] 오염 데이터 딥 클렌징 및 병합
+# [스키마 정의]
 # ==========================================
-@router.post("/cleanse-authors")
-async def cleanse_authors_api(db: Session = Depends(get_db)):
-    """
-    기능: 오염된 작가 꼬리표를 제거하고, 파편화된 작가 데이터를 하나로 강제 병합하는 딥 클렌징 수술을 실행합니다.
-    """
-    return await run_cleansing_and_merge(db)
-
+class MergeWorksRequest(BaseModel):
+    target_work_id: int
+    source_work_ids: list[int]
 
 # ==========================================
-# ▼▼▼ [NEW 2] 장르 오답 노트 수집 및 업데이트 (Upsert) ▼▼▼
+# [1] 작품 데이터 대통합 스캐너 및 병합 API (새로 추가됨)
 # ==========================================
+# 함수 기능: 제목의 공백을 제거한 텍스트를 기준으로, 완벽하게 일치하거나 매우 유사하여 중복 생성된 작품(Work) 그룹 목록을 스캔하여 반환합니다.
+@router.get("/duplicate-works")
+async def get_duplicate_works(db: Session = Depends(get_db)):
+    duplicates = db.query(
+        func.replace(models.Work.title, ' ', '').label('norm_title'),
+        func.count(models.Work.id).label('cnt')
+    ).group_by('norm_title').having(func.count(models.Work.id) > 1).all()
 
-# 클라이언트로부터 받을 장르 교정 데이터 스키마
-class GenreCorrectionRequest(BaseModel):
-    raw_keyword: str
-    standard_genre: str
+    duplicate_titles = [d.norm_title for d in duplicates]
+    if not duplicate_titles: return []
 
-@router.post("/genre-correction")
-async def save_genre_correction(req: GenreCorrectionRequest, db: Session = Depends(get_db)):
-    """
-    기능: 전달받은 외부 원본 장르 텍스트와 관리자가 수동 교정한 BoooknTalk 8대 표준 장르를 DB(genre_training_data)에 저장합니다. 동일한 원본 텍스트가 이미 존재할 경우, 새로운 정답 장르로 덮어씌우는 Upsert 처리를 수행합니다.
-    """
-    # 1. DB에 해당 원본 텍스트(raw_keyword)가 이미 존재하는지 검색
-    existing_data = db.query(models.GenreTrainingData).filter(
-        models.GenreTrainingData.raw_keyword == req.raw_keyword
-    ).first()
+    works = db.query(models.Work).filter(
+        func.replace(models.Work.title, ' ', '').in_(duplicate_titles)
+    ).order_by(models.Work.title).all()
 
-    if existing_data:
-        # 2. 이미 존재하는 데이터라면 새로운 표준 장르로 업데이트 (Update)
-        existing_data.standard_genre = req.standard_genre
-        db.commit()
-        return {
-            "status": "success", 
-            "message": f"기존 오답 노트가 업데이트되었습니다: '{req.raw_keyword}' ➡️ '{req.standard_genre}'"
-        }
-    else:
-        # 3. 처음 보는 텍스트라면 오답 노트에 새롭게 추가 (Insert)
-        new_correction = models.GenreTrainingData(
-            raw_keyword=req.raw_keyword,
-            standard_genre=req.standard_genre
-        )
-        db.add(new_correction)
-        db.commit()
-        return {
-            "status": "success", 
-            "message": f"새로운 오답 데이터가 저장되었습니다: '{req.raw_keyword}' ➡️ '{req.standard_genre}'"
-        }
-        
-@router.post("/retrain-ai")
-async def trigger_retrain_ai(user_email: str):
-    """
-    기능: 마이페이지의 시스템 관리자 패널(AdminPanel)에서 호출 시, 백그라운드에서 train_model.py를 실행하여 AI를 재학습시키고 메모리에 즉각 반영합니다.
-    """
+    result_map = {}
+    for w in works:
+        norm_t = w.title.replace(' ', '')
+        if norm_t not in result_map: result_map[norm_t] = []
+        edition_count = db.query(models.Edition).filter(models.Edition.work_id == w.id).count()
+        result_map[norm_t].append({
+            "work_id": w.id, "title": w.title, "author": w.author, "edition_count": edition_count
+        })
+
+    return [{"normalized_title": k, "works": v} for k, v in result_map.items() if len(v) > 1]
+
+# 함수 기능: 여러 개의 파편화된 작품(Work)의 하위 데이터(판본, 서평, 작가 연결)를 하나의 타겟 작품으로 완벽하게 이전(Merge)하고, 빈 껍데기는 영구 삭제합니다.
+@router.post("/merge-works")
+async def merge_specific_works(req: MergeWorksRequest, db: Session = Depends(get_db)):
     try:
-        # 1. 파이썬 스크립트의 절대 경로를 안전하게 추적
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(current_dir, "..", "utils", "train_model.py")
-        
-        # 2. 서브프로세스로 학습 스크립트 자동 실행 (터미널에서 엔터 치는 것과 동일한 효과)
-        subprocess.run(["python", script_path], check=True)
-        
-        # 3. 새로 구워진 뇌로 무중단 교체 (Hot Reload)
-        reload_ai_model()
-        
-        return {
-            "status": "success", 
-            "message": "BoooknTalk AI 엔진이 누적된 오답 노트를 바탕으로 새롭게 진화했습니다! 🚀"
-        }
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=500, detail=f"AI 학습 스크립트 실행 실패: {str(e)}")
+        target_id = req.target_work_id
+        source_ids = [sid for sid in req.source_work_ids if sid != target_id]
+
+        if not source_ids: raise HTTPException(status_code=400, detail="병합할 대상이 없습니다.")
+
+        target_work = db.query(models.Work).filter(models.Work.id == target_id).first()
+        if not target_work: raise HTTPException(status_code=404, detail="타겟 작품을 찾을 수 없습니다.")
+
+        for source_id in source_ids:
+            db.query(models.Edition).filter(models.Edition.work_id == source_id).update({"work_id": target_id})
+            db.query(models.LongReview).filter(models.LongReview.work_id == source_id).update({"work_id": target_id})
+
+            source_links = db.query(models.WorkContributor).filter(models.WorkContributor.work_id == source_id).all()
+            for link in source_links:
+                exists = db.query(models.WorkContributor).filter(
+                    models.WorkContributor.work_id == target_id,
+                    models.WorkContributor.contributor_id == link.contributor_id,
+                    models.WorkContributor.role == link.role
+                ).first()
+                if exists: db.delete(link)
+                else: link.work_id = target_id
+
+            db.query(models.Work).filter(models.Work.id == source_id).delete()
+
+        db.commit()
+        return {"status": "success", "message": f"작품 대통합 완료! ({target_id}번 작품으로 흡수되었습니다)"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI 재학습 중 알 수 없는 오류 발생: {str(e)}")
-    
-# ==========================================
-# 1. 사진 누락 작가 리스트 조회 API
-# ==========================================
-@router.get("/authors/no-image")
-def get_authors_without_image(db: Session = Depends(get_db)):
-    """프로필 사진이 등록되지 않은 작가 리스트를 조회합니다."""
-    
-    # 💡 [핵심 방어막] 진짜 NULL, 빈 문자열(""), 가짜 "null" 텍스트까지 모조리 필터링
-    authors = db.query(models.Contributor).filter(
-        or_(
-            models.Contributor.profile_image == None, 
-            models.Contributor.profile_image == "",
-            models.Contributor.profile_image == "null"
-        )
-    ).order_by(models.Contributor.name.asc()).limit(100).all()
-    
-    return authors
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"작품 병합 중 오류 발생: {str(e)}")
 
 # ==========================================
-# 2. 작가 프로필 사진 수동 업로드 API
+# [2] 기존 main.py에서 분리된 관리자 API들
 # ==========================================
-@router.post("/authors/{contributor_id}/upload-image")
-def upload_author_image(
-    contributor_id: int, 
-    user_email: str = Body(...), # 프론트엔드의 FormData에서 이메일 추출
-    file: UploadFile = File(...), 
-    db: Session = Depends(get_db)
-):
-    """특정 작가의 프로필 이미지를 수동으로 업로드하여 로컬에 저장하고 DB를 갱신합니다."""
+
+# 함수 기능: 기존에 등록된 도서 중 외부 URL(네이버 등)을 사용하고 있는 도서를 찾아 로컬로 일괄 다운로드합니다.
+@router.get("/sync-covers")
+async def sync_existing_covers(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    editions_to_update = db.query(models.Edition).filter(
+        models.Edition.cover_image.isnot(None),
+        models.Edition.cover_image.like("http%"),
+        ~models.Edition.cover_image.like("%localhost%"),
+        ~models.Edition.cover_image.like("%/static/covers/%")
+    ).all()
+
+    count = 0
+    for edition in editions_to_update:
+        background_tasks.add_task(download_and_update_cover, edition.id, edition.cover_image, SessionLocal)
+        count += 1
+
+    return {"status": "success", "message": f"총 {count}권 다운로드 시작!", "target_editions": [ed.id for ed in editions_to_update]}
+
+# 함수 기능: 기존 DB에 저장된 모든 Work의 author 문자열을 새로 분석하여 참여자 테이블을 재정립합니다.
+@router.get("/sync-authors")
+async def sync_existing_authors(db: Session = Depends(get_db)):
+    works = db.query(models.Work).all()
+    updated_count = 0
+
+    for work in works:
+        if not work.author: continue
+        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
+        
+        parsed_authors = parse_author_string(work.author)
+        for p_auth in parsed_authors:
+            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+            if not contributor:
+                contributor = models.Contributor(name=p_auth['name'], original_name=p_auth.get('original_name'))
+                db.add(contributor)
+                db.flush()
+            elif p_auth.get('original_name') and not contributor.original_name:
+                contributor.original_name = p_auth.get('original_name')
+                db.flush()
+
+            link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
+            db.add(link)
+
+        updated_count += 1
+
+    try:
+        db.commit()
+        return {"status": "success", "message": f"총 {updated_count}개 작품 데이터 정제 완료!"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"정제 오류: {str(e)}")
+
+# 함수 기능: 어떤 작품(Work)과도 연결되지 않은 찌꺼기(고아) 참여자 데이터를 일괄 삭제합니다.
+@router.get("/cleanup-contributors")
+async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
+    active_ids = db.query(models.WorkContributor.contributor_id).distinct()
+    deleted_count = db.query(models.Contributor).filter(models.Contributor.id.not_in(active_ids)).delete(synchronize_session=False)
     
-    # 1. 최고 관리자 권한 검증
+    try:
+        db.commit()
+        return {"status": "success", "message": f"총 {deleted_count}개 찌꺼기 데이터 삭제 완료."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"청소 오류: {str(e)}")
+
+# 함수 기능: 파편화된 작가들을 한 명으로 강제 흡수 병합합니다.
+@router.get("/merge-contributors")
+async def merge_specific_contributors(target_id: int, source_ids: str, db: Session = Depends(get_db)):
+    try:
+        source_id_list = [int(x.strip()) for x in source_ids.split(",")]
+        for source_id in source_id_list:
+            if source_id == target_id: continue
+            
+            links = db.query(models.WorkContributor).filter(models.WorkContributor.contributor_id == source_id).all()
+            for link in links:
+                exists = db.query(models.WorkContributor).filter(
+                    models.WorkContributor.work_id == link.work_id,
+                    models.WorkContributor.contributor_id == target_id,
+                    models.WorkContributor.role == link.role
+                ).first()
+
+                if exists: db.delete(link)
+                else: link.contributor_id = target_id
+            
+            source_contributor = db.query(models.Contributor).filter(models.Contributor.id == source_id).first()
+            if source_contributor: db.delete(source_contributor)
+
+        db.commit()
+        return {"status": "success", "message": "작가 병합 완료!"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 함수 기능: '기타'로 오염된 도서들을 알라딘 API를 통해 심층 복구합니다.
+@router.get("/sync-genres")
+async def sync_existing_genres(db: Session = Depends(get_db)):
+    works = db.query(models.Work).filter(models.Work.category == "기타").all()
+    updated_count = 0
+    aladin_key = os.getenv("ALADIN_TTB_KEY", "")
+    if not aladin_key: return {"status": "error", "message": "API 키 부재."}
+
+    async with httpx.AsyncClient() as client:
+        for work in works:
+            edition = db.query(models.Edition).filter(models.Edition.work_id == work.id).first()
+            if not edition or not edition.isbn: continue
+            
+            raw_kdc = edition.kdc_code or ""
+            new_cat = "기타"
+            if raw_kdc: new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category="")
+            
+            if new_cat == "기타":
+                clean_isbn = edition.isbn.replace("-", "").strip()
+                aladin_url = f"http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx?ttbkey={aladin_key}&itemIdType=ISBN&ItemId={clean_isbn}&output=js&Version=20131101"
+                try:
+                    res = await client.get(aladin_url, timeout=5.0)
+                    if res.status_code == 200:
+                        data = res.json()
+                        items = data.get("item", [])
+                        if items:
+                            new_cat = map_to_standard_genre(kdc_code=raw_kdc, naver_category=items[0].get("categoryName", ""))
+                except Exception as e:
+                    print(f"⚠️ API 에러: {e}")
+            
+            if new_cat != "기타":
+                work.category = new_cat
+                updated_count += 1
+                db.commit()
+
+    return {"status": "success", "message": f"총 {updated_count}개 작품 장르 복구 완료."}
+
+# 함수 기능: AI 장르 분류기 재학습을 백그라운드에서 실행하고 모델을 다시 불러옵니다.
+@router.post("/retrain-ai")
+async def retrain_ai_model(user_email: str):
     if not user_email.startswith("boookntalk"):
-        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    try:
+        subprocess.run(["python", "utils/train_model.py"], check=True)
+        from utils.genre_parser import reload_ai_model
+        reload_ai_model()
+        return {"status": "success", "message": "AI 재학습 완료!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    contributor = db.query(models.Contributor).filter(models.Contributor.id == contributor_id).first()
-    if not contributor:
-        raise HTTPException(status_code=404, detail="작가를 찾을 수 없습니다.")
+# 함수 기능: 트렌딩 작가 캐시를 즉시 수동 갱신합니다.
+@router.get("/refresh-trending")
+async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
+    result = update_global_trending_authors(db)
+    return result
 
-    # 2. 로컬 저장소 폴더 확인 및 생성 (서버 루트 기준)
-    upload_dir = "static/uploads/authors"
-    if not os.path.exists(upload_dir):
-        os.makedirs(upload_dir)
-
-    # 3. 해킹 방지용 난수 파일명(UUID) 생성
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    unique_filename = f"{uuid.uuid4()}{file_ext}"
-    file_path = os.path.join(upload_dir, unique_filename)
-
-    # 4. 물리적 파일 저장
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # 5. 마스터 테이블 및 캐시 테이블 동시 업데이트
-    # 프론트엔드에서 바로 읽을 수 있는 로컬 URL 생성
-    image_url = f"http://localhost:8000/{upload_dir}/{unique_filename}"
-    
-    # 마스터 테이블 갱신
-    contributor.profile_image = image_url
-    
-    # 사색 작가 랭킹 캐시 테이블 동기화 (화면에 즉시 반영하기 위함)
-    db.query(models.GlobalTrendingAuthor).filter(
-        models.GlobalTrendingAuthor.contributor_id == contributor_id
-    ).update({"author_profile_image": image_url})
-    
+# 함수 기능: 작품, 참여자 등 DB 전체를 한 번에 정제하는 마스터 클린업 도구입니다.
+@router.get("/master-cleanup")
+async def execute_master_cleanup(db: Session = Depends(get_db)):
+    works = db.query(models.Work).all()
+    for work in works:
+        if not work.author: continue
+        parsed = parse_author_string(work.author)
+        if not parsed: continue
+        
+        main_authors = [p['name'] for p in parsed if p['role'] == 'AUTHOR']
+        work.author = ", ".join(main_authors) if main_authors else parsed[0]['name']
+        
+        db.query(models.WorkContributor).filter(models.WorkContributor.work_id == work.id).delete()
+        for p_auth in parsed:
+            contributor = db.query(models.Contributor).filter(models.Contributor.name == p_auth['name']).first()
+            if not contributor:
+                contributor = models.Contributor(name=p_auth['name'], original_name=p_auth.get('original_name'))
+                db.add(contributor)
+                db.flush()
+            
+            link = models.WorkContributor(work_id=work.id, contributor_id=contributor.id, role=p_auth['role'])
+            db.add(link)
+            
     db.commit()
+    active_ids = db.query(models.WorkContributor.contributor_id).distinct()
+    db.query(models.Contributor).filter(models.Contributor.id.not_in(active_ids)).delete(synchronize_session=False)
+    db.commit()
+    update_global_trending_authors(db)
+    
+    return {"status": "success", "message": "마스터 클린업 완료!"}
 
-    return {"status": "success", "url": image_url}
+# 함수 기능: 외부 도서 API 데이터를 수동으로 갱신합니다.
+@router.post("/refresh-discovery")
+def refresh_discovery_data(db: Session = Depends(get_db)):
+    success = update_external_book_cache(db)
+    if success: return {"message": "성공적으로 갱신되었습니다."}
+    raise HTTPException(status_code=500, detail="데이터 수집 실패.")
 
 
 ============================================================

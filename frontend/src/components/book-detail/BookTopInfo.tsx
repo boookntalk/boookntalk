@@ -1,15 +1,18 @@
 // 파일 경로: src/components/book/BookTopInfo.tsx
+// 역할 및 기능: 부모 영역의 하얀 도화지에 녹아들도록 디자인된 도서 상세 상단 정보 컴포넌트.
+// 업데이트: 1줄 정렬 UI 유지 및 판본(출판사) 스위칭 메뉴 노출 조건 완벽 조율(2개 이상일 때만 노출)
 
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Star, ExternalLink, Layers, ArrowRight, Edit3, Trash2 } from 'lucide-react';
+import { Star, ExternalLink, Layers, ArrowRight, Edit3, Trash2, User, Edit2 } from 'lucide-react';
 import { FloatingCover } from '@/components/common/FloatingCover';
 import { useRouter } from 'next/navigation';
 import { AuthorAvatar } from '@/components/common/AuthorAvatar';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface BookTopInfoProps {
     record: any;
@@ -29,6 +32,7 @@ interface BookTopInfoProps {
         title: string;
         cover: string;
     }>;
+    currentUser?: any; 
 }
 
 const getSafeDateString = (dateString: string) => {
@@ -38,9 +42,10 @@ const getSafeDateString = (dateString: string) => {
     return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}.`;
 };
 
+// 함수 기능: 도서 상단 히어로 영역 렌더링. 판본 스위칭, 쪽수 미상 툴팁, 1줄 메타 데이터 등 포함.
 export default function BookTopInfo({ 
     record, edition, work, myEditions = [], onRecordChange,
-    authorInfo, authorOtherBooks = []
+    authorInfo, authorOtherBooks = [], currentUser
 }: BookTopInfoProps) {
     const router = useRouter();
     const [isMounted, setIsMounted] = useState(false);
@@ -61,35 +66,53 @@ export default function BookTopInfo({
     const externalLink = `https://search.shopping.naver.com/book/search?query=${edition?.isbn}`;
     const displayDesc = (edition?.description || work?.description || "").trim() || "상세 설명이 없습니다.";
 
-    // =========================================================================
-    // 💡 [핵심 수정] 독서 상태 마커(O) 활성화 로직 강화
-    // 백엔드의 다양한 상태값(read, completed 등)과 % 진행률을 모두 조합하여 
-    // 현재 도달한 단계를 정확하게 계산해 냅니다.
-    // =========================================================================
-    const currentPage = record?.current_page || 0;
-    const totalPage = edition?.page_count || 1;
-    const progressPercent = Math.min(Math.round((currentPage / totalPage) * 100), 100);
-    
     const rawStatus = (record?.status || '').toLowerCase();
-    let statusIndex = 0; // 0: 읽고 싶음 (기본)
+    const currentPage = record?.current_page || 0;
+    const dbTotalPage = edition?.page_count || 0; 
+
+    let statusIndex = 0; 
     
-    if (['reading', 'currently_reading'].includes(rawStatus) || (progressPercent > 0 && progressPercent < 100)) {
-        statusIndex = 1; // 1: 읽는 중 단계 도달
+    if (['reading', 'currently_reading'].includes(rawStatus) || (currentPage > 0 && currentPage < (dbTotalPage || Infinity))) {
+        statusIndex = 1;
     }
-    if (['finished', 'read', 'completed', 'done'].includes(rawStatus) || progressPercent >= 100) {
-        statusIndex = 2; // 2: 완독 단계 도달
+    if (['finished', 'read', 'completed', 'done'].includes(rawStatus) || (dbTotalPage > 0 && currentPage >= dbTotalPage)) {
+        statusIndex = 2;
+    }
+
+    let progressPercent = 0;
+    if (statusIndex === 2) {
+        progressPercent = 100; 
+    } else if (dbTotalPage > 0) {
+        progressPercent = Math.min(Math.round((currentPage / dbTotalPage) * 100), 100);
     }
 
     const currentStatus = statusIndex === 0 ? 'wish' : statusIndex === 1 ? 'reading' : 'finished';
     const barWidth = statusIndex === 2 ? '100%' : statusIndex === 0 ? '0%' : `${progressPercent}%`;
-    // =========================================================================
+
+    const firstDiscoverer = edition?.first_discoverer || "익명의 여행자";
+    const isAdmin = currentUser?.email?.startsWith('boookntalk');
+    const currentNickname = currentUser?.nickname || currentUser?.email?.split('@')[0];
+    const isCreator = currentNickname === firstDiscoverer;
+    
+    const canEditBookInfo = isAdmin || isCreator;
+
+    const handleEditPageCount = () => {
+        const newPageStr = window.prompt("책의 정확한 전체 쪽수를 입력해 주세요:");
+        if (newPageStr !== null) {
+            const newPageNum = parseInt(newPageStr, 10);
+            if (isNaN(newPageNum) || newPageNum <= 0) {
+                alert("올바른 숫자를 입력해 주세요.");
+                return;
+            }
+            alert(`쪽수가 ${newPageNum}쪽으로 업데이트 되었습니다! (API 연동 대기중)`);
+        }
+    };
 
     return (
         <section className="bg-transparent w-full relative z-[100]">
             <div className="max-w-[1200px] mx-auto px-[var(--spacing-1cm,32px)] pt-4 pb-8">
                 <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,32px)] items-stretch">
                     
-                    {/* [좌측 영역]: 도서 표지 */}
                     <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
                         <FloatingCover 
                             src={edition?.cover_image || edition?.cover || work?.cover_image ? getHighResCover(edition.cover_image || edition.cover || work.cover_image) : null}
@@ -104,17 +127,16 @@ export default function BookTopInfo({
                         </div>
                     </div>
 
-                    {/* [우측 영역]: 2/3 (도서) 와 1/3 (작가) 분할 */}
                     <div className="flex-1 flex flex-col min-w-0">
                         <div className="flex flex-col lg:flex-row gap-8 w-full">
                             
-                            {/* [우측-1] 도서 상세 정보 */}
                             <div className="w-full lg:w-2/3 flex flex-col min-w-0 lg:border-r lg:border-gray-100 lg:pr-8">
                                 <div className="flex justify-between items-start mb-2 gap-4">
                                     <h1 className="text-[28px] md:text-[32px] font-extrabold text-[#1d1d1f] leading-tight tracking-tight break-keep">
                                         {work?.title}
                                     </h1>
-                                    {isMounted && myEditions.length > 0 && (
+                                    {/* 💡 [적용] 내 서재에 같은 책의 다른 판본이 존재할 때(2개 이상)만 셀렉트 박스 노출 */}
+                                    {isMounted && myEditions.length > 1 && (
                                         <div className="flex items-center bg-gray-50 rounded-lg pr-1 shadow-sm border border-gray-100 flex-shrink-0 mt-1">
                                             <div className="pl-3 pr-2 py-1.5 flex items-center gap-1.5 border-r border-gray-200/60">
                                                 <Layers size={14} className="text-gray-400" />
@@ -135,37 +157,69 @@ export default function BookTopInfo({
                                     )}
                                 </div>
 
-                                <div className="text-[15px] text-gray-700 font-bold mb-3 flex items-center flex-wrap gap-2">
-                                    <span>{formatAuthor(work?.author)}</span>
-                                    <span className="text-gray-300 mx-1">|</span>
-                                    <span>{edition?.publisher}</span>
-                                    {pubYear && <span className="text-gray-500 font-medium">({pubYear})</span>}
+                                {/* 작가, 출판사 & 최초도서등록 우측 정렬 */}
+                                <div className="flex justify-between items-center mb-3 gap-4">
+                                    <div className="text-[15px] text-gray-700 font-bold flex items-center flex-wrap gap-2 flex-1 min-w-0">
+                                        <span className="truncate">{formatAuthor(work?.author)}</span>
+                                        <span className="text-gray-300 shrink-0">|</span>
+                                        <span className="truncate">{edition?.publisher}</span>
+                                        {pubYear && <span className="text-gray-500 font-medium shrink-0">({pubYear})</span>}
+                                    </div>
+                                    <div className="flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-md text-[11px] font-bold text-gray-500 shrink-0">
+                                        <User size={12} className="text-gray-400" />
+                                        <span>최초도서등록 : <span className="text-gray-700">{firstDiscoverer}</span></span>
+                                    </div>
                                 </div>
 
-                                <div className="flex flex-wrap items-center justify-between mb-5 gap-y-3">
-                                    <div className="flex items-center flex-wrap gap-2.5">
-                                        <div className="text-[13px] text-gray-500 font-medium flex items-center gap-1.5 flex-wrap">
-                                            {edition?.format && <><span className="text-[#1d1d1f] font-bold">{edition.format}</span><span className="text-gray-300">·</span></>}
-                                            {edition?.language && <><span className="text-[#1d1d1f] font-bold">{edition.language}</span><span className="text-gray-300">·</span></>}
-                                            <span>{edition?.page_count ? `${edition.page_count}쪽` : '쪽수 미상'}</span>
-                                            <span className="text-gray-300">·</span>
-                                            <span className="font-mono">ISBN {edition?.isbn}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-4 bg-gray-50/50 px-3 py-1.5 rounded-xl border border-gray-100 shrink-0">
-                                        <div className="flex items-center gap-1.5 pr-3 border-r border-gray-200">
-                                            <span className="text-[11px] font-bold text-gray-500">BoooknTalk 평균</span>
-                                            <span className="text-[13px] font-black text-[#1d1d1f] flex items-center gap-0.5"><Star size={12} className="text-[#FFCC00]" fill="currentColor" /> {work?.average_rating || "0.0"}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-[11px] font-bold text-gray-500">나의 별점</span>
-                                            {currentStatus !== 'wish' ? (
-                                                <div className="flex text-[#FFCC00]">{[1, 2, 3, 4, 5].map((s) => <Star key={s} size={13} fill={s <= (record?.rating || 0) ? "currentColor" : "none"} className={s <= (record?.rating || 0) ? "text-[#FFCC00]" : "text-gray-200"} />)}</div>
-                                            ) : (
-                                                <span className="text-[11px] font-medium text-gray-400">평가 전</span>
-                                            )}
-                                        </div>
-                                    </div>
+                                {/* [완벽 1줄 강제] 언어, 쪽수(툴팁), ISBN, 평균별점, 나의별점 */}
+                                <div className="flex items-center gap-2.5 mb-6 text-[13px] text-gray-500 font-medium overflow-x-auto scrollbar-hide whitespace-nowrap w-full">
+                                    {edition?.language && (
+                                        <><span className="text-[#1d1d1f] font-bold">{edition.language}</span><span className="text-gray-300">·</span></>
+                                    )}
+                                    
+                                    {dbTotalPage > 0 ? (
+                                        <span className="text-[#1d1d1f] font-bold">{dbTotalPage}쪽</span>
+                                    ) : canEditBookInfo ? (
+                                        <TooltipProvider delayDuration={200}>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <button 
+                                                        onClick={handleEditPageCount}
+                                                        className="text-[#0066cc] font-bold border-b border-dashed border-[#0066cc] pb-[1px] hover:text-blue-700 hover:border-blue-700 transition-colors cursor-pointer flex items-center gap-1"
+                                                    >
+                                                        <Edit2 size={10} /> 쪽수 미상
+                                                    </button>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="top" className="bg-[#1d1d1f] text-white text-[12px] font-bold px-3 py-2 rounded-lg border-none shadow-md z-[100]">
+                                                    쪽수를 입력할 수 있는 메뉴입니다.
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    ) : (
+                                        <span>쪽수 미상</span>
+                                    )}
+                                    <span className="text-gray-300">·</span>
+
+                                    <span className="font-mono">ISBN {edition?.isbn}</span>
+                                    <span className="text-gray-300">·</span>
+
+                                    <span className="flex items-center gap-1">
+                                        BoooknTalk 평균 <Star size={12} className="text-[#FFCC00] mb-[2px]" fill="currentColor" />
+                                        <span className="text-[#1d1d1f] font-black">{work?.average_rating || "0.0"}</span>
+                                    </span>
+                                    <span className="text-gray-300">·</span>
+
+                                    <span className="flex items-center gap-1.5">나의 별점
+                                        {currentStatus !== 'wish' ? (
+                                            <div className="flex text-[#FFCC00] mb-[2px]">
+                                                {[1, 2, 3, 4, 5].map((s) => (
+                                                    <Star key={s} size={13} fill={s <= (record?.rating || 0) ? "currentColor" : "none"} className={s <= (record?.rating || 0) ? "text-[#FFCC00]" : "text-gray-200"} />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-400">평가 전</span>
+                                        )}
+                                    </span>
                                 </div>
 
                                 <div className="mb-6">
@@ -175,7 +229,6 @@ export default function BookTopInfo({
                                     />
                                 </div>
 
-                                {/* 나의 독서 기록 게이지 바 */}
                                 <div className="mt-auto bg-[#F5F5F7] rounded-2xl p-5 border border-gray-200/60 shadow-sm">
                                     <div className="flex justify-between items-center mb-6">
                                         <div className="flex items-baseline gap-2">
@@ -192,15 +245,16 @@ export default function BookTopInfo({
                                     <div>
                                         {statusIndex === 1 && (
                                             <div className="flex justify-between items-end mb-2">
-                                                <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">{progressPercent}%</span>
-                                                <span className="text-[13px] text-gray-500 font-bold">{currentPage} / {totalPage} 페이지</span>
+                                                <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">
+                                                    {dbTotalPage > 0 ? `${progressPercent}%` : '읽는 중'}
+                                                </span>
+                                                <span className="text-[13px] text-gray-500 font-bold">
+                                                    {dbTotalPage > 0 ? `${currentPage} / ${dbTotalPage} 페이지` : `현재 ${currentPage}쪽`}
+                                                </span>
                                             </div>
                                         )}
                                         <div className="relative h-2 bg-gray-200 rounded-full flex items-center mt-3 mb-2">
-                                            {/* 파란색 게이지 라인 */}
                                             <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: barWidth }}></div>
-                                            
-                                            {/* 💡 [적용] 단계 도달 시 테두리 점등 로직 */}
                                             <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 transition-colors duration-300 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
                                             <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
                                             <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 transition-colors duration-300 ${statusIndex >= 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
@@ -214,7 +268,6 @@ export default function BookTopInfo({
                                 </div>
                             </div>
 
-                            {/* [우측-2] 작가 정보 영역 */}
                             <div className="w-full lg:w-1/3 flex flex-col min-w-0">
                                 {authorInfo && (
                                     <div className="flex flex-col h-full gap-6">
