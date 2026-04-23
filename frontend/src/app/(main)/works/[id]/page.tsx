@@ -1,3 +1,5 @@
+// 파일 경로: frontend/src/app/(main)/works/[id]/page.tsx
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -6,14 +8,11 @@ import Image from 'next/image';
 import { useSession, signIn } from "next-auth/react";
 import Container from '@/components/layout/Container';
 import Footer from '@/components/layout/Footer';
-import { Loader2, Star, Users, ChevronLeft, BookCopy, Plus, MessageSquare, PenTool } from 'lucide-react';
+import { Loader2, Star, Users, BookCopy, Plus, MessageSquare, PenTool, User, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { User } from 'lucide-react';
 import { formatDetailAuthor } from '@/utils/formatters';
 
-// 방금 만든 판본 선택 모달을 불러옵니다
 import EditionSelectModal from '@/components/work/EditionSelectModal';
-// 완벽한 긴줄평 목록 컴포넌트 불러오기
 import LongReviewListSection from '@/components/book-detail/LongReviewListSection';
 import StandardContainer from '@/components/layout/StandardContainer';
 
@@ -27,14 +26,12 @@ export default function WorkHubPage() {
     const [work, setWork] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     
-    // 모달 열림/닫힘 상태 관리
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const [shortReviews, setShortReviews] = useState<any[]>([]);
     const [longReviews, setLongReviews] = useState<any[]>([]);
     const [isReviewsLoading, setIsReviewsLoading] = useState(false);
     
-    // URL 쿼리를 읽어 초기 탭 상태 설정
     const initialTab = searchParams.get('tab') === 'long_review' ? 'long_reviews' : 'short_reviews';
     const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -99,11 +96,12 @@ export default function WorkHubPage() {
         <StandardContainer>
             <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col">
                 <Container className="pt-[var(--spacing-1cm,32px)] pb-20">
+                    
                     {/* 2. 작품 마스터 영역 (상단) */}
-                    {/* ▼▼▼ 핵심 수정 1: 최상위 카드에 w-full을 추가하여 무조건 전체 폭을 채우도록 강제 ▼▼▼ */}
-                    <div className="w-full bg-white rounded-sm p-[var(--spacing-1cm,32px)] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-10 mb-8 relative overflow-hidden">
+                    {/* 💡 lg:flex-row로 3단 분리가 가능하도록 구조를 업그레이드했습니다. */}
+                    <div className="w-full bg-white rounded-sm p-[var(--spacing-1cm,32px)] shadow-sm border border-gray-100 flex flex-col lg:flex-row gap-10 mb-8 relative overflow-hidden">
                         
-                        {/* 좌측: 대표 표지 */}
+                        {/* 컬럼 1: 대표 표지 */}
                         <div className="w-40 md:w-56 shrink-0 relative aspect-[1/1.4] rounded-sm shadow-md border border-gray-100 bg-gray-50 flex items-center justify-center z-10">
                             {work.best_cover ? (
                                 <Image src={work.best_cover} alt={work.title} fill className="object-cover" priority />
@@ -112,12 +110,11 @@ export default function WorkHubPage() {
                             )}
                         </div>
 
-                        {/* 우측: 통합 정보 및 통계 */}
-                        {/* ▼▼▼ 핵심 수정 2: flex-1과 함께 w-full, min-w-0을 추가하여 내부 텍스트 밀림 완벽 방어 ▼▼▼ */}
-                        <div className="flex flex-col flex-1 w-full min-w-0 z-10 pt-2">
+                        {/* 컬럼 2: 책 정보 및 통계 */}
+                        {/* 💡 우측에 작가 정보가 들어올 수 있도록 lg:border-r 및 padding을 추가했습니다. */}
+                        <div className="flex flex-col flex-1 min-w-0 z-10 pt-2 lg:border-r lg:border-gray-100 lg:pr-10">
                             {work.category && <span className="text-[12px] font-bold text-[#0066cc] mb-2">{work.category}</span>}
                             
-                            {/* ▼▼▼ 수정 3: 매우 긴 제목이나 작가명으로 인해 레이아웃이 터지지 않도록 truncate(말줄임) 추가 ▼▼▼ */}
                             <h1 className="text-[28px] md:text-[36px] font-black text-[#1d1d1f] leading-tight tracking-tight mb-2 truncate">
                                 {work.title}
                             </h1>
@@ -126,8 +123,7 @@ export default function WorkHubPage() {
                             </p>
                             
                             {/* 통합 통계 뱃지 */}
-                            {/* ▼▼▼ 수정 4: w-full 및 overflow 방어 코드 추가 ▼▼▼ */}
-                            <div className="flex items-center gap-6 mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100 w-full overflow-x-auto scrollbar-hide">
+                            <div className="flex items-center gap-6 mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100 w-full overflow-x-auto scrollbar-hide shrink-0">
                                 <div className="flex flex-col shrink-0">
                                     <span className="text-[11px] text-gray-400 font-bold mb-1">통합 평점</span>
                                     <div className="flex items-center gap-1.5 text-amber-400">
@@ -154,7 +150,6 @@ export default function WorkHubPage() {
                             </div>
 
                             {/* 작품 소개글 */}
-                            {/* ▼▼▼ 수정 5: 텍스트가 짧아도 카드의 최소 높이를 유지하도록 min-h-[100px] 추가 ▼▼▼ */}
                             <div className="text-[14px] text-gray-600 leading-relaxed break-keep min-h-[100px]">
                                 {work.description || "이 작품에 대한 상세 소개가 아직 없습니다."}
                             </div>
@@ -172,6 +167,70 @@ export default function WorkHubPage() {
                                 </button>
                             </div>
                         </div>
+
+                        {/* ▼▼▼ 핵심 추가: 컬럼 3 작가 상세 프로필 및 대표작 ▼▼▼ */}
+                        {work.authorInfo && (
+                            <div className="w-full lg:w-1/3 flex flex-col min-w-0 z-10 shrink-0">
+                                <div className="flex flex-col h-full gap-6">
+                                    <div className="flex flex-col">
+                                        <h2 className="text-[12px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
+                                        <div className="flex items-center gap-3 mb-4">
+                                            {/* 작가 사진 */}
+                                            <div className="w-12 h-12 rounded-full bg-gray-100 shrink-0 relative overflow-hidden flex items-center justify-center border border-gray-200">
+                                                {work.authorInfo.photo ? (
+                                                    <Image src={work.authorInfo.photo} alt={work.authorInfo.name} fill className="object-cover" />
+                                                ) : (
+                                                    <User size={20} className="text-gray-400" />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-[16px] font-extrabold text-[#1d1d1f]">{work.authorInfo.name}</h3>
+                                                {work.authorInfo.role && <p className="text-[11px] font-bold text-[#0066cc] mt-0.5">{work.authorInfo.role}</p>}
+                                            </div>
+                                        </div>
+                                        
+                                        <p className="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-4 mb-4">
+                                            {work.authorInfo.bio || "등록된 저자 소개가 없습니다."}
+                                        </p>
+                                    </div>
+
+                                    {/* 작가의 다른 대표작 목록 */}
+                                    {work.authorOtherBooks && work.authorOtherBooks.length > 0 && (
+                                        <div className="pt-6 border-t border-gray-100 mt-auto">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-[12px] font-extrabold text-gray-500 uppercase tracking-wide">대표작</h3>
+                                                {/* 더보기 버튼 (옵션) */}
+                                            </div>
+                                            
+                                            <div className="flex flex-col gap-2">
+                                                {work.authorOtherBooks.map((book: any) => (
+                                                    <div 
+                                                        key={book.id} 
+                                                        onClick={() => router.push(`/works/${book.id}`)} 
+                                                        className="flex items-center gap-3 cursor-pointer group rounded-xl hover:bg-gray-50 transition-all p-2 -ml-2 border border-transparent hover:border-gray-100"
+                                                    >
+                                                        {/* 다른 책 표지 */}
+                                                        <div className="w-10 h-14 shrink-0 relative bg-gray-100 border border-gray-200 shadow-sm rounded-sm overflow-hidden flex items-center justify-center">
+                                                            {book.cover ? (
+                                                                <Image src={book.cover} alt={book.title} fill className="object-cover" />
+                                                            ) : (
+                                                                <BookCopy size={12} className="text-gray-300" />
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-col flex-1 min-w-0">
+                                                            <h4 className="text-[14px] font-bold text-[#1d1d1f] line-clamp-1 leading-tight group-hover:text-[#0066cc] transition-colors mb-1">{book.title}</h4>
+                                                            <span className="text-[11px] font-bold text-gray-400">BoooknTalk 광장</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        {/* ▲▲▲ 작가 영역 끝 ▲▲▲ */}
+
                     </div>
 
                     {/* 3. 통합 소셜 라운지 영역 (하단) */}
@@ -193,7 +252,6 @@ export default function WorkHubPage() {
                             </button>
                         </div>
 
-                        {/* 실제 데이터가 렌더링되는 리스트 영역 */}
                         {isReviewsLoading ? (
                             <div className="py-20 flex justify-center items-center bg-white rounded-lg border border-gray-100 border-dashed">
                                 <Loader2 className="animate-spin text-[#0066cc]" size={32} />
@@ -233,13 +291,11 @@ export default function WorkHubPage() {
                                 </div>
                             )
                         ) : (
-                            /* ▼▼▼ [핵심] 기존 코드를 날리고 우리가 만든 컴포넌트로 통째로 교체 ▼▼▼ */
                             <LongReviewListSection workId={Number(workId)} currentUser={session?.user} />
                         )}
                     </div>
                 </Container>
 
-                {/* 모달 컴포넌트 마운트 */}
                 <EditionSelectModal 
                     isOpen={isModalOpen} 
                     onClose={() => setIsModalOpen(false)} 

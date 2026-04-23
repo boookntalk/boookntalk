@@ -1,4 +1,5 @@
-// src/app/(main)/library/[id]/BookDetailClient.tsx
+// 파일 경로: src/components/book-detail/BookDetailClient.tsx
+// 역할 및 기능: 도서 상세 페이지의 메인 클라이언트 컴포넌트로, 상단 도서 정보부터 탭 메뉴와 각 탭의 콘텐츠(독서노트, 한줄평, 긴줄평)까지 전체 레이아웃과 상태 관리를 담당합니다. 또한, 브레드크럼 네비게이션과 플로팅 액션 버튼(FAB)을 포함하여 사용자가 페이지 내에서 원활하게 이동하고 상호작용할 수 있도록 설계되었습니다.
 
 'use client';
 

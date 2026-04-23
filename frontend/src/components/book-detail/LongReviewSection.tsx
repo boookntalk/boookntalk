@@ -1,4 +1,4 @@
-// 파일 경로: src/app/(main)/library/[id]/LongReviewSection.tsx
+// 파일 경로: src/components/book-detail/LongReviewSection.tsx
 // 역할 및 기능: 도서 상세 페이지의 '긴줄평' 탭을 담당하며, 부모 레이아웃의 여백과 충돌하지 않도록 자체 마진을 제거하고 14px 표준을 적용했습니다.
 
 'use client';

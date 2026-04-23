@@ -163,7 +163,7 @@ app.include_router(editions.router)
 app.include_router(library.router)
 app.include_router(insights.router)
 app.include_router(authors.router)
-app.include_router(admin.router)
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 # ▼▼▼ [필수 확인] CORS 미들웨어 설정 ▼▼▼
 app.add_middleware(
@@ -1213,7 +1213,52 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
     else:
         # 코드가 없으면 기존 DB에 있는 2-Depth ("문학 / 소설") 데이터를 그대로 살립니다.
         final_category = getattr(work, 'category', "기타 / 미분류")
-    # ▲▲▲ 수술 완료 ▲▲▲
+    
+    work_contributor = db.query(models.WorkContributor).filter(
+        models.WorkContributor.work_id == work.id,
+        models.WorkContributor.role == 'AUTHOR'
+    ).first()
+
+    author_info = None
+    other_books_data = []
+
+    if work_contributor and work_contributor.contributor:
+        author = work_contributor.contributor
+
+        photo_url = author.profile_image
+        if photo_url and not photo_url.startswith("http"):
+            base_url = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:8000")
+            photo_url = f"{base_url}/{photo_url.lstrip('/')}"
+
+        author_info = {
+            "id": str(author.id),
+            "name": author.name,
+            "photo": photo_url,
+            "bio": author.description,
+            "role": work_contributor.role
+        }
+
+        # 다른 작품 3개 추출
+        other_links = db.query(models.WorkContributor).filter(
+            models.WorkContributor.contributor_id == author.id,
+            models.WorkContributor.work_id != work.id
+        ).limit(3).all()
+
+        for link in other_links:
+            other_work = db.query(models.Work).filter(models.Work.id == link.work_id).first()
+            if other_work:
+                rep_edition = db.query(models.Edition).filter(models.Edition.work_id == other_work.id).first()
+                cover_url = rep_edition.cover_image if rep_edition else ""
+                
+                if cover_url and not cover_url.startswith("http"):
+                    base_url = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:8000")
+                    cover_url = f"{base_url}/{cover_url.lstrip('/')}"
+                
+                other_books_data.append({
+                    "id": str(other_work.id),
+                    "title": other_work.title,
+                    "cover": cover_url
+                })
     
     return {
         "record": {
@@ -1253,7 +1298,9 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "price": getattr(current_edition, 'price', None),
             "first_discoverer": discoverer_name
         },
-        "my_editions": my_editions_data
+        "my_editions": my_editions_data,
+        "authorInfo": author_info,
+        "authorOtherBooks": other_books_data
     }
 
 @app.post("/api/records/{record_id}/memos")
@@ -2438,16 +2485,43 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
     ).first()
 
     author_info = None
+    other_books_data = []
+    
     if work_contributor and work_contributor.contributor:
         author = work_contributor.contributor
+        photo_url = author.profile_image
+        if photo_url and not photo_url.startswith("http"):
+            # DB에 상대경로로 저장되었다면 백엔드 도메인을 강제로 붙여줍니다.
+            base_url = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:8000")
+            photo_url = f"{base_url}/{photo_url.lstrip('/')}"
+
         author_info = {
             "id": str(author.id),
             "name": author.name,
-            # 💡 바로 이 값이 어드민에서 업로드한 로컬 경로(예: /static/uploads/...)입니다!
-            "photo": author.profile_image, 
+            "photo": photo_url, # 👈 보정된 무결점 URL 투입!
             "bio": author.description,
             "role": work_contributor.role
         }
+
+        # 🚨 2. 작가의 '다른 책' 실제 데이터 긁어오기
+        # 현재 보고 있는 책(work_id)은 제외하고, 이 작가가 참여한 다른 작품을 찾습니다.
+        other_links = db.query(models.WorkContributor).filter(
+            models.WorkContributor.contributor_id == author.id,
+            models.WorkContributor.work_id != work_id 
+        ).limit(3).all() # 최대 3개까지만 추출
+
+        for link in other_links:
+            other_work = db.query(models.Work).filter(models.Work.id == link.work_id).first()
+            if other_work:
+                # 해당 작품의 대표 표지 찾기 (가장 첫 번째 판본의 표지)
+                rep_edition = db.query(models.Edition).filter(models.Edition.work_id == other_work.id).first()
+                cover_url = rep_edition.cover_image if rep_edition else ""
+                
+                other_books_data.append({
+                    "id": str(other_work.id),
+                    "title": other_work.title,
+                    "cover": cover_url # 👈 실제 표지 이미지 연결!
+                })
 
     return {
         "work_id": work.id,
@@ -2462,7 +2536,8 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
         "edition_count": len(editions),
         
         # 💡 [NEW] 프론트엔드가 기다리던 작가 상세 객체를 최종 응답에 포함시킵니다.
-        "authorInfo": author_info 
+        "authorInfo": author_info,
+        "authorOtherBooks": other_books_data 
     }
 
 @app.get("/api/works/{work_id}/editions")

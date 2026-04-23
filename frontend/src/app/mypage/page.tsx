@@ -13,6 +13,8 @@ import { Loader2, BookOpen, Star, FileText, TrendingUp, Edit3, Hash, BarChart3, 
 import ProfileEditModal from '@/components/profile/ProfileEditModal';
 import AdminPanel from '@/components/admin/AdminPanel';
 import AdminWorkMerge from '@/components/admin/AdminWorkMerge';
+// 💡 [추가] 기여자 통합 관리 컴포넌트 임포트
+import ContributorImageManager from '@/components/admin/ContributorImageManager';
 
 // 함수 기능: 인증 상태를 확인하여 통계 데이터를 불러오고, 관리자 권한 여부에 따라 시스템 관리 탭을 노출합니다.
 export default function MyPage() {
@@ -237,13 +239,15 @@ export default function MyPage() {
                         </div>
                     )}
 
-                    {/* 탭 2: 최고 관리자 시스템 영역 */}
+                    {/* 💡 [추가] 탭 2: 시스템 관리 화면 렌더링 */}
                     {activeTab === 'admin' && isAdmin && (
-                        <div className="w-full flex flex-col gap-[var(--spacing-1cm,32px)] animate-in fade-in slide-in-from-bottom-2 duration-300 mb-[var(--spacing-1cm,32px)]">
-                            <AdminPanel /> 
+                        <div className="animate-in fade-in duration-300 w-full mb-[var(--spacing-1cm,32px)] flex flex-col gap-[var(--spacing-1cm,32px)]">
+                            <AdminPanel />
+                            <ContributorImageManager userEmail={currentUserEmail} />
                             <AdminWorkMerge />
                         </div>
                     )}
+
                 </Container>
 
                 <div className="mt-auto w-full">

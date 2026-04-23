@@ -16,9 +16,18 @@ export default function AdminWorkMerge() {
         try {
             const res = await fetch('http://localhost:8000/api/admin/duplicate-works');
             const data = await res.json();
-            setDuplicates(data);
+            
+            // 💡 [핵심 수정] 받아온 데이터가 진짜 배열(Array)일 때만 세팅하고, 아니면 빈 배열로 처리합니다!
+            if (Array.isArray(data)) {
+                setDuplicates(data);
+            } else {
+                console.error("배열이 아닌 데이터가 응답되었습니다:", data);
+                setDuplicates([]); // 에러 시 빈 배열로 초기화하여 화면 깨짐 방지
+            }
+            
         } catch (error) {
             console.error("중복 데이터 스캔 실패", error);
+            setDuplicates([]); // 네트워크 에러 시에도 빈 배열 처리
         } finally {
             setLoading(false);
         }

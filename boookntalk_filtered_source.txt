@@ -1397,6 +1397,7 @@ PROJECT ROOT: boookntalk
 │   ├── src
 │   │   ├── app
 │   │   │   ├── (main)
+│   │   │   │   ├── community
 │   │   │   │   ├── layout.tsx
 │   │   │   │   ├── library
 │   │   │   │   │   ├── BookDetailForm.tsx
@@ -1446,6 +1447,7 @@ PROJECT ROOT: boookntalk
 │   │   │   │   │   └── page.tsx
 │   │   │   │   ├── square
 │   │   │   │   │   └── page.tsx
+│   │   │   │   ├── statistics
 │   │   │   │   └── works
 │   │   │   │       └── [id]
 │   │   │   │           └── page.tsx
@@ -1466,7 +1468,9 @@ PROJECT ROOT: boookntalk
 │   │   │   ├── admin
 │   │   │   │   ├── AdminPanel.tsx
 │   │   │   │   ├── AdminWorkMerge.tsx
-│   │   │   │   └── AuthorImageManager.tsx
+│   │   │   │   └── ContributorImageManager.tsx
+│   │   │   ├── book
+│   │   │   │   └── ContributorProfile.tsx
 │   │   │   ├── book-detail
 │   │   │   │   ├── BookDetailClient.tsx
 │   │   │   │   ├── BookTopInfo.tsx
@@ -7643,29 +7647,31 @@ html, body {
 ============================================================
 FILE PATH: frontend/src/app/mypage/page.tsx
 ============================================================
-// 파일 경로: frontend/src/app/mypage/page.tsx
-// 역할 및 기능: 유저의 독서 통계 대시보드와 관리자 전용 제어 패널을 탭 형태로 스위칭하여 보여주는 페이지 컴포넌트입니다.
+// 경로: frontend/src/app/mypage/page.tsx
+// 역할 및 기능: BoooknTalk 유저의 독서 통계 대시보드와 최고 관리자(boookntalk@gmail.com) 전용 제어 패널을 제공하며 상단 헤더를 포함하는 마이페이지 컴포넌트입니다.
 
 'use client';
 
 import React, { useEffect, useState } from 'react';
 import { useSession } from "next-auth/react";
 import { useRouter } from 'next/navigation';
+import Header from '@/components/layout/Header';
 import Container from '@/components/layout/Container';
 import Footer from '@/components/layout/Footer';
 import { Loader2, BookOpen, Star, FileText, TrendingUp, Edit3, Hash, BarChart3, ShieldCheck } from 'lucide-react';
 import ProfileEditModal from '@/components/profile/ProfileEditModal';
 import AdminPanel from '@/components/admin/AdminPanel';
 import AdminWorkMerge from '@/components/admin/AdminWorkMerge';
+// 💡 [추가] 기여자 통합 관리 컴포넌트 임포트
+import ContributorImageManager from '@/components/admin/ContributorImageManager';
 
-// 함수 기능: 마이페이지 레이아웃 렌더링 및 통계/관리자 탭 스위칭
+// 함수 기능: 인증 상태를 확인하여 통계 데이터를 불러오고, 관리자 권한 여부에 따라 시스템 관리 탭을 노출합니다.
 export default function MyPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
     const [statsData, setStatsData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-
     const [activeTab, setActiveTab] = useState<'dashboard' | 'admin'>('dashboard');
 
     const currentUserEmail = session?.user?.email?.toLowerCase().trim() || "";
@@ -7706,7 +7712,7 @@ export default function MyPage() {
         );
     }
 
-    const profile = statsData?.profile || { nickname: session?.user?.name || '관리자', bio: '프로필을 설정해주세요.', profile_image: session?.user?.image || '' };
+    const profile = statsData?.profile || { nickname: session?.user?.name || '사용자', bio: '프로필을 설정해주세요.', profile_image: session?.user?.image || '' };
     const summary = statsData?.summary || { total_finished: 0, avg_rating: 0, total_pages: 0, total_reading: 0 };
     const trend_data = statsData?.trend_data || [];
     const top_genres = statsData?.top_genres || [];
@@ -7714,183 +7720,188 @@ export default function MyPage() {
     const maxTrendCount = Math.max(...trend_data.map((d: any) => d.count), 1);
 
     return (
-        <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col pt-[var(--spacing-1cm,32px)] pb-20">
-            <Container>
-                
-                {/* 탭 네비게이션 영역 */}
-                <div className="flex items-center gap-6 border-b border-gray-200 mb-[var(--spacing-1cm,32px)] px-2">
-                    <button 
-                        onClick={() => setActiveTab('dashboard')}
-                        className={`pb-3 text-[16px] font-extrabold transition-colors relative ${activeTab === 'dashboard' ? 'text-[#1d1d1f]' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                        나의 대시보드
-                        {activeTab === 'dashboard' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-[#1d1d1f] rounded-t-md"></span>}
-                    </button>
-                    
-                    {isAdmin && (
-                        <button 
-                            onClick={() => setActiveTab('admin')}
-                            className={`pb-3 text-[16px] font-extrabold transition-colors relative flex items-center gap-1.5 ${activeTab === 'admin' ? 'text-[#0066cc]' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
-                            <ShieldCheck size={18} className={activeTab === 'admin' ? 'text-[#0066cc]' : 'text-gray-400'} />
-                            시스템 관리
-                            {activeTab === 'admin' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-[#0066cc] rounded-t-md"></span>}
-                        </button>
-                    )}
-                </div>
+        <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col">
+            {/* 글로벌 헤더 복구 */}
+            <Header />
 
-                {/* 탭 1: 대시보드 화면 */}
-                {activeTab === 'dashboard' && statsData && (
-                    <div className="animate-in fade-in duration-300 w-full mb-[var(--spacing-1cm,32px)]">
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-[var(--spacing-1cm,32px)] mb-[var(--spacing-1cm,32px)]">
-                            <div className="lg:col-span-4 bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden">
-                                <div className="absolute top-0 w-full h-24 bg-gradient-to-b from-[#0066cc]/5 to-transparent z-0" />
-                                <div className="relative z-10 w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-gray-100 mb-4">
-                                    {profile.profile_image ? (
-                                        <img src={profile.profile_image} alt="Profile" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full bg-gray-200" />
+            <div className="flex-1 flex flex-col pt-[var(--spacing-1cm,32px)] pb-20">
+                <Container>
+                    {/* 탭 네비게이션 영역 */}
+                    <div className="flex items-center gap-6 border-b border-gray-200 mb-[var(--spacing-1cm,32px)] px-2">
+                        <button 
+                            onClick={() => setActiveTab('dashboard')}
+                            className={`pb-3 text-[16px] font-extrabold transition-colors relative ${activeTab === 'dashboard' ? 'text-[#1d1d1f]' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            나의 대시보드
+                            {activeTab === 'dashboard' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-[#1d1d1f] rounded-t-md"></span>}
+                        </button>
+                        
+                        {isAdmin && (
+                            <button 
+                                onClick={() => setActiveTab('admin')}
+                                className={`pb-3 text-[16px] font-extrabold transition-colors relative flex items-center gap-1.5 ${activeTab === 'admin' ? 'text-[#0066cc]' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <ShieldCheck size={18} className={activeTab === 'admin' ? 'text-[#0066cc]' : 'text-gray-400'} />
+                                시스템 관리
+                                {activeTab === 'admin' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-[#0066cc] rounded-t-md"></span>}
+                            </button>
+                        )}
+                    </div>
+
+                    {/* 탭 1: 대시보드 화면 */}
+                    {activeTab === 'dashboard' && statsData && (
+                        <div className="animate-in fade-in duration-300 w-full mb-[var(--spacing-1cm,32px)]">
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-[var(--spacing-1cm,32px)] mb-[var(--spacing-1cm,32px)]">
+                                <div className="lg:col-span-4 bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden">
+                                    <div className="absolute top-0 w-full h-24 bg-gradient-to-b from-[#0066cc]/5 to-transparent z-0" />
+                                    <div className="relative z-10 w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-gray-100 mb-4">
+                                        {profile.profile_image ? (
+                                            <img src={profile.profile_image} alt="Profile" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full bg-gray-200" />
+                                        )}
+                                    </div>
+                                    <h2 className="relative z-10 text-[22px] font-black text-[#1d1d1f] mb-1">{profile.nickname}</h2>
+                                    <p className="relative z-10 text-[14px] text-gray-500 font-medium break-keep px-4">{profile.bio}</p>
+                                    <button 
+                                        onClick={() => setIsProfileModalOpen(true)} 
+                                        className="relative z-10 mt-6 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-50 text-[13px] font-bold text-gray-600 hover:bg-gray-100 transition-colors border border-gray-200"
+                                    >
+                                        <Edit3 size={14} /> 프로필 수정
+                                    </button>
+                                </div>
+
+                                <div className="lg:col-span-8 grid grid-cols-2 gap-4 md:gap-[var(--spacing-1cm,32px)]">
+                                    <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="p-2 bg-blue-50 rounded-lg"><BookOpen size={18} className="text-[#0066cc]" /></div>
+                                            <span className="text-[13px] font-bold text-gray-500">완독한 지식들</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_finished}</span>
+                                            <span className="text-[15px] font-medium text-gray-400">권</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="p-2 bg-amber-50 rounded-lg"><Star size={18} className="text-amber-500" /></div>
+                                            <span className="text-[13px] font-bold text-gray-500">나의 평균 별점</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.avg_rating}</span>
+                                            <span className="text-[15px] font-medium text-gray-400">점</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="p-2 bg-emerald-50 rounded-lg"><FileText size={18} className="text-emerald-600" /></div>
+                                            <span className="text-[13px] font-bold text-gray-500">누적 읽은 페이지</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_pages.toLocaleString()}</span>
+                                            <span className="text-[15px] font-medium text-gray-400">쪽</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="p-2 bg-purple-50 rounded-lg"><TrendingUp size={18} className="text-purple-600" /></div>
+                                            <span className="text-[13px] font-bold text-gray-500">현재 읽는 중</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_reading}</span>
+                                            <span className="text-[15px] font-medium text-gray-400">권</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="w-full bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 mb-[var(--spacing-1cm,32px)]">
+                                <div className="flex items-center justify-between mb-8">
+                                    <h3 className="text-[18px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
+                                        <BarChart3 className="text-[#0066cc]" size={20} /> 올해의 독서 흐름
+                                    </h3>
+                                    <span className="text-[13px] font-bold bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200">
+                                        {new Date().getFullYear()}년 완독 기준
+                                    </span>
+                                </div>
+                                <div className="h-[200px] w-full flex items-end justify-between gap-2 px-2">
+                                    {trend_data.length > 0 ? trend_data.map((data: any, idx: number) => {
+                                        const heightPercent = data.count > 0 ? Math.max((data.count / maxTrendCount) * 100, 10) : 0;
+                                        return (
+                                            <div key={idx} className="flex flex-col items-center flex-1 group">
+                                                <div className="text-[12px] font-bold text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity mb-2">
+                                                    {data.count}권
+                                                </div>
+                                                <div className="w-full max-w-[40px] bg-[#f5f5f7] rounded-t-xl flex items-end justify-center overflow-hidden h-[150px] relative">
+                                                    <div 
+                                                        className="w-full bg-gradient-to-t from-[#0066cc] to-[#3388ff] rounded-t-xl transition-all duration-1000 ease-out"
+                                                        style={{ height: `${heightPercent}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-[12px] font-bold text-gray-400 mt-3">{data.month}</span>
+                                            </div>
+                                        );
+                                    }) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm font-bold">아직 기록된 데이터가 없습니다.</div>
                                     )}
                                 </div>
-                                <h2 className="relative z-10 text-[22px] font-black text-[#1d1d1f] mb-1">{profile.nickname}</h2>
-                                <p className="relative z-10 text-[14px] text-gray-500 font-medium break-keep px-4">{profile.bio}</p>
-                                <button 
-                                    onClick={() => setIsProfileModalOpen(true)} 
-                                    className="relative z-10 mt-6 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-50 text-[13px] font-bold text-gray-600 hover:bg-gray-100 transition-colors border border-gray-200"
-                                >
-                                    <Edit3 size={14} /> 프로필 수정
-                                </button>
                             </div>
 
-                            <div className="lg:col-span-8 grid grid-cols-2 gap-4 md:gap-[var(--spacing-1cm,32px)]">
-                                <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="p-2 bg-blue-50 rounded-lg"><BookOpen size={18} className="text-[#0066cc]" /></div>
-                                        <span className="text-[13px] font-bold text-gray-500">완독한 지식들</span>
-                                    </div>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_finished}</span>
-                                        <span className="text-[15px] font-medium text-gray-400">권</span>
-                                    </div>
-                                </div>
-                                <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="p-2 bg-amber-50 rounded-lg"><Star size={18} className="text-amber-500" /></div>
-                                        <span className="text-[13px] font-bold text-gray-500">나의 평균 별점</span>
-                                    </div>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.avg_rating}</span>
-                                        <span className="text-[15px] font-medium text-gray-400">점</span>
-                                    </div>
-                                </div>
-                                <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="p-2 bg-emerald-50 rounded-lg"><FileText size={18} className="text-emerald-600" /></div>
-                                        <span className="text-[13px] font-bold text-gray-500">누적 읽은 페이지</span>
-                                    </div>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_pages.toLocaleString()}</span>
-                                        <span className="text-[15px] font-medium text-gray-400">쪽</span>
-                                    </div>
-                                </div>
-                                <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="p-2 bg-purple-50 rounded-lg"><TrendingUp size={18} className="text-purple-600" /></div>
-                                        <span className="text-[13px] font-bold text-gray-500">현재 읽는 중</span>
-                                    </div>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-[36px] font-black text-[#1d1d1f] tracking-tight">{summary.total_reading}</span>
-                                        <span className="text-[15px] font-medium text-gray-400">권</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="w-full bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 mb-[var(--spacing-1cm,32px)]">
-                            <div className="flex items-center justify-between mb-8">
-                                <h3 className="text-[18px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
-                                    <BarChart3 className="text-[#0066cc]" size={20} /> 올해의 독서 흐름
-                                </h3>
-                                <span className="text-[13px] font-bold bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200">
-                                    {new Date().getFullYear()}년 완독 기준
-                                </span>
-                            </div>
-                            <div className="h-[200px] w-full flex items-end justify-between gap-2 px-2">
-                                {trend_data.length > 0 ? trend_data.map((data: any, idx: number) => {
-                                    const heightPercent = data.count > 0 ? Math.max((data.count / maxTrendCount) * 100, 10) : 0;
-                                    return (
-                                        <div key={idx} className="flex flex-col items-center flex-1 group">
-                                            <div className="text-[12px] font-bold text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity mb-2">
-                                                {data.count}권
-                                            </div>
-                                            <div className="w-full max-w-[40px] bg-[#f5f5f7] rounded-t-xl flex items-end justify-center overflow-hidden h-[150px] relative">
-                                                <div 
-                                                    className="w-full bg-gradient-to-t from-[#0066cc] to-[#3388ff] rounded-t-xl transition-all duration-1000 ease-out"
-                                                    style={{ height: `${heightPercent}%` }}
-                                                />
-                                            </div>
-                                            <span className="text-[12px] font-bold text-gray-400 mt-3">{data.month}</span>
-                                        </div>
-                                    );
-                                }) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm font-bold">아직 기록된 데이터가 없습니다.</div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--spacing-1cm,32px)]">
-                            <div className="bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 min-h-[280px]">
-                                <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">나의 선호 장르</h3>
-                                {top_genres.length > 0 ? (
-                                    <div className="flex flex-col gap-4">
-                                        {top_genres.map((genre: any, idx: number) => (
-                                            <div key={idx} className="flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="w-6 h-6 rounded-full bg-blue-50 text-[#0066cc] text-[12px] font-black flex items-center justify-center">{idx + 1}</span>
-                                                    <span className="text-[14px] font-bold text-[#1d1d1f]">{genre.genre}</span>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-[var(--spacing-1cm,32px)]">
+                                <div className="bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 min-h-[280px]">
+                                    <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">나의 선호 장르</h3>
+                                    {top_genres.length > 0 ? (
+                                        <div className="flex flex-col gap-4">
+                                            {top_genres.map((genre: any, idx: number) => (
+                                                <div key={idx} className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="w-6 h-6 rounded-full bg-blue-50 text-[#0066cc] text-[12px] font-black flex items-center justify-center">{idx + 1}</span>
+                                                        <span className="text-[14px] font-bold text-[#1d1d1f]">{genre.genre}</span>
+                                                    </div>
+                                                    <span className="text-[13px] font-bold text-gray-400">{genre.count}권</span>
                                                 </div>
-                                                <span className="text-[13px] font-bold text-gray-400">{genre.count}권</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="h-full flex items-center justify-center text-[13px] text-gray-400 font-medium pb-8">아직 기록된 장르 데이터가 없습니다.</div>
-                                )}
-                            </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="h-full flex items-center justify-center text-[13px] text-gray-400 font-medium pb-8">아직 기록된 장르 데이터가 없습니다.</div>
+                                    )}
+                                </div>
 
-                            <div className="bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 min-h-[280px]">
-                                <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">
-                                    <Hash className="text-[#0066cc]" size={18} /> 내가 가장 많이 쓴 태그
-                                </h3>
-                                {top_tags.length > 0 ? (
-                                    <div className="flex flex-wrap gap-3">
-                                        {top_tags.map((tag: any, idx: number) => (
-                                            <div key={idx} className="px-3 py-1.5 rounded-lg bg-[#f5f5f7] border border-gray-200 flex items-center gap-1.5 hover:bg-blue-50 hover:border-blue-100 hover:text-[#0066cc] transition-colors cursor-default">
-                                                <span className="text-[13px] font-bold text-gray-700">{tag.text}</span>
-                                                <span className="text-[11px] font-medium text-gray-400">{tag.count}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="h-full flex items-center justify-center text-[13px] text-gray-400 font-medium pb-8">아직 등록된 태그가 없습니다.</div>
-                                )}
+                                <div className="bg-white rounded-[24px] p-8 shadow-sm border border-gray-100 min-h-[280px]">
+                                    <h3 className="text-[16px] font-extrabold text-[#1d1d1f] mb-6 flex items-center gap-2 border-b border-gray-50 pb-4">
+                                        <Hash className="text-[#0066cc]" size={18} /> 내가 가장 많이 쓴 태그
+                                    </h3>
+                                    {top_tags.length > 0 ? (
+                                        <div className="flex flex-wrap gap-3">
+                                            {top_tags.map((tag: any, idx: number) => (
+                                                <div key={idx} className="px-3 py-1.5 rounded-lg bg-[#f5f5f7] border border-gray-200 flex items-center gap-1.5 hover:bg-blue-50 hover:border-blue-100 hover:text-[#0066cc] transition-colors cursor-default">
+                                                    <span className="text-[13px] font-bold text-gray-700">{tag.text}</span>
+                                                    <span className="text-[11px] font-medium text-gray-400">{tag.count}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="h-full flex items-center justify-center text-[13px] text-gray-400 font-medium pb-8">아직 등록된 태그가 없습니다.</div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {/* 탭 2: 최고 관리자 시스템 영역 (기존 패널과 신규 스캐너 동시 노출) */}
-                {activeTab === 'admin' && isAdmin && (
-                    <div className="w-full flex flex-col gap-[var(--spacing-1cm,32px)] animate-in fade-in slide-in-from-bottom-2 duration-300 mb-[var(--spacing-1cm,32px)]">
-                        <AdminPanel /> 
-                        <AdminWorkMerge />
-                    </div>
-                )}
+                    {/* 💡 [추가] 탭 2: 시스템 관리 화면 렌더링 */}
+                    {activeTab === 'admin' && isAdmin && (
+                        <div className="animate-in fade-in duration-300 w-full mb-[var(--spacing-1cm,32px)] flex flex-col gap-[var(--spacing-1cm,32px)]">
+                            <AdminPanel />
+                            <ContributorImageManager userEmail={currentUserEmail} />
+                            <AdminWorkMerge />
+                        </div>
+                    )}
 
-            </Container>
-            
-            <div className="mt-auto w-full">
-                <Footer />
+                </Container>
+
+                <div className="mt-auto w-full">
+                    <Footer />
+                </div>
             </div>
 
             <ProfileEditModal 
@@ -12491,6 +12502,8 @@ export default function SearchPage() {
 ============================================================
 FILE PATH: frontend/src/app/(main)/works/[id]/page.tsx
 ============================================================
+// 파일 경로: frontend/src/app/(main)/works/[id]/page.tsx
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -12499,14 +12512,11 @@ import Image from 'next/image';
 import { useSession, signIn } from "next-auth/react";
 import Container from '@/components/layout/Container';
 import Footer from '@/components/layout/Footer';
-import { Loader2, Star, Users, ChevronLeft, BookCopy, Plus, MessageSquare, PenTool } from 'lucide-react';
+import { Loader2, Star, Users, BookCopy, Plus, MessageSquare, PenTool, User, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { User } from 'lucide-react';
 import { formatDetailAuthor } from '@/utils/formatters';
 
-// 방금 만든 판본 선택 모달을 불러옵니다
 import EditionSelectModal from '@/components/work/EditionSelectModal';
-// 완벽한 긴줄평 목록 컴포넌트 불러오기
 import LongReviewListSection from '@/components/book-detail/LongReviewListSection';
 import StandardContainer from '@/components/layout/StandardContainer';
 
@@ -12520,14 +12530,12 @@ export default function WorkHubPage() {
     const [work, setWork] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     
-    // 모달 열림/닫힘 상태 관리
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const [shortReviews, setShortReviews] = useState<any[]>([]);
     const [longReviews, setLongReviews] = useState<any[]>([]);
     const [isReviewsLoading, setIsReviewsLoading] = useState(false);
     
-    // URL 쿼리를 읽어 초기 탭 상태 설정
     const initialTab = searchParams.get('tab') === 'long_review' ? 'long_reviews' : 'short_reviews';
     const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -12592,11 +12600,12 @@ export default function WorkHubPage() {
         <StandardContainer>
             <div className="w-full h-full overflow-y-auto scrollbar-hide bg-[#F5F5F7] flex flex-col">
                 <Container className="pt-[var(--spacing-1cm,32px)] pb-20">
+                    
                     {/* 2. 작품 마스터 영역 (상단) */}
-                    {/* ▼▼▼ 핵심 수정 1: 최상위 카드에 w-full을 추가하여 무조건 전체 폭을 채우도록 강제 ▼▼▼ */}
-                    <div className="w-full bg-white rounded-sm p-[var(--spacing-1cm,32px)] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-10 mb-8 relative overflow-hidden">
+                    {/* 💡 lg:flex-row로 3단 분리가 가능하도록 구조를 업그레이드했습니다. */}
+                    <div className="w-full bg-white rounded-sm p-[var(--spacing-1cm,32px)] shadow-sm border border-gray-100 flex flex-col lg:flex-row gap-10 mb-8 relative overflow-hidden">
                         
-                        {/* 좌측: 대표 표지 */}
+                        {/* 컬럼 1: 대표 표지 */}
                         <div className="w-40 md:w-56 shrink-0 relative aspect-[1/1.4] rounded-sm shadow-md border border-gray-100 bg-gray-50 flex items-center justify-center z-10">
                             {work.best_cover ? (
                                 <Image src={work.best_cover} alt={work.title} fill className="object-cover" priority />
@@ -12605,12 +12614,11 @@ export default function WorkHubPage() {
                             )}
                         </div>
 
-                        {/* 우측: 통합 정보 및 통계 */}
-                        {/* ▼▼▼ 핵심 수정 2: flex-1과 함께 w-full, min-w-0을 추가하여 내부 텍스트 밀림 완벽 방어 ▼▼▼ */}
-                        <div className="flex flex-col flex-1 w-full min-w-0 z-10 pt-2">
+                        {/* 컬럼 2: 책 정보 및 통계 */}
+                        {/* 💡 우측에 작가 정보가 들어올 수 있도록 lg:border-r 및 padding을 추가했습니다. */}
+                        <div className="flex flex-col flex-1 min-w-0 z-10 pt-2 lg:border-r lg:border-gray-100 lg:pr-10">
                             {work.category && <span className="text-[12px] font-bold text-[#0066cc] mb-2">{work.category}</span>}
                             
-                            {/* ▼▼▼ 수정 3: 매우 긴 제목이나 작가명으로 인해 레이아웃이 터지지 않도록 truncate(말줄임) 추가 ▼▼▼ */}
                             <h1 className="text-[28px] md:text-[36px] font-black text-[#1d1d1f] leading-tight tracking-tight mb-2 truncate">
                                 {work.title}
                             </h1>
@@ -12619,8 +12627,7 @@ export default function WorkHubPage() {
                             </p>
                             
                             {/* 통합 통계 뱃지 */}
-                            {/* ▼▼▼ 수정 4: w-full 및 overflow 방어 코드 추가 ▼▼▼ */}
-                            <div className="flex items-center gap-6 mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100 w-full overflow-x-auto scrollbar-hide">
+                            <div className="flex items-center gap-6 mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100 w-full overflow-x-auto scrollbar-hide shrink-0">
                                 <div className="flex flex-col shrink-0">
                                     <span className="text-[11px] text-gray-400 font-bold mb-1">통합 평점</span>
                                     <div className="flex items-center gap-1.5 text-amber-400">
@@ -12647,7 +12654,6 @@ export default function WorkHubPage() {
                             </div>
 
                             {/* 작품 소개글 */}
-                            {/* ▼▼▼ 수정 5: 텍스트가 짧아도 카드의 최소 높이를 유지하도록 min-h-[100px] 추가 ▼▼▼ */}
                             <div className="text-[14px] text-gray-600 leading-relaxed break-keep min-h-[100px]">
                                 {work.description || "이 작품에 대한 상세 소개가 아직 없습니다."}
                             </div>
@@ -12665,6 +12671,70 @@ export default function WorkHubPage() {
                                 </button>
                             </div>
                         </div>
+
+                        {/* ▼▼▼ 핵심 추가: 컬럼 3 작가 상세 프로필 및 대표작 ▼▼▼ */}
+                        {work.authorInfo && (
+                            <div className="w-full lg:w-1/3 flex flex-col min-w-0 z-10 shrink-0">
+                                <div className="flex flex-col h-full gap-6">
+                                    <div className="flex flex-col">
+                                        <h2 className="text-[12px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
+                                        <div className="flex items-center gap-3 mb-4">
+                                            {/* 작가 사진 */}
+                                            <div className="w-12 h-12 rounded-full bg-gray-100 shrink-0 relative overflow-hidden flex items-center justify-center border border-gray-200">
+                                                {work.authorInfo.photo ? (
+                                                    <Image src={work.authorInfo.photo} alt={work.authorInfo.name} fill className="object-cover" />
+                                                ) : (
+                                                    <User size={20} className="text-gray-400" />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-[16px] font-extrabold text-[#1d1d1f]">{work.authorInfo.name}</h3>
+                                                {work.authorInfo.role && <p className="text-[11px] font-bold text-[#0066cc] mt-0.5">{work.authorInfo.role}</p>}
+                                            </div>
+                                        </div>
+                                        
+                                        <p className="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-4 mb-4">
+                                            {work.authorInfo.bio || "등록된 저자 소개가 없습니다."}
+                                        </p>
+                                    </div>
+
+                                    {/* 작가의 다른 대표작 목록 */}
+                                    {work.authorOtherBooks && work.authorOtherBooks.length > 0 && (
+                                        <div className="pt-6 border-t border-gray-100 mt-auto">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-[12px] font-extrabold text-gray-500 uppercase tracking-wide">대표작</h3>
+                                                {/* 더보기 버튼 (옵션) */}
+                                            </div>
+                                            
+                                            <div className="flex flex-col gap-2">
+                                                {work.authorOtherBooks.map((book: any) => (
+                                                    <div 
+                                                        key={book.id} 
+                                                        onClick={() => router.push(`/works/${book.id}`)} 
+                                                        className="flex items-center gap-3 cursor-pointer group rounded-xl hover:bg-gray-50 transition-all p-2 -ml-2 border border-transparent hover:border-gray-100"
+                                                    >
+                                                        {/* 다른 책 표지 */}
+                                                        <div className="w-10 h-14 shrink-0 relative bg-gray-100 border border-gray-200 shadow-sm rounded-sm overflow-hidden flex items-center justify-center">
+                                                            {book.cover ? (
+                                                                <Image src={book.cover} alt={book.title} fill className="object-cover" />
+                                                            ) : (
+                                                                <BookCopy size={12} className="text-gray-300" />
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-col flex-1 min-w-0">
+                                                            <h4 className="text-[14px] font-bold text-[#1d1d1f] line-clamp-1 leading-tight group-hover:text-[#0066cc] transition-colors mb-1">{book.title}</h4>
+                                                            <span className="text-[11px] font-bold text-gray-400">BoooknTalk 광장</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        {/* ▲▲▲ 작가 영역 끝 ▲▲▲ */}
+
                     </div>
 
                     {/* 3. 통합 소셜 라운지 영역 (하단) */}
@@ -12686,7 +12756,6 @@ export default function WorkHubPage() {
                             </button>
                         </div>
 
-                        {/* 실제 데이터가 렌더링되는 리스트 영역 */}
                         {isReviewsLoading ? (
                             <div className="py-20 flex justify-center items-center bg-white rounded-lg border border-gray-100 border-dashed">
                                 <Loader2 className="animate-spin text-[#0066cc]" size={32} />
@@ -12726,13 +12795,11 @@ export default function WorkHubPage() {
                                 </div>
                             )
                         ) : (
-                            /* ▼▼▼ [핵심] 기존 코드를 날리고 우리가 만든 컴포넌트로 통째로 교체 ▼▼▼ */
                             <LongReviewListSection workId={Number(workId)} currentUser={session?.user} />
                         )}
                     </div>
                 </Container>
 
-                {/* 모달 컴포넌트 마운트 */}
                 <EditionSelectModal 
                     isOpen={isModalOpen} 
                     onClose={() => setIsModalOpen(false)} 
@@ -16655,6 +16722,158 @@ export default function RecordForm() {
 
 
 ============================================================
+FILE PATH: frontend/src/components/admin/ContributorImageManager.tsx
+============================================================
+// 파일 경로: frontend/src/components/admin/ContributorImageManager.tsx
+// 역할 및 기능: 기여자 사진을 로컬/외부 소스별로 관리하고 동기화하는 최고 관리자 전용 컴포넌트
+// 작성일: 2026-04-21
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { Camera, Search, RefreshCw, Upload, Link, UserCircle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface Contributor {
+    id: number;
+    name: string;
+    profile_image: string | null;
+    original_name?: string;
+}
+
+export default function ContributorImageManager({ userEmail }: { userEmail: string }) {
+    const [contributors, setContributors] = useState<Contributor[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [processingId, setProcessingId] = useState<number | null>(null);
+
+    /**
+     * 함수 기능: 기여자 검색 리스트를 호출합니다.
+     */
+    const fetchContributors = async () => {
+        setIsLoading(true);
+        try {
+            const res = await fetch(`http://localhost:8000/api/admin/contributors/search?q=${searchTerm}`);
+            if (res.ok) setContributors(await res.json());
+        } catch (error) {
+            toast.error("데이터 로드 실패");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * 함수 기능: 외부 URL을 로컬 서버로 다운로드하여 영구 저장(Sync)합니다.
+     */
+    const handleSyncExternal = async (id: number, url: string) => {
+        if (!url.startsWith('http')) return toast.error("올바른 URL이 아닙니다.");
+        setProcessingId(id);
+        
+        const formData = new FormData();
+        formData.append('external_url', url);
+        formData.append('user_email', userEmail);
+
+        try {
+            const res = await fetch(`http://localhost:8000/api/admin/contributors/${id}/sync-external`, {
+                method: 'POST',
+                body: formData
+            });
+            if (res.ok) {
+                toast.success("로컬 동기화 완료");
+                fetchContributors();
+            }
+        } catch (error) {
+            toast.error("동기화 중 오류 발생");
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    useEffect(() => { fetchContributors(); }, [searchTerm]);
+
+    if (!userEmail.startsWith('boookntalk')) return null;
+
+    return (
+        <div className="w-full bg-white rounded-2xl border border-gray-100 p-[var(--spacing-1cm,32px)] shadow-sm mb-[var(--spacing-1cm,32px)]">
+            <div className="flex justify-between items-end mb-8">
+                <div>
+                    <h3 className="text-[20px] font-extrabold text-[#1d1d1f] flex items-center gap-2">
+                        <Camera size={22} className="text-[#0066cc]" /> 기여자 프로필 마스터
+                    </h3>
+                    <p className="text-[14px] text-gray-500 font-medium mt-1">로컬 저장소 우선 원칙에 따른 인물 사진 관리 시스템</p>
+                </div>
+                <div className="relative w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input 
+                        type="text" 
+                        placeholder="이름 또는 원어명 검색..." 
+                        className="w-full h-11 pl-10 pr-4 bg-gray-50 border border-gray-100 rounded-xl text-[14px] focus:ring-2 focus:ring-blue-100 outline-none"
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {contributors.map(person => {
+                    const isLocal = person.profile_image?.startsWith('/static');
+                    const isExternal = person.profile_image?.startsWith('http');
+
+                    return (
+                        <div key={person.id} className="p-5 bg-gray-50/50 border border-gray-100 rounded-2xl flex flex-col gap-4 group hover:bg-white hover:shadow-md transition-all">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 rounded-full bg-white border border-gray-100 flex items-center justify-center overflow-hidden shadow-sm">
+                                    {person.profile_image ? (
+                                        <img 
+                                            src={isLocal ? `http://localhost:8000${person.profile_image}` : person.profile_image} 
+                                            className="w-full h-full object-cover"
+                                            alt={person.name}
+                                        />
+                                    ) : <UserCircle size={28} className="text-gray-300" />}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <span className="font-bold text-[15px] text-gray-800 truncate">{person.name}</span>
+                                    {isLocal && (
+                                        <span title="로컬 저장 완료" className="flex items-center">
+                                            <CheckCircle2 size={14} className="text-green-500" />
+                                        </span>
+                                    )}
+                                    {isExternal && (
+                                        <span title="외부 링크 사용 중" className="flex items-center">
+                                            <AlertCircle size={14} className="text-amber-500" />
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                                {isExternal ? (
+                                    <button 
+                                        onClick={() => handleSyncExternal(person.id, person.profile_image!)}
+                                        className="flex-1 h-9 bg-[#0066cc] text-white text-[12px] font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors"
+                                    >
+                                        {processingId === person.id ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                                        로컬로 동기화
+                                    </button>
+                                ) : (
+                                    <label className="flex-1 h-9 bg-white border border-gray-200 text-gray-600 text-[12px] font-bold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer hover:bg-gray-50 transition-colors">
+                                        <Upload size={14} /> 직접 업로드
+                                        <input type="file" className="hidden" />
+                                    </label>
+                                )}
+                                <button className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 transition-colors">
+                                    <Link size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+
+============================================================
 FILE PATH: frontend/src/components/admin/AdminPanel.tsx
 ============================================================
 // 파일 경로: frontend/src/components/admin/AdminPanel.tsx
@@ -16805,9 +17024,18 @@ export default function AdminWorkMerge() {
         try {
             const res = await fetch('http://localhost:8000/api/admin/duplicate-works');
             const data = await res.json();
-            setDuplicates(data);
+            
+            // 💡 [핵심 수정] 받아온 데이터가 진짜 배열(Array)일 때만 세팅하고, 아니면 빈 배열로 처리합니다!
+            if (Array.isArray(data)) {
+                setDuplicates(data);
+            } else {
+                console.error("배열이 아닌 데이터가 응답되었습니다:", data);
+                setDuplicates([]); // 에러 시 빈 배열로 초기화하여 화면 깨짐 방지
+            }
+            
         } catch (error) {
             console.error("중복 데이터 스캔 실패", error);
+            setDuplicates([]); // 네트워크 에러 시에도 빈 배열 처리
         } finally {
             setLoading(false);
         }
@@ -16914,140 +17142,9 @@ export default function AdminWorkMerge() {
 
 
 ============================================================
-FILE PATH: frontend/src/components/admin/AuthorImageManager.tsx
-============================================================
-// 파일 경로: src/components/admin/AuthorImageManager.tsx
-// 역할 및 기능: 프로필 사진이 누락된 작가 리스트를 조회하고, 관리자가 직접 사진을 업로드하여 즉시 반영할 수 있는 관리자 전용 UI 컴포넌트입니다.
-
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { Camera, Upload, UserCircle, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-// 함수 기능: 프로필 사진이 누락된 작가 리스트를 조회하고 개별 업로드 UI를 렌더링합니다.
-export default function AuthorImageManager({ userEmail }: { userEmail: string }) {
-    const [authors, setAuthors] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isUploading, setIsUploading] = useState<number | null>(null);
-
-    // 함수 기능: 백엔드에서 사진이 없는 작가 목록을 가져와 상태를 업데이트합니다.
-    const fetchMissingAuthors = async () => {
-        setIsLoading(true);
-        try {
-            const res = await fetch(`${API_URL}/api/admin/authors/no-image`);
-            if (res.ok) {
-                setAuthors(await res.json());
-            }
-        } catch (error) {
-            console.error("작가 로드 실패:", error);
-            toast.error("작가 목록을 불러오지 못했습니다.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => { 
-        fetchMissingAuthors(); 
-    }, []);
-
-    // 함수 기능: 선택된 파일을 백엔드로 전송하여 작가의 프로필 이미지를 업데이트합니다.
-    const handleUpload = async (contributorId: number, file: File) => {
-        setIsUploading(contributorId);
-        const formData = new FormData();
-        formData.append('file', file);
-        // JSON 바디 대신 폼 데이터로 이메일 전송 (보안 검증용)
-        formData.append('user_email', userEmail); 
-
-        try {
-            const res = await fetch(`${API_URL}/api/admin/authors/${contributorId}/upload-image`, {
-                method: 'POST',
-                body: formData,
-            });
-
-            if (res.ok) {
-                toast.success('프로필 사진이 성공적으로 등록되었습니다.');
-                fetchMissingAuthors(); // 업로드 성공 시 리스트 갱신 (해당 작가는 리스트에서 사라짐)
-            } else {
-                const errorData = await res.json();
-                toast.error(errorData.detail || '업로드에 실패했습니다.');
-            }
-        } catch (error) {
-            toast.error('서버 통신 에러가 발생했습니다.');
-        } finally {
-            setIsUploading(null);
-        }
-    };
-
-    return (
-        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm flex flex-col h-full max-h-[400px]">
-            <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3 shrink-0">
-                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-1.5">
-                    <Camera size={16} className="text-[#0066cc]" />
-                    사진 누락 작가 관리 (총 {authors.length}명)
-                </h3>
-                <button 
-                    onClick={fetchMissingAuthors} 
-                    className="text-[11px] text-gray-400 hover:text-[#0066cc] font-bold"
-                >
-                    새로고침
-                </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide space-y-2">
-                {isLoading ? (
-                    <div className="flex justify-center items-center h-full">
-                        <Loader2 className="animate-spin text-gray-300" size={24} />
-                    </div>
-                ) : authors.length > 0 ? (
-                    authors.map((author) => (
-                        <div key={author.id} className="flex items-center justify-between p-3 bg-gray-50/50 hover:bg-gray-50 rounded-lg border border-gray-100 transition-colors group">
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-300 shadow-sm shrink-0">
-                                    <UserCircle size={20} />
-                                </div>
-                                <div className="flex flex-col min-w-0">
-                                    <p className="font-bold text-[13px] text-gray-800 truncate">{author.name}</p>
-                                    <p className="text-[11px] text-gray-400 truncate">ID: {author.id} {author.original_name ? `| ${author.original_name}` : ''}</p>
-                                </div>
-                            </div>
-                            
-                            <label className="cursor-pointer shrink-0 ml-2">
-                                <input 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*"
-                                    onChange={(e) => e.target.files?.[0] && handleUpload(author.id, e.target.files[0])}
-                                    disabled={isUploading === author.id}
-                                />
-                                <div className={`flex items-center justify-center w-8 h-8 rounded-md transition-all ${
-                                    isUploading === author.id 
-                                    ? 'bg-gray-200 text-gray-400' 
-                                    : 'bg-white border border-gray-200 text-gray-500 hover:border-[#0066cc] hover:text-[#0066cc] shadow-sm'
-                                }`}>
-                                    {isUploading === author.id ? <Loader2 className="animate-spin" size={14} /> : <Upload size={14} />}
-                                </div>
-                            </label>
-                        </div>
-                    ))
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 space-y-2">
-                        <Camera size={32} className="opacity-20" />
-                        <span className="text-[12px] font-medium">모든 작가의 사진이 등록되어 있습니다! ✨</span>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-
-============================================================
 FILE PATH: frontend/src/components/book-detail/BookTopInfo.tsx
 ============================================================
-// 파일 경로: src/components/book/BookTopInfo.tsx
+// 파일 경로: src/components/book-detail/BookTopInfo.tsx
 // 역할 및 기능: 부모 영역의 하얀 도화지에 녹아들도록 디자인된 도서 상세 상단 정보 컴포넌트.
 // 업데이트: 1줄 정렬 UI 유지 및 판본(출판사) 스위칭 메뉴 노출 조건 완벽 조율(2개 이상일 때만 노출)
 
@@ -17475,7 +17572,7 @@ export default function ShortReviewWriteModal({
 ============================================================
 FILE PATH: frontend/src/components/book-detail/MemoryLayer.tsx
 ============================================================
-// 파일 경로: src/app/(main)/library/[id]/MemoryLayer.tsx
+// 파일 경로: src/components/book-detail/MemoryLayer.tsx
 // 역할 및 기능: 도서 상세 페이지 내의 '독서노트' 탭 리스트를 렌더링하며, 본문 14px 폰트 표준과 레이아웃 일관성을 확보했습니다.
 
 'use client';
@@ -17666,7 +17763,9 @@ export default function MemoryLayer({ recordId, user, refreshTrigger, onDataLoad
 ============================================================
 FILE PATH: frontend/src/components/book-detail/EditionMaster.tsx
 ============================================================
-//src/components/book-detail/EditionMaster.tsx
+// 파일 경로: src/components/book-detail/EditionMaster.tsx
+// 역할 및 기능: 도서 상세 페이지의 판본 정보와 판본 선택 드롭다운을 담당하는 컴포넌트입니다. 3D 책 표지 효과와 함께, 출판사, 출간일, 페이지 수, ISBN 등의 핵심 메타데이터를 깔끔하게 보여줍니다. 또한, 관련 판본이 2개 이상일 때만 판본 선택 메뉴가 나타나도록 조건부 렌더링을 적용했습니다.
+
 'use client';
 
 import React from 'react';
@@ -17819,7 +17918,7 @@ export default function EditionMaster({
 ============================================================
 FILE PATH: frontend/src/components/book-detail/ShortReviewSection.tsx
 ============================================================
-// 파일 경로: src/app/(main)/library/[id]/ShortReviewSection.tsx
+// 파일 경로: src/components/book-detail/ShortReviewSection.tsx
 // 역할 및 기능: 도서 상세 페이지의 '한줄평' 탭을 담당하며, 독서노트(MemoryLayer)와 동일한 둥근 모서리와 14px 표준 본문 폰트를 적용하여 일관된 UX를 제공합니다.
 
 'use client';
@@ -17995,7 +18094,7 @@ export default function ShortReviewSection({ editionId, onDataLoaded, currentUse
 ============================================================
 FILE PATH: frontend/src/components/book-detail/LongReviewSection.tsx
 ============================================================
-// 파일 경로: src/app/(main)/library/[id]/LongReviewSection.tsx
+// 파일 경로: src/components/book-detail/LongReviewSection.tsx
 // 역할 및 기능: 도서 상세 페이지의 '긴줄평' 탭을 담당하며, 부모 레이아웃의 여백과 충돌하지 않도록 자체 마진을 제거하고 14px 표준을 적용했습니다.
 
 'use client';
@@ -18345,6 +18444,8 @@ function LongReviewEditor({ recordId, user, realNickname }: { recordId?: number;
 ============================================================
 FILE PATH: frontend/src/components/book-detail/LongReviewListSection.tsx
 ============================================================
+// 파일 경로: src/components/book-detail/LongReviewListSection.tsx
+// 역할 및 기능: 도서 상세 페이지의 '긴줄평' 탭을 담당하며, 부모 레이아웃의 여백과 충돌하지 않도록 자체 마진을 제거하고 14px 표준을 적용했습니다.
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -18512,6 +18613,8 @@ export default function LongReviewListSection({ workId, currentUser }: LongRevie
 ============================================================
 FILE PATH: frontend/src/components/book-detail/MemoWriteModal.tsx
 ============================================================
+// 파일 경로: src/components/book-detail/MemoWriteModal.tsx
+// 역할 및 기능: 도서 상세 페이지에서 독서노트(MemoryLayer) 작성 및 수정을 담당하는 모달 컴포넌트입니다. 책(Book)과 같은 단단한 사각형 디자인과 14px 본문 폰트를 적용하여 일관된 UX를 제공합니다.
 'use client';
 
 import React, { useState } from 'react';
@@ -18655,7 +18758,8 @@ export default function MemoWriteModal({ isOpen, onClose, bookTitle, onSubmit, i
 ============================================================
 FILE PATH: frontend/src/components/book-detail/BookDetailClient.tsx
 ============================================================
-// src/app/(main)/library/[id]/BookDetailClient.tsx
+// 파일 경로: src/components/book-detail/BookDetailClient.tsx
+// 역할 및 기능: 도서 상세 페이지의 메인 클라이언트 컴포넌트로, 상단 도서 정보부터 탭 메뉴와 각 탭의 콘텐츠(독서노트, 한줄평, 긴줄평)까지 전체 레이아웃과 상태 관리를 담당합니다. 또한, 브레드크럼 네비게이션과 플로팅 액션 버튼(FAB)을 포함하여 사용자가 페이지 내에서 원활하게 이동하고 상호작용할 수 있도록 설계되었습니다.
 
 'use client';
 
@@ -20303,6 +20407,149 @@ export default function EditionSelectModal({ isOpen, onClose, workId, workTitle,
 
 
 ============================================================
+FILE PATH: frontend/src/components/book/ContributorProfile.tsx
+============================================================
+// 경로: frontend/src/components/book/ContributorProfile.tsx
+// 역할: 도서 상세페이지의 "AUTHOR" 영역에서 기여자 프로필 노출 및 관리자 전용 즉시 업로드 기능
+
+'use client';
+
+import React, { useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { UserCircle, Camera, Loader2, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface ContributorProps {
+    id: number;
+    name: string;
+    role: string; // 저자, 옮긴이 등
+    profileImage: string | null;
+    original_name?: string;
+    description?: string;
+    representative_works?: string[]; // 대표작 목록 (향후 기능 확장용)
+}
+
+export default function ContributorProfile({ id, name, role, profileImage, original_name, description, representative_works }: ContributorProps) {
+    const { data: session } = useSession();
+    const [currentImage, setCurrentImage] = useState(profileImage);
+    const [isUploading, setIsUploading] = useState(false);
+
+    // 최고 관리자(`boookntalk`) 여부 확인
+    const isAdmin = session?.user?.email?.toLowerCase().startsWith('boookntalk');
+
+    // 함수 기능: 파일 선택 시 백엔드 전용 업로드 API를 호출하여 즉시 반영합니다.
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !isAdmin) return;
+
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('user_email', session?.user?.email || '');
+
+        try {
+            const res = await fetch(`${API_URL}/api/admin/contributors/${id}/upload-image`, {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setCurrentImage(data.url); // 업로드된 로컬 경로로 즉시 교체 (Optimistic UI)
+                toast.success(`${name}님의 프로필 사진이 등록되었습니다.`);
+            } else {
+                toast.error("사진 업로드에 실패했습니다.");
+            }
+        } catch (error) {
+            toast.error("서버 통신 중 오류가 발생했습니다.");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    return (
+        <div className="flex flex-col md:flex-row gap-6 p-6 bg-gray-50/50 rounded-2xl border border-gray-100 group transition-all hover:bg-white hover:shadow-md">
+            {/* 1. 프로필 사진 영역 (동그란 형태, 관리자 업로드 기능 포함) */}
+            <div className="flex flex-col items-center gap-3 shrink-0">
+                <div className="relative w-28 h-28 rounded-full overflow-hidden border border-gray-100 bg-white shadow-sm transition-all hover:border-[#0066cc]/30">
+                    {currentImage ? (
+                        <img 
+                            src={currentImage.startsWith('/') ? `${API_URL}${currentImage}` : currentImage} 
+                            alt={name}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300">
+                            <UserCircle size={56} />
+                        </div>
+                    )}
+
+                    {/* 최고 관리자 전용 업로드 오버레이 (마우스 호버 시 노출) */}
+                    {isAdmin && (
+                        <label className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                            {isUploading ? (
+                                <Loader2 className="animate-spin text-white" size={24} />
+                            ) : (
+                                <>
+                                    <Camera className="text-white mb-1.5" size={20} />
+                                    <span className="text-[11px] text-white font-bold text-center leading-tight">
+                                        프로필<br/>사진 등록
+                                    </span>
+                                </>
+                            )}
+                            <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*" 
+                                onChange={handleFileChange}
+                                disabled={isUploading}
+                            />
+                        </label>
+                    )}
+                </div>
+            </div>
+
+            {/* 2. 기여자 상세 정보 영역 */}
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[12px] font-bold text-[#0066cc] bg-blue-50 px-2.5 py-1 rounded-full uppercase tracking-wider">{role}</span>
+                    {currentImage && currentImage.startsWith('/') && (
+                        <span className="flex items-center gap-1.5 text-[11px] font-bold text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
+                            <CheckCircle2 size={12} /> 로컬 저장 완료
+                        </span>
+                    )}
+                </div>
+                
+                <h3 className="font-extrabold text-[18px] text-[#1d1d1f] flex items-center gap-1.5 mb-2 truncate">
+                    {name} {original_name && <span className="font-normal text-[14px] text-gray-500">({original_name})</span>}
+                </h3>
+                
+                <p className="text-[13px] text-gray-600 font-medium leading-relaxed mb-4 line-clamp-3">
+                    {description || "아직 등록된 기여자 소개가 없습니다."}
+                </p>
+
+                {/* 대표작 영역 (기획자님 이미지의 "대표작" 부분과 동일하게 적용) */}
+                {representative_works && representative_works.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                        <p className="text-[12px] font-bold text-gray-500 mb-2">대표작</p>
+                        <div className="flex items-center gap-2 truncate text-[13px] text-gray-700 font-medium">
+                           {representative_works.map((work, index) => (
+                               <span key={index} className="px-3 py-1 bg-white border border-gray-100 rounded-lg shadow-sm">
+                                   {work}
+                               </span>
+                           ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+
+============================================================
 FILE PATH: frontend/src/components/community/FollowingFeed.tsx
 ============================================================
 'use client';
@@ -21659,7 +21906,7 @@ app.include_router(editions.router)
 app.include_router(library.router)
 app.include_router(insights.router)
 app.include_router(authors.router)
-app.include_router(admin.router)
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 # ▼▼▼ [필수 확인] CORS 미들웨어 설정 ▼▼▼
 app.add_middleware(
@@ -22709,7 +22956,52 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
     else:
         # 코드가 없으면 기존 DB에 있는 2-Depth ("문학 / 소설") 데이터를 그대로 살립니다.
         final_category = getattr(work, 'category', "기타 / 미분류")
-    # ▲▲▲ 수술 완료 ▲▲▲
+    
+    work_contributor = db.query(models.WorkContributor).filter(
+        models.WorkContributor.work_id == work.id,
+        models.WorkContributor.role == 'AUTHOR'
+    ).first()
+
+    author_info = None
+    other_books_data = []
+
+    if work_contributor and work_contributor.contributor:
+        author = work_contributor.contributor
+
+        photo_url = author.profile_image
+        if photo_url and not photo_url.startswith("http"):
+            base_url = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:8000")
+            photo_url = f"{base_url}/{photo_url.lstrip('/')}"
+
+        author_info = {
+            "id": str(author.id),
+            "name": author.name,
+            "photo": photo_url,
+            "bio": author.description,
+            "role": work_contributor.role
+        }
+
+        # 다른 작품 3개 추출
+        other_links = db.query(models.WorkContributor).filter(
+            models.WorkContributor.contributor_id == author.id,
+            models.WorkContributor.work_id != work.id
+        ).limit(3).all()
+
+        for link in other_links:
+            other_work = db.query(models.Work).filter(models.Work.id == link.work_id).first()
+            if other_work:
+                rep_edition = db.query(models.Edition).filter(models.Edition.work_id == other_work.id).first()
+                cover_url = rep_edition.cover_image if rep_edition else ""
+                
+                if cover_url and not cover_url.startswith("http"):
+                    base_url = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:8000")
+                    cover_url = f"{base_url}/{cover_url.lstrip('/')}"
+                
+                other_books_data.append({
+                    "id": str(other_work.id),
+                    "title": other_work.title,
+                    "cover": cover_url
+                })
     
     return {
         "record": {
@@ -22749,7 +23041,9 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "price": getattr(current_edition, 'price', None),
             "first_discoverer": discoverer_name
         },
-        "my_editions": my_editions_data
+        "my_editions": my_editions_data,
+        "authorInfo": author_info,
+        "authorOtherBooks": other_books_data
     }
 
 @app.post("/api/records/{record_id}/memos")
@@ -23934,16 +24228,43 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
     ).first()
 
     author_info = None
+    other_books_data = []
+    
     if work_contributor and work_contributor.contributor:
         author = work_contributor.contributor
+        photo_url = author.profile_image
+        if photo_url and not photo_url.startswith("http"):
+            # DB에 상대경로로 저장되었다면 백엔드 도메인을 강제로 붙여줍니다.
+            base_url = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:8000")
+            photo_url = f"{base_url}/{photo_url.lstrip('/')}"
+
         author_info = {
             "id": str(author.id),
             "name": author.name,
-            # 💡 바로 이 값이 어드민에서 업로드한 로컬 경로(예: /static/uploads/...)입니다!
-            "photo": author.profile_image, 
+            "photo": photo_url, # 👈 보정된 무결점 URL 투입!
             "bio": author.description,
             "role": work_contributor.role
         }
+
+        # 🚨 2. 작가의 '다른 책' 실제 데이터 긁어오기
+        # 현재 보고 있는 책(work_id)은 제외하고, 이 작가가 참여한 다른 작품을 찾습니다.
+        other_links = db.query(models.WorkContributor).filter(
+            models.WorkContributor.contributor_id == author.id,
+            models.WorkContributor.work_id != work_id 
+        ).limit(3).all() # 최대 3개까지만 추출
+
+        for link in other_links:
+            other_work = db.query(models.Work).filter(models.Work.id == link.work_id).first()
+            if other_work:
+                # 해당 작품의 대표 표지 찾기 (가장 첫 번째 판본의 표지)
+                rep_edition = db.query(models.Edition).filter(models.Edition.work_id == other_work.id).first()
+                cover_url = rep_edition.cover_image if rep_edition else ""
+                
+                other_books_data.append({
+                    "id": str(other_work.id),
+                    "title": other_work.title,
+                    "cover": cover_url # 👈 실제 표지 이미지 연결!
+                })
 
     return {
         "work_id": work.id,
@@ -23958,7 +24279,8 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
         "edition_count": len(editions),
         
         # 💡 [NEW] 프론트엔드가 기다리던 작가 상세 객체를 최종 응답에 포함시킵니다.
-        "authorInfo": author_info 
+        "authorInfo": author_info,
+        "authorOtherBooks": other_books_data 
     }
 
 @app.get("/api/works/{work_id}/editions")
@@ -25090,9 +25412,9 @@ def get_home_dashboard(user_email: Optional[str] = None, db: Session = Depends(g
 FILE PATH: backend/routers/admin.py
 ============================================================
 # 파일 경로: backend/routers/admin.py
-# 역할 및 기능: 관리자(ADMIN) 전용 API 라우터입니다. 데이터 클렌징, 작가 병합, 장르 오답 노트 수집 등의 시스템 핵심 관리 기능을 담당합니다.
+# 역할 및 기능: 관리자(ADMIN) 전용 API 라우터입니다. 데이터 클렌징, 작가 병합, 장르 오답 노트 수집 및 기여자 프로필 사진 관리를 담당합니다.
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile, Body
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile, Body, Form, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from pydantic import BaseModel
@@ -25107,10 +25429,12 @@ from utils.author_parser import parse_author_string
 from services.trending_service import update_global_trending_authors
 from services.external_api_service import update_external_book_cache
 
-import os, httpx, subprocess, uuid, shutil, models
+import os, httpx, subprocess, uuid, shutil, models, requests
 
 # 💡 [핵심] 여기서 prefix를 "/api/admin"으로 고정해두면, 아래 API들에는 안 써도 자동으로 붙습니다!
-router = APIRouter(prefix="/api/admin", tags=["Admin"])
+router = APIRouter()
+
+UPLOAD_DIR = "static/uploads/contributors"
 
 # ==========================================
 # [스키마 정의]
@@ -25119,10 +25443,19 @@ class MergeWorksRequest(BaseModel):
     target_work_id: int
     source_work_ids: list[int]
 
+def get_local_path(filename: str):
+    """함수 기능: 기여자 프로필 저장용 로컬 물리 경로를 반환합니다."""
+    return os.path.join(UPLOAD_DIR, filename)
+
+@router.get("/health")
+def admin_health_check():
+    """관리자 라우터 연결 상태를 확인하는 헬스 체크 함수입니다."""
+    return {"status": "ok", "message": "Admin router is fully functional"}
+
+
 # ==========================================
-# [1] 작품 데이터 대통합 스캐너 및 병합 API (새로 추가됨)
+# [1] 작품 데이터 대통합 스캐너 및 병합 API
 # ==========================================
-# 함수 기능: 제목의 공백을 제거한 텍스트를 기준으로, 완벽하게 일치하거나 매우 유사하여 중복 생성된 작품(Work) 그룹 목록을 스캔하여 반환합니다.
 @router.get("/duplicate-works")
 async def get_duplicate_works(db: Session = Depends(get_db)):
     duplicates = db.query(
@@ -25148,7 +25481,7 @@ async def get_duplicate_works(db: Session = Depends(get_db)):
 
     return [{"normalized_title": k, "works": v} for k, v in result_map.items() if len(v) > 1]
 
-# 함수 기능: 여러 개의 파편화된 작품(Work)의 하위 데이터(판본, 서평, 작가 연결)를 하나의 타겟 작품으로 완벽하게 이전(Merge)하고, 빈 껍데기는 영구 삭제합니다.
+
 @router.post("/merge-works")
 async def merge_specific_works(req: MergeWorksRequest, db: Session = Depends(get_db)):
     try:
@@ -25171,9 +25504,12 @@ async def merge_specific_works(req: MergeWorksRequest, db: Session = Depends(get
                     models.WorkContributor.contributor_id == link.contributor_id,
                     models.WorkContributor.role == link.role
                 ).first()
-                if exists: db.delete(link)
-                else: link.work_id = target_id
+                if exists: 
+                    db.delete(link)
+                else: 
+                    link.work_id = target_id
 
+            db.flush()
             db.query(models.Work).filter(models.Work.id == source_id).delete()
 
         db.commit()
@@ -25182,11 +25518,10 @@ async def merge_specific_works(req: MergeWorksRequest, db: Session = Depends(get
         db.rollback()
         raise HTTPException(status_code=500, detail=f"작품 병합 중 오류 발생: {str(e)}")
 
-# ==========================================
-# [2] 기존 main.py에서 분리된 관리자 API들
-# ==========================================
 
-# 함수 기능: 기존에 등록된 도서 중 외부 URL(네이버 등)을 사용하고 있는 도서를 찾아 로컬로 일괄 다운로드합니다.
+# ==========================================
+# [2] 기존 관리자 시스템 API (정제, 동기화 등)
+# ==========================================
 @router.get("/sync-covers")
 async def sync_existing_covers(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     editions_to_update = db.query(models.Edition).filter(
@@ -25203,7 +25538,7 @@ async def sync_existing_covers(background_tasks: BackgroundTasks, db: Session = 
 
     return {"status": "success", "message": f"총 {count}권 다운로드 시작!", "target_editions": [ed.id for ed in editions_to_update]}
 
-# 함수 기능: 기존 DB에 저장된 모든 Work의 author 문자열을 새로 분석하여 참여자 테이블을 재정립합니다.
+
 @router.get("/sync-authors")
 async def sync_existing_authors(db: Session = Depends(get_db)):
     works = db.query(models.Work).all()
@@ -25236,7 +25571,7 @@ async def sync_existing_authors(db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"정제 오류: {str(e)}")
 
-# 함수 기능: 어떤 작품(Work)과도 연결되지 않은 찌꺼기(고아) 참여자 데이터를 일괄 삭제합니다.
+
 @router.get("/cleanup-contributors")
 async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
     active_ids = db.query(models.WorkContributor.contributor_id).distinct()
@@ -25249,7 +25584,7 @@ async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"청소 오류: {str(e)}")
 
-# 함수 기능: 파편화된 작가들을 한 명으로 강제 흡수 병합합니다.
+
 @router.get("/merge-contributors")
 async def merge_specific_contributors(target_id: int, source_ids: str, db: Session = Depends(get_db)):
     try:
@@ -25277,7 +25612,7 @@ async def merge_specific_contributors(target_id: int, source_ids: str, db: Sessi
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# 함수 기능: '기타'로 오염된 도서들을 알라딘 API를 통해 심층 복구합니다.
+
 @router.get("/sync-genres")
 async def sync_existing_genres(db: Session = Depends(get_db)):
     works = db.query(models.Work).filter(models.Work.category == "기타").all()
@@ -25314,7 +25649,7 @@ async def sync_existing_genres(db: Session = Depends(get_db)):
 
     return {"status": "success", "message": f"총 {updated_count}개 작품 장르 복구 완료."}
 
-# 함수 기능: AI 장르 분류기 재학습을 백그라운드에서 실행하고 모델을 다시 불러옵니다.
+
 @router.post("/retrain-ai")
 async def retrain_ai_model(user_email: str):
     if not user_email.startswith("boookntalk"):
@@ -25327,13 +25662,13 @@ async def retrain_ai_model(user_email: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 함수 기능: 트렌딩 작가 캐시를 즉시 수동 갱신합니다.
+
 @router.get("/refresh-trending")
 async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
     result = update_global_trending_authors(db)
     return result
 
-# 함수 기능: 작품, 참여자 등 DB 전체를 한 번에 정제하는 마스터 클린업 도구입니다.
+
 @router.get("/master-cleanup")
 async def execute_master_cleanup(db: Session = Depends(get_db)):
     works = db.query(models.Work).all()
@@ -25364,12 +25699,117 @@ async def execute_master_cleanup(db: Session = Depends(get_db)):
     
     return {"status": "success", "message": "마스터 클린업 완료!"}
 
-# 함수 기능: 외부 도서 API 데이터를 수동으로 갱신합니다.
+
 @router.post("/refresh-discovery")
 def refresh_discovery_data(db: Session = Depends(get_db)):
     success = update_external_book_cache(db)
     if success: return {"message": "성공적으로 갱신되었습니다."}
     raise HTTPException(status_code=500, detail="데이터 수집 실패.")
+
+
+# ==========================================
+# 🚀 [3] 기여자(Contributor) 통합 관리 및 상세 페이지 업로드 API (신규 추가)
+# ==========================================
+
+# 1. 전체 기여자 조회 및 검색 API (마이페이지 관리자 탭용)
+@router.get("/contributors/search")
+async def search_contributors(
+    db: Session = Depends(get_db),
+    q: str = Query(None),
+    has_photo: bool = Query(None)
+):
+    """함수 기능: 기여자 리스트를 검색하며, 로컬/외부 사진 유무에 따른 필터링을 제공합니다."""
+    query = db.query(models.Contributor)
+    
+    if q:
+        query = query.filter(or_(
+            models.Contributor.name.ilike(f"%{q}%"),
+            models.Contributor.original_name.ilike(f"%{q}%")
+        ))
+    
+    if has_photo is not None:
+        if has_photo:
+            query = query.filter(models.Contributor.profile_image.ilike("/static%"))
+        else:
+            query = query.filter(or_(
+                models.Contributor.profile_image == None,
+                models.Contributor.profile_image == "",
+                models.Contributor.profile_image.ilike("http%")
+            ))
+
+    contributors = query.order_by(models.Contributor.id.desc()).limit(100).all()
+    return contributors
+
+# 2. 도서 상세 페이지 사진 클릭 즉시 업로드 API
+@router.post("/contributors/{contributor_id}/upload-image")
+async def upload_contributor_image(
+    contributor_id: int, 
+    user_email: str = Form(...), 
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
+    """함수 기능: 상세페이지에서 기여자 사진을 직접 업로드 시 로컬에 저장하고 DB를 갱신합니다."""
+    if not user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    contributor = db.query(models.Contributor).filter(models.Contributor.id == contributor_id).first()
+    if not contributor:
+        raise HTTPException(status_code=404, detail="기여자를 찾을 수 없습니다.")
+
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = get_local_path(unique_filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    image_url = f"/{UPLOAD_DIR}/{unique_filename}"
+    contributor.profile_image = image_url
+    db.commit()
+
+    return {"status": "success", "url": image_url}
+
+# 3. 외부 URL 로컬 동기화 API (도서 커버 방식과 동일)
+@router.post("/contributors/{contributor_id}/sync-external")
+async def sync_external_contributor_image(
+    contributor_id: int,
+    external_url: str = Form(...),
+    user_email: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """함수 기능: 외부 이미지 URL을 로컬 서버로 다운로드하여 영구 저장합니다."""
+    if not user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    contributor = db.query(models.Contributor).filter(models.Contributor.id == contributor_id).first()
+    if not contributor:
+        raise HTTPException(status_code=404, detail="기여자를 찾을 수 없습니다.")
+
+    try:
+        response = requests.get(external_url, stream=True, timeout=15)
+        if response.status_code != 200:
+            raise Exception("외부 이미지를 불러올 수 없습니다.")
+
+        if not os.path.exists(UPLOAD_DIR):
+            os.makedirs(UPLOAD_DIR)
+            
+        ext = external_url.split('.')[-1].split('?')[0].lower() or 'jpg'
+        filename = f"{uuid.uuid4()}.{ext}"
+        file_path = get_local_path(filename)
+
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(response.raw, f)
+
+        local_url = f"/{UPLOAD_DIR}/{filename}"
+        contributor.profile_image = local_url
+        db.commit()
+
+        return {"status": "success", "url": local_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"동기화 오류: {str(e)}")
 
 
 ============================================================

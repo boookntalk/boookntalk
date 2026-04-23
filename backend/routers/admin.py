@@ -1,7 +1,7 @@
 # 파일 경로: backend/routers/admin.py
-# 역할 및 기능: 관리자(ADMIN) 전용 API 라우터입니다. 데이터 클렌징, 작가 병합, 장르 오답 노트 수집 등의 시스템 핵심 관리 기능을 담당합니다.
+# 역할 및 기능: 관리자(ADMIN) 전용 API 라우터입니다. 데이터 클렌징, 작가 병합, 장르 오답 노트 수집 및 기여자 프로필 사진 관리를 담당합니다.
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile, Body
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile, Body, Form, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from pydantic import BaseModel
@@ -16,10 +16,12 @@ from utils.author_parser import parse_author_string
 from services.trending_service import update_global_trending_authors
 from services.external_api_service import update_external_book_cache
 
-import os, httpx, subprocess, uuid, shutil, models
+import os, httpx, subprocess, uuid, shutil, models, requests
 
 # 💡 [핵심] 여기서 prefix를 "/api/admin"으로 고정해두면, 아래 API들에는 안 써도 자동으로 붙습니다!
-router = APIRouter(prefix="/api/admin", tags=["Admin"])
+router = APIRouter()
+
+UPLOAD_DIR = "static/uploads/contributors"
 
 # ==========================================
 # [스키마 정의]
@@ -28,10 +30,19 @@ class MergeWorksRequest(BaseModel):
     target_work_id: int
     source_work_ids: list[int]
 
+def get_local_path(filename: str):
+    """함수 기능: 기여자 프로필 저장용 로컬 물리 경로를 반환합니다."""
+    return os.path.join(UPLOAD_DIR, filename)
+
+@router.get("/health")
+def admin_health_check():
+    """관리자 라우터 연결 상태를 확인하는 헬스 체크 함수입니다."""
+    return {"status": "ok", "message": "Admin router is fully functional"}
+
+
 # ==========================================
-# [1] 작품 데이터 대통합 스캐너 및 병합 API (새로 추가됨)
+# [1] 작품 데이터 대통합 스캐너 및 병합 API
 # ==========================================
-# 함수 기능: 제목의 공백을 제거한 텍스트를 기준으로, 완벽하게 일치하거나 매우 유사하여 중복 생성된 작품(Work) 그룹 목록을 스캔하여 반환합니다.
 @router.get("/duplicate-works")
 async def get_duplicate_works(db: Session = Depends(get_db)):
     duplicates = db.query(
@@ -57,7 +68,7 @@ async def get_duplicate_works(db: Session = Depends(get_db)):
 
     return [{"normalized_title": k, "works": v} for k, v in result_map.items() if len(v) > 1]
 
-# 함수 기능: 여러 개의 파편화된 작품(Work)의 하위 데이터(판본, 서평, 작가 연결)를 하나의 타겟 작품으로 완벽하게 이전(Merge)하고, 빈 껍데기는 영구 삭제합니다.
+
 @router.post("/merge-works")
 async def merge_specific_works(req: MergeWorksRequest, db: Session = Depends(get_db)):
     try:
@@ -80,9 +91,12 @@ async def merge_specific_works(req: MergeWorksRequest, db: Session = Depends(get
                     models.WorkContributor.contributor_id == link.contributor_id,
                     models.WorkContributor.role == link.role
                 ).first()
-                if exists: db.delete(link)
-                else: link.work_id = target_id
+                if exists: 
+                    db.delete(link)
+                else: 
+                    link.work_id = target_id
 
+            db.flush()
             db.query(models.Work).filter(models.Work.id == source_id).delete()
 
         db.commit()
@@ -91,11 +105,10 @@ async def merge_specific_works(req: MergeWorksRequest, db: Session = Depends(get
         db.rollback()
         raise HTTPException(status_code=500, detail=f"작품 병합 중 오류 발생: {str(e)}")
 
-# ==========================================
-# [2] 기존 main.py에서 분리된 관리자 API들
-# ==========================================
 
-# 함수 기능: 기존에 등록된 도서 중 외부 URL(네이버 등)을 사용하고 있는 도서를 찾아 로컬로 일괄 다운로드합니다.
+# ==========================================
+# [2] 기존 관리자 시스템 API (정제, 동기화 등)
+# ==========================================
 @router.get("/sync-covers")
 async def sync_existing_covers(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     editions_to_update = db.query(models.Edition).filter(
@@ -112,7 +125,7 @@ async def sync_existing_covers(background_tasks: BackgroundTasks, db: Session = 
 
     return {"status": "success", "message": f"총 {count}권 다운로드 시작!", "target_editions": [ed.id for ed in editions_to_update]}
 
-# 함수 기능: 기존 DB에 저장된 모든 Work의 author 문자열을 새로 분석하여 참여자 테이블을 재정립합니다.
+
 @router.get("/sync-authors")
 async def sync_existing_authors(db: Session = Depends(get_db)):
     works = db.query(models.Work).all()
@@ -145,7 +158,7 @@ async def sync_existing_authors(db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"정제 오류: {str(e)}")
 
-# 함수 기능: 어떤 작품(Work)과도 연결되지 않은 찌꺼기(고아) 참여자 데이터를 일괄 삭제합니다.
+
 @router.get("/cleanup-contributors")
 async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
     active_ids = db.query(models.WorkContributor.contributor_id).distinct()
@@ -158,7 +171,7 @@ async def cleanup_orphaned_contributors(db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"청소 오류: {str(e)}")
 
-# 함수 기능: 파편화된 작가들을 한 명으로 강제 흡수 병합합니다.
+
 @router.get("/merge-contributors")
 async def merge_specific_contributors(target_id: int, source_ids: str, db: Session = Depends(get_db)):
     try:
@@ -186,7 +199,7 @@ async def merge_specific_contributors(target_id: int, source_ids: str, db: Sessi
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# 함수 기능: '기타'로 오염된 도서들을 알라딘 API를 통해 심층 복구합니다.
+
 @router.get("/sync-genres")
 async def sync_existing_genres(db: Session = Depends(get_db)):
     works = db.query(models.Work).filter(models.Work.category == "기타").all()
@@ -223,7 +236,7 @@ async def sync_existing_genres(db: Session = Depends(get_db)):
 
     return {"status": "success", "message": f"총 {updated_count}개 작품 장르 복구 완료."}
 
-# 함수 기능: AI 장르 분류기 재학습을 백그라운드에서 실행하고 모델을 다시 불러옵니다.
+
 @router.post("/retrain-ai")
 async def retrain_ai_model(user_email: str):
     if not user_email.startswith("boookntalk"):
@@ -236,13 +249,13 @@ async def retrain_ai_model(user_email: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 함수 기능: 트렌딩 작가 캐시를 즉시 수동 갱신합니다.
+
 @router.get("/refresh-trending")
 async def refresh_trending_authors_manual(db: Session = Depends(get_db)):
     result = update_global_trending_authors(db)
     return result
 
-# 함수 기능: 작품, 참여자 등 DB 전체를 한 번에 정제하는 마스터 클린업 도구입니다.
+
 @router.get("/master-cleanup")
 async def execute_master_cleanup(db: Session = Depends(get_db)):
     works = db.query(models.Work).all()
@@ -273,9 +286,114 @@ async def execute_master_cleanup(db: Session = Depends(get_db)):
     
     return {"status": "success", "message": "마스터 클린업 완료!"}
 
-# 함수 기능: 외부 도서 API 데이터를 수동으로 갱신합니다.
+
 @router.post("/refresh-discovery")
 def refresh_discovery_data(db: Session = Depends(get_db)):
     success = update_external_book_cache(db)
     if success: return {"message": "성공적으로 갱신되었습니다."}
     raise HTTPException(status_code=500, detail="데이터 수집 실패.")
+
+
+# ==========================================
+# 🚀 [3] 기여자(Contributor) 통합 관리 및 상세 페이지 업로드 API (신규 추가)
+# ==========================================
+
+# 1. 전체 기여자 조회 및 검색 API (마이페이지 관리자 탭용)
+@router.get("/contributors/search")
+async def search_contributors(
+    db: Session = Depends(get_db),
+    q: str = Query(None),
+    has_photo: bool = Query(None)
+):
+    """함수 기능: 기여자 리스트를 검색하며, 로컬/외부 사진 유무에 따른 필터링을 제공합니다."""
+    query = db.query(models.Contributor)
+    
+    if q:
+        query = query.filter(or_(
+            models.Contributor.name.ilike(f"%{q}%"),
+            models.Contributor.original_name.ilike(f"%{q}%")
+        ))
+    
+    if has_photo is not None:
+        if has_photo:
+            query = query.filter(models.Contributor.profile_image.ilike("/static%"))
+        else:
+            query = query.filter(or_(
+                models.Contributor.profile_image == None,
+                models.Contributor.profile_image == "",
+                models.Contributor.profile_image.ilike("http%")
+            ))
+
+    contributors = query.order_by(models.Contributor.id.desc()).limit(100).all()
+    return contributors
+
+# 2. 도서 상세 페이지 사진 클릭 즉시 업로드 API
+@router.post("/contributors/{contributor_id}/upload-image")
+async def upload_contributor_image(
+    contributor_id: int, 
+    user_email: str = Form(...), 
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
+    """함수 기능: 상세페이지에서 기여자 사진을 직접 업로드 시 로컬에 저장하고 DB를 갱신합니다."""
+    if not user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    contributor = db.query(models.Contributor).filter(models.Contributor.id == contributor_id).first()
+    if not contributor:
+        raise HTTPException(status_code=404, detail="기여자를 찾을 수 없습니다.")
+
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = get_local_path(unique_filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    image_url = f"/{UPLOAD_DIR}/{unique_filename}"
+    contributor.profile_image = image_url
+    db.commit()
+
+    return {"status": "success", "url": image_url}
+
+# 3. 외부 URL 로컬 동기화 API (도서 커버 방식과 동일)
+@router.post("/contributors/{contributor_id}/sync-external")
+async def sync_external_contributor_image(
+    contributor_id: int,
+    external_url: str = Form(...),
+    user_email: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """함수 기능: 외부 이미지 URL을 로컬 서버로 다운로드하여 영구 저장합니다."""
+    if not user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    contributor = db.query(models.Contributor).filter(models.Contributor.id == contributor_id).first()
+    if not contributor:
+        raise HTTPException(status_code=404, detail="기여자를 찾을 수 없습니다.")
+
+    try:
+        response = requests.get(external_url, stream=True, timeout=15)
+        if response.status_code != 200:
+            raise Exception("외부 이미지를 불러올 수 없습니다.")
+
+        if not os.path.exists(UPLOAD_DIR):
+            os.makedirs(UPLOAD_DIR)
+            
+        ext = external_url.split('.')[-1].split('?')[0].lower() or 'jpg'
+        filename = f"{uuid.uuid4()}.{ext}"
+        file_path = get_local_path(filename)
+
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(response.raw, f)
+
+        local_url = f"/{UPLOAD_DIR}/{filename}"
+        contributor.profile_image = local_url
+        db.commit()
+
+        return {"status": "success", "url": local_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"동기화 오류: {str(e)}")

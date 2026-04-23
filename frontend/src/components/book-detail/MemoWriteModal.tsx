@@ -1,3 +1,5 @@
+// 파일 경로: src/components/book-detail/MemoWriteModal.tsx
+// 역할 및 기능: 도서 상세 페이지에서 독서노트(MemoryLayer) 작성 및 수정을 담당하는 모달 컴포넌트입니다. 책(Book)과 같은 단단한 사각형 디자인과 14px 본문 폰트를 적용하여 일관된 UX를 제공합니다.
 'use client';
 
 import React, { useState } from 'react';

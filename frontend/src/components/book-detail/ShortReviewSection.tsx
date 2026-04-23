@@ -1,4 +1,4 @@
-// 파일 경로: src/app/(main)/library/[id]/ShortReviewSection.tsx
+// 파일 경로: src/components/book-detail/ShortReviewSection.tsx
 // 역할 및 기능: 도서 상세 페이지의 '한줄평' 탭을 담당하며, 독서노트(MemoryLayer)와 동일한 둥근 모서리와 14px 표준 본문 폰트를 적용하여 일관된 UX를 제공합니다.
 
 'use client';

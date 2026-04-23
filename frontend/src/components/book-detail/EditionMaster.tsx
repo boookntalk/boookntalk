@@ -1,4 +1,6 @@
-//src/components/book-detail/EditionMaster.tsx
+// 파일 경로: src/components/book-detail/EditionMaster.tsx
+// 역할 및 기능: 도서 상세 페이지의 판본 정보와 판본 선택 드롭다운을 담당하는 컴포넌트입니다. 3D 책 표지 효과와 함께, 출판사, 출간일, 페이지 수, ISBN 등의 핵심 메타데이터를 깔끔하게 보여줍니다. 또한, 관련 판본이 2개 이상일 때만 판본 선택 메뉴가 나타나도록 조건부 렌더링을 적용했습니다.
+
 'use client';
 
 import React from 'react';

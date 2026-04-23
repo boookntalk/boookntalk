@@ -1,4 +1,4 @@
-// 파일 경로: src/app/(main)/library/[id]/MemoryLayer.tsx
+// 파일 경로: src/components/book-detail/MemoryLayer.tsx
 // 역할 및 기능: 도서 상세 페이지 내의 '독서노트' 탭 리스트를 렌더링하며, 본문 14px 폰트 표준과 레이아웃 일관성을 확보했습니다.
 
 'use client';

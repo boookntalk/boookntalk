@@ -1,4 +1,4 @@
-// 파일 경로: src/components/book/BookTopInfo.tsx
+// 파일 경로: src/components/book-detail/BookTopInfo.tsx
 // 역할 및 기능: 부모 영역의 하얀 도화지에 녹아들도록 디자인된 도서 상세 상단 정보 컴포넌트.
 // 업데이트: 1줄 정렬 UI 유지 및 판본(출판사) 스위칭 메뉴 노출 조건 완벽 조율(2개 이상일 때만 노출)
 
