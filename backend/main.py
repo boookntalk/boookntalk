@@ -22,6 +22,7 @@ from services.author_service import get_or_create_contributor
 from utils.global_category_mapper import get_category_hierarchy # ▼▼▼ [NEW] 글로벌 장르 파서 임포트 ▼▼▼
 from services.trending_service import update_global_trending_authors
 from services.external_api_service import update_external_book_cache
+from utils.bio_fetcher import fetch_author_bio_multi_tier
 
 import models, httpx, asyncio, uuid, os, sys, time, random, shutil, re
 import subprocess
@@ -1225,6 +1226,19 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
     if work_contributor and work_contributor.contributor:
         author = work_contributor.contributor
 
+        # ==========================================
+        # ▼▼▼ [핵심 추가] 내 서재 상세 페이지에도 Bio 수집 엔진 연결 ▼▼▼
+        # (혹시 공백만 들어있을 경우를 대비해 .strip() 방어막도 추가했습니다)
+        # ==========================================
+        if not author.description or not author.description.strip():
+            fetched_bio = await fetch_author_bio_multi_tier(author.name)
+            if fetched_bio:
+                author.description = fetched_bio
+                db.commit()
+        # ==========================================
+        # ▲▲▲ 추가 완료 ▲▲▲
+        # ==========================================
+
         photo_url = author.profile_image
         if photo_url and not photo_url.startswith("http"):
             base_url = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:8000")
@@ -1234,7 +1248,7 @@ async def get_record_detail(record_id: int, db: Session = Depends(get_db)):
             "id": str(author.id),
             "name": author.name,
             "photo": photo_url,
-            "bio": author.description,
+            "bio": author.description, # 💡 방금 채워진(또는 있던) 소개글이 여기서 프론트로 넘어갑니다.
             "role": work_contributor.role
         }
 
@@ -2489,6 +2503,15 @@ async def get_work_hub_detail(work_id: int, db: Session = Depends(get_db)):
     
     if work_contributor and work_contributor.contributor:
         author = work_contributor.contributor
+        
+        # ▼▼▼ [핵심: Bio 자동 수집 및 DB 갱신] ▼▼▼
+        if not author.description:
+            fetched_bio = await fetch_author_bio_multi_tier(author.name)
+            if fetched_bio:
+                author.description = fetched_bio
+                db.commit() # 한 번 찾아온 정보는 DB에 영구 저장 (캐싱)
+        # ▲▲▲ 수집 로직 완료 ▲▲▲
+        
         photo_url = author.profile_image
         if photo_url and not photo_url.startswith("http"):
             # DB에 상대경로로 저장되었다면 백엔드 도메인을 강제로 붙여줍니다.

@@ -20,7 +20,7 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
     const router = useRouter();
     const searchParams = useSearchParams();
     
-    const { record, work, current_edition, my_editions } = initialData;
+    const { record, work, current_edition, my_editions, authorInfo, authorOtherBooks } = initialData;
 
     const initialTab = searchParams.get('tab') === 'long_review' ? 'long-review' : 'fragments';
     const [activeTab, setActiveTab] = useState<'fragments' | 'short-reviews' | 'long-review'>(initialTab);
@@ -186,8 +186,8 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                         work={work} 
                         myEditions={my_editions} 
                         onRecordChange={(id) => router.push(`/library/${id}`)}
-                        authorInfo={DUMMY_AUTHOR_INFO}
-                        authorOtherBooks={DUMMY_OTHER_BOOKS}
+                        authorInfo={authorInfo} 
+                        authorOtherBooks={authorOtherBooks}
                         currentUser={user}
                     />
                 </div>

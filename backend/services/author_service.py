@@ -182,36 +182,39 @@ async def get_author_timeline(name: str, role: str, db: Session):
 # =========================================================
 
 async def get_user_contributors(user_id: int, role: str, db: Session):
-    """
-    기능: 특정 유저의 서재(Record)를 뒤져서, 등록된 책들의 작가나 번역가 목록을 완독 권수와 함께 반환합니다.
-    """
     db_role = 'author' if role == "writer" else 'translator'
 
-    results = db.query(
-        Contributor.id,
-        Contributor.name,
-        func.count(Record.id).label('read_count')
-    ).select_from(Record) \
-     .join(Edition, Record.edition_id == Edition.id) \
-     .join(Work, Edition.work_id == Work.id) \
-     .join(WorkContributor, Work.id == WorkContributor.work_id) \
-     .join(Contributor, WorkContributor.contributor_id == Contributor.id) \
-     .filter(
-         Record.user_id == user_id, 
-         func.lower(WorkContributor.role) == db_role 
-     ) \
-     .group_by(Contributor.id, Contributor.name) \
-     .order_by(func.count(Record.id).desc()) \
-     .all()
+    # ▼▼▼ [수정] Contributor.profile_image 추가 ▼▼▼
+    results = (
+        db.query(
+            Contributor.id,
+            Contributor.name,
+            Contributor.profile_image, 
+            func.count(Record.id).label('read_count')
+        )
+        .select_from(Record)
+        .join(Edition, Record.edition_id == Edition.id)
+        .join(Work, Edition.work_id == Work.id)
+        .join(WorkContributor, Work.id == WorkContributor.work_id)
+        .join(Contributor, WorkContributor.contributor_id == Contributor.id)
+        .filter(
+            Record.user_id == user_id, 
+            func.lower(WorkContributor.role) == db_role 
+        )
+        # 이제 중간에 주석을 마음껏 넣어도 에러가 발생하지 않습니다!
+        .group_by(Contributor.id, Contributor.name, Contributor.profile_image)
+        .order_by(func.count(Record.id).desc())
+        .all()
+    )
 
     author_list = [
         {
             "id": row.id, 
             "name": row.name, 
+            "profile_image": row.profile_image, # 💡 JSON 응답에 포함
             "read_count": row.read_count
         }
         for row in results
     ]
 
-    print(f"🟢 [DB 조회 완료] 유저 {user_id}의 서재에서 {role} {len(author_list)}명 발견!")
     return author_list

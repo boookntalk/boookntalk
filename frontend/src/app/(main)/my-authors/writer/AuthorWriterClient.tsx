@@ -9,11 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
 import MasterDetailLayout from '@/components/layout/MasterDetailLayout';
+import { AuthorAvatar } from '@/components/common/AuthorAvatar';
 
 interface AuthorListItem {
     id: number;
     name: string;
     read_count: number;
+    profile_image: string | null; // 💡 이 줄을 추가해 주세요!
 }
 
 interface BookstoreModalData {
@@ -129,10 +131,19 @@ export default function AuthorWriterClient() {
                                     : 'hover:bg-gray-50 text-[#1d1d1f]'}`}
                         >
                             <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors
-                                    ${selectedAuthor === author.name ? 'bg-white/20' : 'bg-[#f0f5fa] group-hover:bg-[#e6f0fa]'}`}>
-                                    <Users size={18} className={selectedAuthor === author.name ? 'text-white' : 'text-[#0066cc]'} />
+                                
+                                {/* ▼▼▼ 이 부분을 AuthorAvatar로 완벽 교체! ▼▼▼ */}
+                                <div className={`rounded-full ring-2 transition-all ${selectedAuthor === author.name ? 'ring-white/30' : 'ring-transparent'}`}>
+                                    <AuthorAvatar 
+                                        authorId={author.id} 
+                                        src={author.profile_image} 
+                                        alt={author.name} 
+                                        size={40} 
+                                        fallbackType="user" 
+                                    />
                                 </div>
+                                {/* ▲▲▲ 교체 완료 ▲▲▲ */}
+
                                 <span className={`text-[15px] font-bold ${selectedAuthor === author.name ? 'text-white' : 'text-[#1d1d1f]'}`}>
                                     {author.name}
                                 </span>

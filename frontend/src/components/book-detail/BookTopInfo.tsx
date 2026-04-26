@@ -1,6 +1,6 @@
 // 파일 경로: src/components/book-detail/BookTopInfo.tsx
 // 역할 및 기능: 부모 영역의 하얀 도화지에 녹아들도록 디자인된 도서 상세 상단 정보 컴포넌트.
-// 업데이트: 1줄 정렬 UI 유지 및 판본(출판사) 스위칭 메뉴 노출 조건 완벽 조율(2개 이상일 때만 노출)
+// 업데이트: 1줄 정렬 UI 유지 및 판본(출판사) 스위칭 메뉴 노출 조건 완벽 조율(2개 이상일 때만 노출), 작가 정보 영역 레이아웃 최적화 및 5줄 노출 처리.
 
 'use client';
 
@@ -135,7 +135,6 @@ export default function BookTopInfo({
                                     <h1 className="text-[28px] md:text-[32px] font-extrabold text-[#1d1d1f] leading-tight tracking-tight break-keep">
                                         {work?.title}
                                     </h1>
-                                    {/* 💡 [적용] 내 서재에 같은 책의 다른 판본이 존재할 때(2개 이상)만 셀렉트 박스 노출 */}
                                     {isMounted && myEditions.length > 1 && (
                                         <div className="flex items-center bg-gray-50 rounded-lg pr-1 shadow-sm border border-gray-100 flex-shrink-0 mt-1">
                                             <div className="pl-3 pr-2 py-1.5 flex items-center gap-1.5 border-r border-gray-200/60">
@@ -204,7 +203,7 @@ export default function BookTopInfo({
                                     <span className="text-gray-300">·</span>
 
                                     <span className="flex items-center gap-1">
-                                        BoooknTalk 평균 <Star size={12} className="text-[#FFCC00] mb-[2px]" fill="currentColor" />
+                                        평균 별점<Star size={12} className="text-[#FFCC00] mb-[2px]" fill="currentColor" />
                                         <span className="text-[#1d1d1f] font-black">{work?.average_rating || "0.0"}</span>
                                     </span>
                                     <span className="text-gray-300">·</span>
@@ -222,10 +221,11 @@ export default function BookTopInfo({
                                     </span>
                                 </div>
 
-                                <div className="mb-6">
+                                <div className="mb-6 w-full">
                                     <SmartTruncatedText 
                                         content={displayDesc}
-                                        textClassName="text-[14px] text-gray-600 leading-relaxed font-medium break-keep"
+                                        // 💡 4줄(line-clamp-4)에서 5줄(line-clamp-5)로 변경하고, w-full을 추가하여 가로폭 축소를 방지합니다.
+                                        textClassName="text-[14px] text-gray-600 leading-relaxed font-medium break-keep line-clamp-5 w-full"
                                     />
                                 </div>
 
@@ -268,49 +268,62 @@ export default function BookTopInfo({
                                 </div>
                             </div>
 
-                            <div className="w-full lg:w-1/3 flex flex-col min-w-0">
+                            {/* 우측 1/3: 작가 상세 영역 */}
+                            <div className="w-full lg:w-1/3 flex flex-col min-w-0 z-10 shrink-0">
                                 {authorInfo && (
-                                    <div className="flex flex-col h-full gap-6">
-                                        <div className="flex flex-col">
-                                            <h2 className="text-[12px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
-                                            <div className="flex items-center gap-3 mb-4">
-                                                <AuthorAvatar src={authorInfo.photo} alt={authorInfo.name} size={48} fallbackType="user" />
-                                                <div>
-                                                    <h3 className="text-[16px] font-extrabold text-[#1d1d1f]">{authorInfo.name}</h3>
-                                                    {authorInfo.role && <p className="text-[11px] font-bold text-[#0066cc] mt-0.5">{authorInfo.role}</p>}
-                                                </div>
-                                            </div>
+                                    <div className="w-full flex flex-col min-w-0 h-[320px]">
+                                        <div className="flex flex-col h-full gap-6">
                                             
-                                            <p className="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-4 mb-4">
-                                                {authorInfo.bio || "등록된 저자 소개가 없습니다."}
-                                            </p>
-                                        </div>
-
-                                        {authorOtherBooks.length > 0 && (
-                                            <div className="pt-6 border-t border-gray-100 mt-auto">
-                                                <div className="flex items-center justify-between mb-4">
-                                                    <h3 className="text-[12px] font-extrabold text-gray-500 uppercase tracking-wide">대표작</h3>
-                                                    {authorOtherBooks.length > 1 && (
-                                                        <button onClick={() => router.push(`/author/${authorInfo.id}`)} className="text-[11px] font-bold text-[#0066cc] flex items-center gap-1 hover:underline group">
-                                                            더 보기 <ArrowRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                {authorOtherBooks.slice(0, 1).map((book) => (
-                                                    <div key={book.id} onClick={() => router.push(`/works/${book.id}`)} className="flex items-center gap-3 cursor-pointer group rounded-xl hover:bg-gray-50 transition-all p-2 -ml-2 border border-transparent hover:border-gray-100">
-                                                        <FloatingCover src={book.cover} className="w-[44px] shrink-0 aspect-[1/1.45]" iconSize={12} />
-                                                        <div className="flex flex-col flex-1 min-w-0">
-                                                            <h4 className="text-[14px] font-bold text-[#1d1d1f] line-clamp-2 leading-tight group-hover:text-[#0066cc] transition-colors mb-1">{book.title}</h4>
-                                                            <span className="text-[11px] font-bold text-gray-400">BoooknTalk 광장</span>
-                                                        </div>
+                                            <div className="flex flex-col min-w-0">
+                                                <h2 className="text-[12px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <AuthorAvatar 
+                                                        authorId={Number(authorInfo.id)} 
+                                                        src={authorInfo.photo} 
+                                                        alt={authorInfo.name} 
+                                                        size={48} 
+                                                        fallbackType="user" 
+                                                    />
+                                                    <div className="flex-1 min-w-0">
+                                                        <h3 className="text-[16px] font-extrabold text-[#1d1d1f] truncate">{authorInfo.name}</h3>
+                                                        {authorInfo.role && <p className="text-[11px] font-bold text-[#0066cc] mt-0.5 truncate">{authorInfo.role}</p>}
                                                     </div>
-                                                ))}
+                                                </div>
+                                                
+                                                <div className="mb-4 w-full">
+                                                    <SmartTruncatedText 
+                                                        content={authorInfo.bio || "등록된 저자 소개가 없습니다."}
+                                                        textClassName="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-5 w-full"
+                                                    />
+                                                </div>
                                             </div>
-                                        )}
+
+                                            {authorOtherBooks.length > 0 && (
+                                                <div className="pt-6 border-t border-gray-100 mt-auto shrink-0">
+                                                    <div className="flex items-center justify-between mb-4">
+                                                        <h3 className="text-[12px] font-extrabold text-gray-500 uppercase tracking-wide">대표작</h3>
+                                                        {authorOtherBooks.length > 1 && (
+                                                            <button onClick={() => router.push(`/author/${authorInfo.id}`)} className="text-[11px] font-bold text-[#0066cc] flex items-center gap-1 hover:underline group">
+                                                                더 보기 <ArrowRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {authorOtherBooks.slice(0, 1).map((book) => (
+                                                        <div key={book.id} onClick={() => router.push(`/works/${book.id}`)} className="flex items-center gap-3 cursor-pointer group rounded-xl hover:bg-gray-50 transition-all p-2 -ml-2 border border-transparent hover:border-gray-100">
+                                                            <FloatingCover src={book.cover} className="w-[44px] shrink-0 aspect-[1/1.45]" iconSize={12} />
+                                                            <div className="flex flex-col flex-1 min-w-0">
+                                                                <h4 className="text-[14px] font-bold text-[#1d1d1f] line-clamp-2 leading-tight group-hover:text-[#0066cc] transition-colors mb-1">{book.title}</h4>
+                                                                <span className="text-[11px] font-bold text-gray-400">BoooknTalk 광장</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            
+                                        </div>
                                     </div>
                                 )}
                             </div>
-
                         </div>
                     </div>
                 </div>

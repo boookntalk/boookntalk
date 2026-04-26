@@ -21,7 +21,7 @@ import os, httpx, subprocess, uuid, shutil, models, requests
 # 💡 [핵심] 여기서 prefix를 "/api/admin"으로 고정해두면, 아래 API들에는 안 써도 자동으로 붙습니다!
 router = APIRouter()
 
-UPLOAD_DIR = "static/uploads/contributors"
+UPLOAD_DIR = "static/uploads/authors"
 
 # ==========================================
 # [스키마 정의]
@@ -335,7 +335,7 @@ async def upload_contributor_image(
     file: UploadFile = File(...), 
     db: Session = Depends(get_db)
 ):
-    """함수 기능: 상세페이지에서 기여자 사진을 직접 업로드 시 로컬에 저장하고 DB를 갱신합니다."""
+    """상세페이지에서 기여자 사진을 직접 업로드 시 로컬에 저장하고 DB를 갱신합니다."""
     if not user_email.startswith("boookntalk"):
         raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
 

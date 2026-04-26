@@ -16,6 +16,7 @@ interface TranslatorListItem {
     id: number;
     name: string;
     read_count: number;
+    profile_image: string | null; // 💡 이 줄을 추가해 주세요!
 }
 
 interface BookstoreModalData {
