@@ -30,6 +30,10 @@ class MergeWorksRequest(BaseModel):
     target_work_id: int
     source_work_ids: list[int]
 
+class UpdateBioRequest(BaseModel):
+    user_email: str
+    bio: str
+
 def get_local_path(filename: str):
     """함수 기능: 기여자 프로필 저장용 로컬 물리 경로를 반환합니다."""
     return os.path.join(UPLOAD_DIR, filename)
@@ -397,3 +401,28 @@ async def sync_external_contributor_image(
         return {"status": "success", "url": local_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"동기화 오류: {str(e)}")
+    
+# ==========================================
+# 🚀 [4] 기여자(Contributor) 상세 텍스트(Bio) 수정 API
+# ==========================================
+@router.patch("/contributors/{contributor_id}/bio")
+async def update_contributor_bio(
+    contributor_id: int, 
+    req: UpdateBioRequest, 
+    db: Session = Depends(get_db)
+):
+    """함수 기능: 관리자가 직접 작성/수정한 작가 상세 소개글을 DB에 업데이트합니다."""
+    # 1. 최고 관리자 권한 철저히 검증
+    if not req.user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    # 2. 타겟 작가 조회
+    contributor = db.query(models.Contributor).filter(models.Contributor.id == contributor_id).first()
+    if not contributor:
+        raise HTTPException(status_code=404, detail="해당 작가를 찾을 수 없습니다.")
+
+    # 3. 텍스트 업데이트 (빈 문자열이 올 경우도 허용)
+    contributor.description = req.bio
+    db.commit()
+
+    return {"status": "success", "message": "작가 소개가 성공적으로 수정되었습니다."}
