@@ -185,33 +185,35 @@ export default function BookTopInfo({
         <>
             <section className="bg-transparent w-full relative z-[100]">
                 <div className="max-w-[1200px] mx-auto px-[var(--spacing-1cm,32px)] pt-4 pb-8">
-                    {/* 💡 1. items-stretch를 제거하여 억지로 늘어나는 것을 방지합니다. */}
-                    <div className="flex flex-col md:flex-row gap-[var(--spacing-1cm,32px)]">
+                    
+                    {/* 💡 [핵심] 전체 높이를 375px(표지+간격+버튼)로 고정하여 3개의 기둥이 동일한 공간을 갖도록 만듭니다. */}
+                    <div className="flex flex-col lg:flex-row gap-[var(--spacing-1cm,32px)] lg:h-[375px]">
                         
                         {/* ━━━━━━━━ [좌측 컬럼: 표지 & 네이버 버튼] ━━━━━━━━ */}
-                        <div className="flex-shrink-0 mx-auto md:mx-0 w-[200px] md:w-[220px] flex flex-col gap-4">
+                        <div className="flex-shrink-0 mx-auto lg:mx-0 w-[200px] lg:w-[220px] flex flex-col h-full pb-8 lg:pb-0">
                             <FloatingCover 
                                 src={edition?.cover_image || edition?.cover || work?.cover_image ? getHighResCover(edition.cover_image || edition.cover || work.cover_image) : null}
                                 alt={work?.title || 'Cover'}
                                 className="w-full aspect-[1/1.45]"
                                 iconSize={48}
                             />
-                            {/* 💡 2. mt-auto를 제거하여 버튼이 표지 바로 아래(gap-4)에 붙도록 끌어올립니다. */}
-                            <div className="flex w-full">
+                            {/* 💡 [하단 밀착] mt-auto를 통해 바닥에 완벽히 고정됩니다. */}
+                            <div className="w-full mt-auto shrink-0 pt-4">
                                 <Button variant="outline" onClick={() => window.open(externalLink, '_blank')} className="w-full h-10 rounded-xl border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-[#03C75A] transition-colors text-[13px] font-bold shadow-sm flex items-center justify-center gap-2">
                                     <ExternalLink size={15} className="opacity-70" /> 네이버 도서 정보
                                 </Button>
                             </div>
                         </div>
 
-                        <div className="flex-1 flex flex-col min-w-0">
-                            <div className="flex flex-col lg:flex-row gap-8 w-full">
+                        {/* ━━━━━━━━ [중앙 & 우측 컬럼 래퍼] ━━━━━━━━ */}
+                        <div className="flex-1 flex flex-col min-w-0 h-full">
+                            <div className="flex flex-col lg:flex-row gap-8 w-full h-full">
                                 
                                 {/* ━━━━━━━━ [중앙 컬럼: 도서 정보 & 독서 기록] ━━━━━━━━ */}
-                                <div className="w-full lg:w-2/3 flex flex-col min-w-0 lg:border-r lg:border-gray-100 lg:pr-8">
+                                <div className="w-full lg:w-2/3 flex flex-col min-w-0 lg:border-r lg:border-gray-100 lg:pr-8 h-full pb-8 lg:pb-0">
                                     
-                                    {/* 💡 3. 위쪽 텍스트 영역의 높이를 표지와 동일한 319px로 강제 고정합니다. */}
-                                    <div className="flex flex-col w-full h-auto lg:h-[319px] overflow-hidden">
+                                    {/* 상단 텍스트 영역 (유연하게 공간을 차지하되 넘치지 않음) */}
+                                    <div className="flex-1 overflow-hidden flex flex-col">
                                         <div className="flex justify-between items-start mb-2 gap-4">
                                             <h1 className="text-[28px] md:text-[32px] font-extrabold text-[#1d1d1f] leading-tight tracking-tight break-keep">
                                                 {work?.title}
@@ -250,7 +252,7 @@ export default function BookTopInfo({
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2.5 mb-4 text-[13px] text-gray-500 font-medium overflow-x-auto scrollbar-hide whitespace-nowrap w-full">
+                                        <div className="flex items-center gap-2.5 mb-6 text-[13px] text-gray-500 font-medium overflow-x-auto scrollbar-hide whitespace-nowrap w-full">
                                             {edition?.language && (
                                                 <><span className="text-[#1d1d1f] font-bold">{edition.language}</span><span className="text-gray-300">·</span></>
                                             )}
@@ -300,61 +302,61 @@ export default function BookTopInfo({
                                             </span>
                                         </div>
 
-                                        <div className="w-full flex-1 overflow-hidden">
+                                        <div className="w-full">
                                             <SmartTruncatedText 
                                                 content={displayDesc}
-                                                textClassName="text-[14px] text-gray-600 leading-relaxed font-medium break-keep line-clamp-4 lg:line-clamp-5 w-full"
+                                                textClassName="text-[14px] text-gray-600 leading-relaxed font-medium break-keep line-clamp-3 lg:line-clamp-4 w-full"
                                             />
                                         </div>
                                     </div>
 
-                                    {/* 💡 4. 고정된 319px 바로 아래에 좌측 gap-4와 동일한 여백(lg:mt-4)을 주고 배치합니다. */}
-                                    <div className="mt-6 lg:mt-4 bg-[#F5F5F7] rounded-2xl p-5 border border-gray-200/60 shadow-sm">
-                                        <div className="flex justify-between items-center mb-6">
-                                            <div className="flex items-baseline gap-2">
-                                                <h3 className="font-bold text-[15px] text-[#1d1d1f]">나의 독서 기록</h3>
-                                                <span className="text-[12px] font-medium text-gray-500">
-                                                    {currentStatus === 'wish' ? '' : `(${record?.start_date ? getSafeDateString(record.start_date) : '미정'} ~ ${record?.finish_date ? getSafeDateString(record.finish_date) : (currentStatus === 'reading' ? '현재' : '')})`}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <button className="p-1.5 text-gray-400 hover:text-[#0066cc] hover:bg-white rounded-md transition-colors" title="기록 수정"><Edit3 size={15} /></button>
-                                                <button className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white rounded-md transition-colors" title="기록 삭제"><Trash2 size={15} /></button>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            {statusIndex === 1 && (
-                                                <div className="flex justify-between items-end mb-2">
-                                                    <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">
-                                                        {dbTotalPage > 0 ? `${progressPercent}%` : '읽는 중'}
-                                                    </span>
-                                                    <span className="text-[13px] text-gray-500 font-bold">
-                                                        {dbTotalPage > 0 ? `${currentPage} / ${dbTotalPage} 페이지` : `현재 ${currentPage}쪽`}
+                                    {/* 💡 [하단 밀착] mt-auto를 통해 좌측 버튼과 아랫선이 완벽히 일치합니다! */}
+                                    <div className="w-full mt-auto shrink-0 pt-4">
+                                        <div className="bg-[#F5F5F7] rounded-2xl p-5 border border-gray-200/60 shadow-sm w-full">
+                                            <div className="flex justify-between items-center mb-6">
+                                                <div className="flex items-baseline gap-2">
+                                                    <h3 className="font-bold text-[15px] text-[#1d1d1f]">나의 독서 기록</h3>
+                                                    <span className="text-[12px] font-medium text-gray-500">
+                                                        {currentStatus === 'wish' ? '' : `(${record?.start_date ? getSafeDateString(record.start_date) : '미정'} ~ ${record?.finish_date ? getSafeDateString(record.finish_date) : (currentStatus === 'reading' ? '현재' : '')})`}
                                                     </span>
                                                 </div>
-                                            )}
-                                            <div className="relative h-2 bg-gray-200 rounded-full flex items-center mt-3 mb-2">
-                                                <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: barWidth }}></div>
-                                                <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 transition-colors duration-300 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                                <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
-                                                <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 transition-colors duration-300 ${statusIndex >= 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                                <div className="flex items-center gap-1">
+                                                    <button className="p-1.5 text-gray-400 hover:text-[#0066cc] hover:bg-white rounded-md transition-colors" title="기록 수정"><Edit3 size={15} /></button>
+                                                    <button className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white rounded-md transition-colors" title="기록 삭제"><Trash2 size={15} /></button>
+                                                </div>
                                             </div>
-                                            <div className="flex justify-between text-[11px] font-bold text-gray-400 relative">
-                                                <span className={`absolute left-0 -ml-1 transition-colors duration-300 ${statusIndex >= 0 ? 'text-[#0066cc]' : ''}`}>읽고 싶음</span>
-                                                <span className={`absolute left-1/2 -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'text-[#0066cc]' : ''}`}>읽는 중</span>
-                                                <span className={`absolute right-0 -mr-1 transition-colors duration-300 ${statusIndex >= 2 ? 'text-[#0066cc]' : ''}`}>완독</span>
+                                            <div>
+                                                {statusIndex === 1 && (
+                                                    <div className="flex justify-between items-end mb-2">
+                                                        <span className="text-[28px] font-extrabold text-[#0066cc] leading-none">
+                                                            {dbTotalPage > 0 ? `${progressPercent}%` : '읽는 중'}
+                                                        </span>
+                                                        <span className="text-[13px] text-gray-500 font-bold">
+                                                            {dbTotalPage > 0 ? `${currentPage} / ${dbTotalPage} 페이지` : `현재 ${currentPage}쪽`}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="relative h-2 bg-gray-200 rounded-full flex items-center mt-3 mb-2">
+                                                    <div className="absolute left-0 h-full bg-[#0066cc] rounded-full transition-all duration-700" style={{ width: barWidth }}></div>
+                                                    <div className={`absolute left-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -ml-0.5 transition-colors duration-300 ${statusIndex >= 0 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                                    <div className={`absolute left-1/2 w-3.5 h-3.5 rounded-full border-[3px] bg-white -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                                    <div className={`absolute right-0 w-3.5 h-3.5 rounded-full border-[3px] bg-white -mr-0.5 transition-colors duration-300 ${statusIndex >= 2 ? 'border-[#0066cc]' : 'border-gray-200'}`}></div>
+                                                </div>
+                                                <div className="flex justify-between text-[11px] font-bold text-gray-400 relative">
+                                                    <span className={`absolute left-0 -ml-1 transition-colors duration-300 ${statusIndex >= 0 ? 'text-[#0066cc]' : ''}`}>읽고 싶음</span>
+                                                    <span className={`absolute left-1/2 -translate-x-1/2 transition-colors duration-300 ${statusIndex >= 1 ? 'text-[#0066cc]' : ''}`}>읽는 중</span>
+                                                    <span className={`absolute right-0 -mr-1 transition-colors duration-300 ${statusIndex >= 2 ? 'text-[#0066cc]' : ''}`}>완독</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* ━━━━━━━━ [우측 컬럼: 작가 상세 & 대표작] ━━━━━━━━ */}
-                                <div className="w-full lg:w-1/3 flex flex-col min-w-0 z-10 shrink-0">
+                                <div className="w-full lg:w-1/3 flex flex-col min-w-0 h-full shrink-0">
                                     {authorInfo && (
-                                        <div className="w-full flex flex-col min-w-0">
-                                            
-                                            {/* 💡 5. 위쪽 텍스트 영역의 높이를 표지와 동일한 319px로 강제 고정합니다. */}
-                                            <div className="flex flex-col w-full h-auto lg:h-[319px] overflow-hidden">
+                                        <>
+                                            <div className="flex-1 overflow-hidden flex flex-col">
                                                 <h2 className="text-[12px] font-black tracking-widest text-gray-400 uppercase mb-4">Author</h2>
                                                 <div className="flex items-center gap-3 mb-4">
                                                     <AuthorAvatar 
@@ -370,14 +372,14 @@ export default function BookTopInfo({
                                                     </div>
                                                 </div>
                                                 
-                                                <div className="w-full flex-1 overflow-hidden">
+                                                <div className="w-full">
                                                     <SmartTruncatedText 
                                                         content={currentBio || "등록된 저자 소개가 없습니다."}
-                                                        textClassName="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-4 w-full"
+                                                        textClassName="text-[14px] leading-relaxed text-gray-600 font-medium break-keep line-clamp-3 lg:line-clamp-4 w-full"
                                                     />
 
                                                     {isAdmin && authorInfo?.id && (
-                                                        <div className="mt-3 flex justify-end w-full">
+                                                        <div className="mt-2 flex justify-end w-full">
                                                             <TooltipProvider delayDuration={200}>
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
@@ -398,9 +400,9 @@ export default function BookTopInfo({
                                                 </div>
                                             </div>
 
-                                            {/* 💡 6. 고정된 319px 바로 아래에 좌측 gap-4와 동일한 여백(lg:mt-4)을 주고 배치합니다. */}
+                                            {/* 💡 [하단 밀착] mt-auto를 통해 좌측 버튼, 독서 기록과 아랫선이 완벽히 일치합니다! */}
                                             {authorOtherBooks.length > 0 && (
-                                                <div className="mt-6 lg:mt-4 border-t border-gray-100 pt-4 shrink-0">
+                                                <div className="w-full mt-auto shrink-0 border-t border-gray-100 pt-4">
                                                     <div className="flex items-center justify-between mb-4">
                                                         <h3 className="text-[12px] font-extrabold text-gray-500 uppercase tracking-wide">대표작</h3>
                                                         {authorOtherBooks.length > 1 && (
@@ -420,8 +422,7 @@ export default function BookTopInfo({
                                                     ))}
                                                 </div>
                                             )}
-                                            
-                                        </div>
+                                        </>
                                     )}
                                 </div>
 
