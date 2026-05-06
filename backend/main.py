@@ -2723,6 +2723,21 @@ async def get_user_long_reviews(user_email: str, db: Session = Depends(get_db)):
         
     return results
 
+# 함수 기능: 특정 작품(Work)에 달린 발행 완료된 실제 유저의 긴줄평 순수 개수를 계산하여 반환합니다. (빈 껍데기 유령 데이터 제외)
+@app.get("/api/works/{work_id}/long-reviews/count")
+async def get_work_long_review_count(work_id: int, db: Session = Depends(get_db)):
+    count = db.query(models.LongReview)\
+        .join(models.Record, models.LongReview.record_id == models.Record.id)\
+        .join(models.Edition, models.Record.edition_id == models.Edition.id)\
+        .filter(
+            models.Edition.work_id == work_id,
+            models.LongReview.is_draft == False,
+            models.LongReview.title.isnot(None),  # 유령 데이터 방어막 1
+            models.LongReview.title != ""         # 유령 데이터 방어막 2
+        ).count()
+        
+    return {"count": count}
+
 # @app.get("/api/admin/sync-authors")
 # async def sync_existing_authors(db: Session = Depends(get_db)):
 #     """

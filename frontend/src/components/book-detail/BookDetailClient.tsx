@@ -60,9 +60,13 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
 
     useEffect(() => {
         if (work?.id) {
-            fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/works/${work.id}/long-reviews`)
+            // 💡 [수정 1] API 주소 끝에 /count 를 붙여 새로 만든 카운트 전용 API를 호출합니다.
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/works/${work.id}/long-reviews/count`)
                 .then(res => res.json())
-                .then(data => setTotalLongReviewCount(data.length || 0))
+                .then(data => {
+                    // 💡 [수정 2] 프론트엔드에서 filter로 거를 필요 없이, 백엔드가 계산해준 순수 개수(count)를 바로 사용합니다!
+                    setTotalLongReviewCount(data.count || 0);
+                })
                 .catch(err => console.error("긴줄평 개수 로드 실패", err));
         }
     }, [work?.id]);

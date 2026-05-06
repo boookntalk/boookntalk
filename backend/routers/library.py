@@ -159,7 +159,9 @@ def delete_record(record_id: int, db: Session = Depends(get_db)):
         author_name=work.author if work else "알 수 없음"
     )
 
-    db.delete(record)
+    # 💡 [핵심 변경] db.delete(record)를 지우고, 대신 삭제된 시간만 기록합니다! (Soft Delete)
+    record.deleted_at = datetime.utcnow()
+    
     db.commit()
     return {"message": "정상적으로 삭제되었습니다."}
 

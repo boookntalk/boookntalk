@@ -16,7 +16,7 @@ from utils.author_parser import parse_author_string
 from services.trending_service import update_global_trending_authors
 from services.external_api_service import update_external_book_cache
 
-import os, httpx, subprocess, uuid, shutil, models, requests
+import os, httpx, subprocess, uuid, shutil, models, requests, time
 
 # 💡 [핵심] 여기서 prefix를 "/api/admin"으로 고정해두면, 아래 API들에는 안 써도 자동으로 붙습니다!
 router = APIRouter()
@@ -33,6 +33,10 @@ class MergeWorksRequest(BaseModel):
 class UpdateBioRequest(BaseModel):
     user_email: str
     bio: str
+
+class UpdateDescRequest(BaseModel):
+    user_email: str
+    description: str
 
 def get_local_path(filename: str):
     """함수 기능: 기여자 프로필 저장용 로컬 물리 경로를 반환합니다."""
@@ -426,3 +430,74 @@ async def update_contributor_bio(
     db.commit()
 
     return {"status": "success", "message": "작가 소개가 성공적으로 수정되었습니다."}
+
+# ==========================================
+# 🚀 [5] 도서(Work 및 Edition) 상세 설명 수정 API
+# ==========================================
+@router.patch("/works/{work_id}/description")
+async def update_work_description(
+    work_id: int, 
+    req: UpdateDescRequest, 
+    db: Session = Depends(get_db)
+):
+    """함수 기능: 관리자가 수정한 도서 상세 설명을 Work와 연관 Edition 테이블에 동시 업데이트합니다."""
+    # 1. 최고 관리자 권한 검증
+    if not req.user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    # 2. 타겟 작품(Work) 조회
+    work = db.query(models.Work).filter(models.Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="해당 작품을 찾을 수 없습니다.")
+
+    # 3. 텍스트 업데이트 (Work 원본 수정)
+    work.description = req.description
+    
+    # 4. 동일한 작품에 묶인 모든 판본(Edition)의 설명도 함께 동기화 (일관성 유지)
+    db.query(models.Edition).filter(models.Edition.work_id == work_id).update({"description": req.description})
+    
+    db.commit()
+
+    return {"status": "success", "message": "도서 상세 설명이 성공적으로 수정되었습니다."}
+
+# ==========================================
+# 🚀 [6] 도서 커버 이미지 업로드 API
+# ==========================================
+@router.post("/works/{work_id}/cover")
+async def upload_work_cover(
+    work_id: int,
+    user_email: str = Form(...),  # 파일 업로드(Multipart) 시에는 Form 데이터를 사용합니다.
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """함수 기능: 관리자가 업로드한 커버 이미지를 서버에 저장하고 Work 및 Edition에 반영합니다."""
+    # 1. 최고 관리자 권한 검증
+    if not user_email.startswith("boookntalk"):
+        raise HTTPException(status_code=403, detail="최고 관리자 권한이 없습니다.")
+
+    work = db.query(models.Work).filter(models.Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="해당 작품을 찾을 수 없습니다.")
+
+    # 2. 파일 저장 디렉토리 설정 (루트 디렉토리의 uploads/covers 폴더)
+    UPLOAD_DIR = "uploads/covers"
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    
+    # 3. 파일명 중복 방지를 위한 타임스탬프 기반 이름 생성
+    file_extension = file.filename.split(".")[-1]
+    new_filename = f"work_{work_id}_{int(time.time())}.{file_extension}"
+    file_path = os.path.join(UPLOAD_DIR, new_filename)
+
+    # 4. 파일 로컬 저장
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # 5. 저장된 파일의 URL 경로 (FastAPI에서 Static 설정 필요)
+    cover_url = f"/{UPLOAD_DIR}/{new_filename}"
+
+    # 6. DB 업데이트 (Work 및 연관 Edition 동시 업데이트)
+    work.cover_image = cover_url
+    db.query(models.Edition).filter(models.Edition.work_id == work_id).update({"cover": cover_url})
+    db.commit()
+
+    return {"status": "success", "message": "커버 이미지가 성공적으로 업로드되었습니다.", "cover_url": cover_url}

@@ -191,6 +191,8 @@ class Record(Base):
     # ▼▼▼ 관리자 픽 스위치 추가 (기본값은 False) ▼▼▼
     is_editor_pick = Column(Boolean, default=False, nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    tags = relationship("RecordTag", back_populates="record", cascade="all, delete-orphan")
+    deleted_at = Column(DateTime, nullable=True)
 
 
 # 5. 메모 (Memo) - 구 posts (문장 수집 및 생각)

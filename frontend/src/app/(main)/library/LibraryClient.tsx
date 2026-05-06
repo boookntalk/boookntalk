@@ -93,16 +93,32 @@ export default function LibraryClient({ initialBooks, user }: { initialBooks: an
 
     const handleDeleteBook = async (e: React.MouseEvent, libraryId: number) => {
         e.stopPropagation();
+        
+        // ID가 없는 경우만 방어
+        if (!libraryId) {
+            toast.error("삭제할 도서 정보를 찾을 수 없습니다.");
+            return;
+        }
+
         if (!confirm("정말로 이 책을 서재에서 삭제하시겠습니까? 기록도 함께 삭제됩니다.")) return;
 
         try {
             const res = await fetch(`${API_URL}/api/library/${libraryId}`, { method: 'DELETE' });
+            
             if (res.ok) {
-                setBooks(prev => prev.filter(b => b.library_id !== libraryId));
+                // 💡 [핵심] 성공 시, 타입 불일치 방지를 위해 String으로 변환하여 안전하게 필터링합니다.
+                setBooks(prev => prev.filter(b => 
+                    String(b.library_id) !== String(libraryId)
+                ));
                 toast.success("책이 삭제되었습니다.");
+                
+                // (선택) 다른 탭 이동 시 캐시 갱신을 위해 추가
+                router.refresh();
+            } else {
+                toast.error("삭제 중 오류가 발생했습니다.");
             }
         } catch (error) {
-            toast.error("삭제 중 오류가 발생했습니다.");
+            toast.error("서버 통신 중 오류가 발생했습니다.");
         }
     };
 
