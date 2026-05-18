@@ -1,5 +1,5 @@
 // 파일 경로: src/components/book-detail/BookDetailClient.tsx
-// 역할 및 기능: 도서 상세 페이지의 메인 클라이언트 컴포넌트로, 상단 도서 정보부터 탭 메뉴와 각 탭의 콘텐츠(독서노트, 한줄평, 긴줄평)까지 전체 레이아웃과 상태 관리를 담당합니다. 또한, 브레드크럼 네비게이션과 플로팅 액션 버튼(FAB)을 포함하여 사용자가 페이지 내에서 원활하게 이동하고 상호작용할 수 있도록 설계되었습니다.
+// 역할 및 기능: 긴줄평 팝업(Modal) 상태를 관리하고, 각 탭 컴포넌트와 모달을 연결합니다.
 
 'use client';
 
@@ -11,8 +11,8 @@ import ShortReviewSection from './ShortReviewSection';
 import LongReviewSection from './LongReviewSection';
 import MemoWriteModal from './MemoWriteModal'; 
 import ShortReviewWriteModal from './ShortReviewWriteModal'; 
-// 💡 [추가] 브레드크럼용 Home, ChevronRight 아이콘 추가 (ArrowLeft 제거)
-import { Quote, PenTool, MessageSquare, ChevronRight, Home } from 'lucide-react'; 
+import LongReviewWriteModal from './LongReviewWriteModal'; // 💡 [추가] 긴줄평 모달 임포트
+import { Quote, ChevronRight, Home } from 'lucide-react'; 
 import { toast } from 'sonner';
 import Link from 'next/link';
 
@@ -30,6 +30,10 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
     const [isMemoModalOpen, setIsMemoModalOpen] = useState(false);
     const [isShortReviewModalOpen, setIsShortReviewModalOpen] = useState(false);
     
+    // 💡 [추가] 긴줄평 모달 상태 관리
+    const [isLongReviewModalOpen, setIsLongReviewModalOpen] = useState(false);
+    const [longReviewEditData, setLongReviewEditData] = useState<any>(null);
+    
     const [shortReviewMode, setShortReviewMode] = useState<'create' | 'edit'>('create');
     const [editReviewId, setEditReviewId] = useState<number | null>(null);
     const [editInitialContent, setEditInitialContent] = useState('');
@@ -45,26 +49,11 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         { id: 'long-review', label: '긴줄평' }
     ] as const;
 
-    const DUMMY_AUTHOR_INFO = {
-        id: "author_1",
-        name: work?.author?.split(',')[0] || "작가 이름",
-        photo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Keigo_Higashino.jpg/220px-Keigo_Higashino.jpg",
-        bio: "이 작가는 놀라운 필력으로 독자들을 사로잡는 베스트셀러 작가입니다."
-    };
-
-    const DUMMY_OTHER_BOOKS = [
-        { id: 'work_1', title: "다른 책 1", cover: "https://via.placeholder.com/150x200" },
-        { id: 'work_2', title: "다른 책 2", cover: "https://via.placeholder.com/150x200" },
-        { id: 'work_3', title: "다른 책 3", cover: "https://via.placeholder.com/150x200" }
-    ];
-
     useEffect(() => {
         if (work?.id) {
-            // 💡 [수정 1] API 주소 끝에 /count 를 붙여 새로 만든 카운트 전용 API를 호출합니다.
             fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/works/${work.id}/long-reviews/count`)
                 .then(res => res.json())
                 .then(data => {
-                    // 💡 [수정 2] 프론트엔드에서 filter로 거를 필요 없이, 백엔드가 계산해준 순수 개수(count)를 바로 사용합니다!
                     setTotalLongReviewCount(data.count || 0);
                 })
                 .catch(err => console.error("긴줄평 개수 로드 실패", err));
@@ -114,6 +103,13 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         } catch (error) { toast.error('서버 오류'); } finally { setIsSubmitting(false); }
     };
 
+    const handleWriteShortReviewClick = () => {
+        setShortReviewMode('create'); 
+        setEditInitialContent(''); 
+        setEditReviewId(null); 
+        setIsShortReviewModalOpen(true);
+    };
+
     const handleEditShortReviewClick = (review: any) => {
         setShortReviewMode('edit'); setEditReviewId(review.id); setEditInitialContent(review.short_review); setIsShortReviewModalOpen(true);
     };
@@ -143,46 +139,32 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         } catch (error) { toast.error('서버 오류'); } finally { setIsSubmitting(false); }
     };
 
-    const handleFabClick = () => {
-        if (activeTab === 'fragments') setIsMemoModalOpen(true);
-        else if (activeTab === 'short-reviews') { setShortReviewMode('create'); setEditInitialContent(''); setEditReviewId(null); setIsShortReviewModalOpen(true); }
+    // 💡 [추가] 긴줄평 작성/수정 모달 트리거 함수
+    const handleWriteLongReviewClick = (data: any = null) => {
+        setLongReviewEditData(data);
+        setIsLongReviewModalOpen(true);
     };
 
     return (
         <div className="flex flex-col w-full h-full min-h-screen bg-[#F5F5F7]"> 
             
-            {/* ========================================================= */}
-            {/* 💡 [흰색 통합 영역] 브레드크럼 ~ 도서 정보 ~ 탭 메뉴 (bg-white) */}
-            {/* ========================================================= */}
             <div className="w-full bg-white relative">
-                
-                {/* 1. 상단 브레드크럼 (화살표 대체) */}
                 <div className="w-full max-w-[1200px] mx-auto px-[var(--spacing-1cm,32px)] pt-6 pb-2">
                     <div className="flex items-center gap-1.5 text-[13px] font-bold text-gray-400">
-                        {/* 홈으로 이동 */}
                         <Link href="/" className="flex items-center gap-1 hover:text-[#0066cc] transition-colors">
                             <Home size={14} /> 홈
                         </Link>
                         <ChevronRight size={14} className="opacity-50" />
-                        
-                        {/* 내 서재 카테고리 (단순 텍스트 혹은 기본 리스트로 이동) */}
                         <span className="cursor-default">내 서재</span>
                         <ChevronRight size={14} className="opacity-50" />
-                        
-                        {/* 도서 목록으로 이동 */}
-                        <Link href="/library" className="hover:text-[#0066cc] transition-colors">
-                            도서
-                        </Link>
+                        <Link href="/library" className="hover:text-[#0066cc] transition-colors">도서</Link>
                         <ChevronRight size={14} className="opacity-50" />
-                        
-                        {/* 현재 도서 이름 (강조) */}
                         <span className="text-[#1d1d1f] truncate max-w-[200px] sm:max-w-md">
                             {work?.title || '도서 상세'}
                         </span>
                     </div>
                 </div>
                 
-                {/* 2. 도서 상세 정보 */}
                 <div className="w-full">
                     <BookTopInfo 
                         record={record} 
@@ -196,7 +178,6 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                     />
                 </div>
 
-                {/* 3. 스크롤 시 상단 고정 탭 영역 */}
                 <div id="review-tabs-area" className="sticky top-[56px] z-30 w-full px-[var(--spacing-1cm,32px)] bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm pt-4">
                     <div className="max-w-[1200px] mx-auto flex items-center gap-8 overflow-x-auto scrollbar-hide pb-0">
                         {tabs.map((tab) => (
@@ -213,16 +194,11 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                         ))}
                     </div>
                 </div>
-
             </div>
-            {/* 흰색 통합 영역 끝 */}
 
-            {/* ========================================================= */}
-            {/* 💡 [회색 배경 영역] 탭 메뉴 하단 콘텐츠 (bg-[#F5F5F7]) */}
-            {/* ========================================================= */}
             <div className="w-full flex-1 px-[var(--spacing-1cm,32px)] pt-[var(--spacing-1cm,32px)] pb-32 max-w-[1200px] mx-auto">
                 <div className="w-full">
-                    {/* 독서 노트 탭 */}
+                    
                     <div className={activeTab === 'fragments' ? 'block animate-in fade-in duration-300' : 'hidden'}>
                         {record ? (
                             <RecordFragments recordId={record.id} user={user} refreshTrigger={refreshTrigger} onDataLoaded={setMemoCount} />
@@ -235,28 +211,39 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                         )}
                     </div>
 
-                    {/* 한줄평 탭 */}
                     <div className={activeTab === 'short-reviews' ? 'block animate-in fade-in duration-300' : 'hidden'}>
-                        <ShortReviewSection key={refreshTrigger} editionId={current_edition.id} onDataLoaded={setReviewCount} currentUser={user} onEditClick={handleEditShortReviewClick} onDeleteClick={handleDeleteShortReviewClick} />
+                        <ShortReviewSection key={refreshTrigger} editionId={current_edition.id} onDataLoaded={setReviewCount} currentUser={user} onEditClick={handleEditShortReviewClick} onDeleteClick={handleDeleteShortReviewClick} onWriteClick={handleWriteShortReviewClick} />
                     </div>
                     
-                    {/* 긴줄평 탭 */}
+                    {/* 💡 [연결] 긴줄평 읽기 영역 렌더링 및 모달 호출 프롭 전달 */}
                     <div className={activeTab === 'long-review' ? 'block animate-in fade-in duration-300' : 'hidden'}>
-                        <LongReviewSection recordId={record?.id} user={user} />
+                        <LongReviewSection 
+                            recordId={record?.id} 
+                            user={user} 
+                            refreshTrigger={refreshTrigger} 
+                            onWriteClick={handleWriteLongReviewClick} 
+                        />
                     </div>
                 </div>
             </div>
 
-            {/* 플로팅 버튼 */}
-            {activeTab !== 'long-review' && (
-                <button onClick={handleFabClick} className="fixed bottom-8 right-6 md:right-12 w-14 h-14 bg-[#FFEA00] hover:bg-[#F2D100] text-[#1d1d1f] rounded-full shadow-[0_8px_16px_rgba(255,234,0,0.25)] flex items-center justify-center transition-all duration-300 hover:scale-105 hover:-translate-y-1 z-40 animate-in zoom-in">
-                    {activeTab === 'fragments' && <PenTool size={24} className="animate-in zoom-in duration-200" />}
-                    {activeTab === 'short-reviews' && <MessageSquare size={24} className="animate-in zoom-in duration-200" />}
-                </button>
-            )}
-            
+            {/* 모든 모달(Popup) 렌더링을 이곳에 통합합니다. */}
             <MemoWriteModal isOpen={isMemoModalOpen} onClose={() => setIsMemoModalOpen(false)} bookTitle={work?.title || ""} onSubmit={handleSaveMemo} isSubmitting={isSubmitting} />
+            
             <ShortReviewWriteModal isOpen={isShortReviewModalOpen} onClose={() => setIsShortReviewModalOpen(false)} bookTitle={work?.title || ""} onSubmit={handleSaveShortReview} isSubmitting={isSubmitting} mode={shortReviewMode} initialContent={editInitialContent} />
+            
+            {/* 💡 [추가] 긴줄평 모달 마운트 */}
+            <LongReviewWriteModal 
+                isOpen={isLongReviewModalOpen}
+                onClose={() => setIsLongReviewModalOpen(false)}
+                recordId={record?.id}
+                user={user}
+                initialData={longReviewEditData}
+                onSuccess={() => {
+                    setIsLongReviewModalOpen(false);
+                    setRefreshTrigger(prev => prev + 1); // 저장 성공 시 부모 트리거를 올려 본문을 재조회시킵니다.
+                }}
+            />
 
         </div>
     );
