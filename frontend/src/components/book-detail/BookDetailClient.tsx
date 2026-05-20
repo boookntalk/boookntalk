@@ -4,6 +4,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation'; 
 import BookTopInfo from './BookTopInfo';
 import RecordFragments from './MemoryLayer'; 
@@ -12,7 +13,7 @@ import LongReviewSection from './LongReviewSection';
 import MemoWriteModal from './MemoWriteModal'; 
 import ShortReviewWriteModal from './ShortReviewWriteModal'; 
 import LongReviewWriteModal from './LongReviewWriteModal'; // 💡 [추가] 긴줄평 모달 임포트
-import { Quote, ChevronRight, Home } from 'lucide-react'; 
+import { Quote, ChevronRight, Home, PenTool, MessageSquare } from 'lucide-react'; 
 import { toast } from 'sonner';
 import Link from 'next/link';
 
@@ -42,6 +43,12 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
     const [refreshTrigger, setRefreshTrigger] = useState(0); 
     const [memoCount, setMemoCount] = useState<number>(0);
     const [reviewCount, setReviewCount] = useState<number>(0);
+
+    // 💡 [추가] 클라이언트 사이드 렌더링(Portal) 보장을 위한 마운트 상태
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     const tabs = [
         { id: 'fragments', label: `독서 노트 ${memoCount > 0 ? `(${memoCount})` : ''}` },
@@ -145,6 +152,12 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
         setIsLongReviewModalOpen(true);
     };
 
+    const handleFabClick = () => {
+        if (activeTab === 'fragments') setIsMemoModalOpen(true);
+        else if (activeTab === 'short-reviews') handleWriteShortReviewClick();
+        else if (activeTab === 'long-review') handleWriteLongReviewClick();
+    };
+
     return (
         <div className="flex flex-col w-full h-full min-h-screen bg-[#F5F5F7]"> 
             
@@ -226,6 +239,25 @@ export default function BookDetailClient({ initialData, user }: { initialData: a
                     </div>
                 </div>
             </div>
+
+            {/* 💡 [수정] Portal을 사용하여 부모 z-index의 한계를 벗어나 document.body 최상단에 렌더링합니다. */}
+            {isMounted && createPortal(
+                <button 
+                    onClick={handleFabClick} 
+                    className="fixed bottom-8 right-6 md:right-12 h-14 px-6 bg-[#FFEA00] hover:bg-[#F2D100] text-[#1d1d1f] rounded-full shadow-[0_8px_20px_rgba(0,0,0,0.25)] flex items-center justify-center gap-2.5 transition-all duration-300 hover:scale-105 active:scale-95 z-[90] animate-in zoom-in group"
+                >
+                    {activeTab === 'fragments' && (
+                        <><PenTool size={20} className="animate-in zoom-in duration-200" /><span className="text-[14px] font-bold tracking-wide">독서노트 작성</span></>
+                    )}
+                    {activeTab === 'short-reviews' && (
+                        <><MessageSquare size={20} className="animate-in zoom-in duration-200" /><span className="text-[14px] font-bold tracking-wide">한줄평 남기기</span></>
+                    )}
+                    {activeTab === 'long-review' && (
+                        <><PenTool size={20} className="animate-in zoom-in duration-200" /><span className="text-[14px] font-bold tracking-wide">긴줄평 작성</span></>
+                    )}
+                </button>,
+                document.body
+            )}
 
             {/* 모든 모달(Popup) 렌더링을 이곳에 통합합니다. */}
             <MemoWriteModal isOpen={isMemoModalOpen} onClose={() => setIsMemoModalOpen(false)} bookTitle={work?.title || ""} onSubmit={handleSaveMemo} isSubmitting={isSubmitting} />
