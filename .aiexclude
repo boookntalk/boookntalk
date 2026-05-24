@@ -1,0 +1,46 @@
+# Node.js & Frontend (Next.js) aiexclude
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+*.log
+.pnp.*
+
+# Python & Backend (FastAPI)
+venv/
+.venv/
+backend/venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+
+# User Uploads & Media (AI 분석 불필요)
+backend/static/covers/
+backend/static/uploads/
+
+# Secrets & Configs
+# 환경 변수 구조 참조를 위해 아래 두 항목은 예외 해제 (실제 키 유출에 주의하세요!)
+# .env
+# .env.*
+*.key
+*.pem
+*.p12
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build outputs & Scripts Exporter Text
+coverage/
+build/
+dist/
+boookntalk_source_export.txt
+boookntalk_full_source.txt
+boookntalk_filtered_source.txt
+a.txt
