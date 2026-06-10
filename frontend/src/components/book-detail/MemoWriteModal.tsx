@@ -58,9 +58,13 @@ export default function MemoWriteModal({ isOpen, onClose, bookTitle, onSubmit, i
                         <div className="flex items-center gap-2">
                             <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Page</span>
                             <input 
-                                type="number" 
+                                type="text"
+                                inputMode="numeric"
                                 value={page}
-                                onChange={(e) => setPage(e.target.value)}
+                                onChange={(e) => {
+                                    const numericValue = e.target.value.replace(/[^0-9]/g, '');
+                                    setPage(numericValue);
+                                }}
                                 placeholder="0"
                                 className="w-[70px] h-[30px] px-2 bg-white border border-gray-300 rounded-md text-[13px] font-medium text-right focus:border-black focus:ring-1 focus:ring-black/10 outline-none transition-all placeholder:text-gray-300"
                             />

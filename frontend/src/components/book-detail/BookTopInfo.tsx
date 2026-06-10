@@ -13,6 +13,7 @@ import { AuthorAvatar } from '@/components/common/AuthorAvatar';
 import { SmartTruncatedText } from '@/components/common/SmartTruncatedText';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { toast } from 'sonner';
 
 interface BookTopInfoProps {
     record: any;
@@ -56,9 +57,14 @@ export default function BookTopInfo({
 
     const initialDesc = (edition?.description || work?.description || "").trim() || "상세 설명이 없습니다.";
     const [currentDesc, setCurrentDesc] = useState(initialDesc);
+    const [currentPageCount, setCurrentPageCount] = useState(edition?.page_count || 0);
     const [isDescModalOpen, setIsDescModalOpen] = useState(false);
     const [editingDesc, setEditingDesc] = useState("");
     const [isSavingDesc, setIsSavingDesc] = useState(false);
+    
+    const [isPageModalOpen, setIsPageModalOpen] = useState(false);
+    const [editingPageCount, setEditingPageCount] = useState("");
+    const [isSavingPageCount, setIsSavingPageCount] = useState(false);
 
     const [currentCover, setCurrentCover] = useState<string | null>(null);
     const [isUploadingCover, setIsUploadingCover] = useState(false);
@@ -70,6 +76,7 @@ export default function BookTopInfo({
         setIsMounted(true); 
         setCurrentBio(authorInfo?.bio || "");
         setCurrentDesc((edition?.description || work?.description || "").trim() || "상세 설명이 없습니다.");
+        setCurrentPageCount(edition?.page_count || 0);
         
         const initialCover = edition?.cover_image || edition?.cover || work?.cover_image;
         setCurrentCover(initialCover ? getHighResCover(initialCover) : null);
@@ -88,7 +95,7 @@ export default function BookTopInfo({
 
     const rawStatus = (record?.status || '').toLowerCase();
     const currentPage = record?.current_page || 0;
-    const dbTotalPage = edition?.page_count || work?.page_count || 0; 
+    const dbTotalPage = currentPageCount; 
 
     let statusIndex = 0; 
     if (['reading', 'currently_reading'].includes(rawStatus) || (currentPage > 0 && currentPage < (dbTotalPage || Infinity))) {
@@ -118,15 +125,35 @@ export default function BookTopInfo({
     const bookIsbn = edition?.isbn || work?.isbn;
     const bookTargetId = work?.id || edition?.id;
 
-    const handleEditPageCount = () => {
-        const newPageStr = window.prompt("책의 정확한 전체 쪽수를 입력해 주세요:");
-        if (newPageStr !== null) {
-            const newPageNum = parseInt(newPageStr, 10);
-            if (isNaN(newPageNum) || newPageNum <= 0) {
-                alert("올바른 숫자를 입력해 주세요.");
-                return;
+    const handleOpenPageModal = () => {
+        setEditingPageCount(currentPageCount > 0 ? currentPageCount.toString() : "");
+        setIsPageModalOpen(true);
+    };
+
+    const handleSavePageCount = async () => {
+        const newPageNum = parseInt(editingPageCount, 10);
+        if (isNaN(newPageNum) || newPageNum <= 0) {
+            toast.error("올바른 숫자를 입력해 주세요.");
+            return;
+        }
+        setIsSavingPageCount(true);
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/editions/${edition.id}/page-count`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ page_count: newPageNum })
+            });
+            if (res.ok) {
+                setCurrentPageCount(newPageNum);
+                setIsPageModalOpen(false);
+                toast.success(`쪽수가 ${newPageNum}쪽으로 업데이트 되었습니다!`);
+            } else {
+                toast.error("쪽수 업데이트에 실패했습니다.");
             }
-            alert(`쪽수가 ${newPageNum}쪽으로 업데이트 되었습니다! (API 연동 대기중)`);
+        } catch (error) {
+            toast.error("서버 통신 중 오류가 발생했습니다.");
+        } finally {
+            setIsSavingPageCount(false);
         }
     };
 
@@ -300,7 +327,7 @@ export default function BookTopInfo({
                                             {dbTotalPage > 0 ? (
                                                 <span className="text-[#1d1d1f] font-bold">{dbTotalPage}쪽</span>
                                             ) : canEditBookInfo ? (
-                                                <button onClick={handleEditPageCount} className="text-[#0066cc] font-bold border-b border-dashed border-[#0066cc] pb-[1px] hover:text-blue-700 flex items-center gap-1"><Edit2 size={10} /> 쪽수 입력</button>
+                                                <button onClick={handleOpenPageModal} className="text-[#0066cc] font-bold border-b border-dashed border-[#0066cc] pb-[1px] hover:text-blue-700 flex items-center gap-1"><Edit2 size={10} /> 쪽수 입력</button>
                                             ) : <span>쪽수 미상</span>}
                                             
                                             <span className="text-gray-300">·</span>
@@ -420,7 +447,7 @@ export default function BookTopInfo({
                                                     {/* 💡 [조건부 렌더링] 작가 소개 수정 버튼 유무에 따라 3줄/4줄 동적 변경 */}
                                                     <SmartTruncatedText 
                                                         content={currentBio || "등록된 저자 소개가 없습니다."} 
-                                                        textClassName={`text-[14px] leading-relaxed text-gray-600 font-medium break-keep w-full ${isAdmin && authorInfo?.id ? 'line-clamp-3' : 'line-clamp-4'}`} 
+                                                        textClassName="text-[14px] leading-relaxed text-gray-600 font-medium break-keep w-full line-clamp-4" 
                                                     />
                                                 </div>
                                                 {isAdmin && authorInfo?.id && (
@@ -475,7 +502,41 @@ export default function BookTopInfo({
                 </div>
             </section>
             
-            {/* 다이얼로그 모달들 (기존과 동일) */}
+            {/* 다이얼로그 모달들 */}
+            <Dialog open={isPageModalOpen} onOpenChange={setIsPageModalOpen}>
+                <DialogContent className="sm:max-w-[400px] bg-white border border-gray-200 rounded-[20px] p-6 shadow-2xl">
+                    <DialogHeader className="mb-4">
+                        <DialogTitle className="text-[20px] font-black text-[#1d1d1f]">도서 쪽수 입력</DialogTitle>
+                        <DialogDescription className="text-[13px] text-gray-500 font-medium">
+                            {work?.title || edition?.title}의 정확한 전체 쪽수를 입력해 주세요.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-4 py-2">
+                        <input 
+                            type="text" 
+                            inputMode="numeric"
+                            value={editingPageCount}
+                            onChange={(e) => {
+                                const numericValue = e.target.value.replace(/[^0-9]/g, '');
+                                setEditingPageCount(numericValue);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSavePageCount();
+                                }
+                            }}
+                            placeholder="예: 320"
+                            className="w-full h-12 px-4 bg-gray-50 border border-gray-200 rounded-xl text-[14px] text-gray-700 font-medium focus:outline-none focus:border-[#0066cc] focus:ring-1 focus:ring-[#0066cc] transition-all"
+                        />
+                    </div>
+                    <DialogFooter className="mt-6 flex gap-2 sm:justify-end">
+                        <Button variant="outline" onClick={() => setIsPageModalOpen(false)} disabled={isSavingPageCount} className="rounded-xl border-gray-200 text-gray-600 font-bold">취소</Button>
+                        <Button onClick={handleSavePageCount} disabled={isSavingPageCount} className="rounded-xl bg-[#0066cc] text-white font-bold">{isSavingPageCount ? <><Loader2 className="animate-spin mr-2" size={16} /> 저장 중...</> : '확인'}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={isBioModalOpen} onOpenChange={setIsBioModalOpen}>
                 <DialogContent className="sm:max-w-[600px] bg-white border border-gray-200 rounded-[20px] p-6 shadow-2xl">
                     <DialogHeader className="mb-4">

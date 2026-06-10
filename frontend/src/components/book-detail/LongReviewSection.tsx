@@ -87,13 +87,6 @@ export default function LongReviewSection({ recordId, user, refreshTrigger, onWr
                 <p className="text-[14px] text-gray-400 mb-6">
                     첫 번째 긴줄평을 남겨 BoooknTalk 광장을 빛내주세요.
                 </p>
-                <button
-                    onClick={() => onWriteClick(null)} // 새 작성 모드
-                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-[#1d1d1f] hover:bg-black text-white text-[14px] font-bold shadow-md transition-transform hover:scale-105 active:scale-95"
-                >
-                    <PenTool size={16} />
-                    긴줄평 작성하기
-                </button>
             </div>
         );
     }

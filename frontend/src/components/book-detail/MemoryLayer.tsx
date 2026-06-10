@@ -24,6 +24,7 @@ export default function MemoryLayer({ recordId, user, refreshTrigger, onDataLoad
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [form, setForm] = useState({ pageNumber: '', sentence: '', thought: '', isPublic: true });
+    const [expandedMemos, setExpandedMemos] = useState<Record<number, boolean>>({});
 
     const fetchMemos = async () => {
         try {
@@ -99,7 +100,14 @@ export default function MemoryLayer({ recordId, user, refreshTrigger, onDataLoad
 
     return (
         <div className="flex flex-col gap-4 pb-20">
-            {memos.map((memo) => (
+            {memos.map((memo) => {
+                const isExpanded = expandedMemos[memo.id] || false;
+                const isLong = (memo.sentence?.length > 150) || 
+                               ((memo.sentence?.match(/\n/g) || []).length > 3) || 
+                               (memo.thought && memo.thought.length > 150) || 
+                               (memo.thought && (memo.thought.match(/\n/g) || []).length > 2);
+
+                return (
                 <div 
                     key={memo.id} 
                     className="bg-white rounded-2xl p-6 md:p-8 border border-gray-100 hover:border-gray-300 transition-colors group shadow-sm hover:shadow-md"
@@ -132,7 +140,7 @@ export default function MemoryLayer({ recordId, user, refreshTrigger, onDataLoad
 
                     <div>
                         {/* 💡 문장 본문은 시각적 구분을 위해 16px 세리프 유지 */}
-                        <p className="font-serif text-[#1d1d1f] text-[16px] leading-[1.8] break-keep selection:bg-[#dbeafe]">
+                        <p className={`font-serif text-[#1d1d1f] text-[16px] leading-[1.8] break-keep selection:bg-[#dbeafe] whitespace-pre-wrap ${!isExpanded && isLong ? 'line-clamp-4' : ''}`}>
                             {memo.sentence}
                         </p>
                     </div>
@@ -140,14 +148,25 @@ export default function MemoryLayer({ recordId, user, refreshTrigger, onDataLoad
                     {memo.thought && (
                         <div className="mt-5 pt-5 border-t border-gray-50">
                             {/* 💡 기획자님 표준: 생각/노트 폰트는 14px 적용 */}
-                            <p className="text-[14px] text-gray-600 leading-relaxed font-medium break-keep">
+                            <p className={`text-[14px] text-gray-600 leading-relaxed font-medium break-keep whitespace-pre-wrap ${!isExpanded && isLong ? 'line-clamp-3' : ''}`}>
                                 <span className="text-[#0066cc] font-bold mr-1.5">생각.</span> 
                                 {memo.thought}
                             </p>
                         </div>
                     )}
+
+                    {isLong && (
+                        <div className="mt-4 pt-1">
+                            <button 
+                                onClick={() => setExpandedMemos(prev => ({ ...prev, [memo.id]: !prev[memo.id] }))}
+                                className="text-[13px] font-bold text-gray-400 hover:text-[#0066cc] transition-colors"
+                            >
+                                {isExpanded ? '접기' : '더보기'}
+                            </button>
+                        </div>
+                    )}
                 </div>
-            ))}
+            )})}
 
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogContent className="sm:max-w-[500px] bg-white rounded-2xl">

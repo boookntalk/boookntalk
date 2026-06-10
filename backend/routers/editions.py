@@ -3,6 +3,10 @@ from sqlalchemy.orm import Session
 from database import get_db, SessionLocal # SessionLocal 가져오기 (백그라운드용)
 import models
 from utils.image_handler import download_and_update_cover
+from pydantic import BaseModel
+
+class PageCountUpdate(BaseModel):
+    page_count: int
 
 router = APIRouter(prefix="/api/editions", tags=["editions"])
 
@@ -87,3 +91,13 @@ async def create_edition(
         "cover_image": new_edition.cover_image,
         "isbn": new_edition.isbn
     }
+
+@router.patch("/{edition_id}/page-count")
+async def update_edition_page_count(edition_id: int, req: PageCountUpdate, db: Session = Depends(get_db)):
+    edition = db.query(models.Edition).filter(models.Edition.id == edition_id).first()
+    if not edition:
+        raise HTTPException(status_code=404, detail="해당 판본을 찾을 수 없습니다.")
+    
+    edition.page_count = req.page_count
+    db.commit()
+    return {"status": "success", "page_count": edition.page_count}
