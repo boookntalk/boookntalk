@@ -146,7 +146,8 @@ export default function Home() {
         if (offset !== 0) return;
         const clickedBook = coverFlowBooks[idx];
         if (status === "authenticated") {
-            router.push(`/works/${clickedBook.work_id || clickedBook.id}`); 
+            //router.push(`/works/${clickedBook.work_id || clickedBook.id}`);
+            router.push(`/works/${clickedBook.work_id}?edition=${clickedBook.id}`);
         } else {
             setSelectedBookForModal(clickedBook);
             setIsGuestModalOpen(true);
